@@ -29,14 +29,15 @@ IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cdd/{coa
 # it is for ALLWISE.
 LATEST_WISE_CODE = "ac"
 
-def batch_download_images(BASEDIR, objects, ras, decs, upgrade=False):
+def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False):
     '''Downloads all images for many objects.
 
     The objects, ras, and decs variables should be arrays with the same length.
+    It will download square cutouts with length given by size arcseconds.
     '''
     for object, ra, dec in zip(objects, ras, decs):
         coaddID = query_metadata(ra, dec)
-        query_image(BASEDIR, object, coaddID, ra, dec)
+        query_image(BASEDIR, object, coaddID, ra, dec, size=size)
 
 def query_metadata(ra, dec):
     '''Queries the WISE Image Metadata service for image information.
