@@ -1113,7 +1113,8 @@ def Convert_to_WISE_Table(objstr, w1rsemi, w2rsemi, w3rsemi, w4rsemi, w1pa,
     The table should be able to be found at
     $WISE/Jarrett_DB/WISE_Isophotal-Aperture_Photometry.txt.
     '''
-    return Table([objstr, w1rsemi, w2rsemi, w3rsemi, w4rsemi, w1pa, w2pa, w3pa,
-        w4pa, w1ba, w2ba, w3ba, w4ba], names=("objstr_01", "w1rsemi", "w2rsemi",
-            "w3rsemi", "w4rsemi" "w1pa", "w2pa", "w3pa", "w4pa", "w1ba", "w2ba",
-            "w3ba", "w4ba"))
+    fulltable = [objstr, w1rsemi, w2rsemi, w3rsemi, w4rsemi, w1pa, w2pa, w3pa,
+        w4pa, w1ba, w2ba, w3ba, w4ba]
+    names = ("objstr_01", "w1rsemi", "w2rsemi", "w3rsemi", "w4rsemi", "w1pa", 
+            "w2pa", "w3pa", "w4pa", "w1ba", "w2ba", "w3ba", "w4ba")
+    return Table(fulltable , names=names)
