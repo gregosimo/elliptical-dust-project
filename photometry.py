@@ -635,7 +635,8 @@ def extractEllipseParamsfromWISE(BASEDIR, WISErow, band):
     # Now for the semimajor axis
     sma = WISErow["{0}rsemi".format("w1")] / pixelscale
     # Now the position angle
-    pa = WISErow["{0}pa".format("w1")]
+    # Adding a small value in order to prevent convergence problems with PA=0
+    pa = WISErow["{0}pa".format("w1")]+0.001
     # The next two items are the X center and Y center.
     FITS_image = match_filter(objectdir, band)
     hdulist = fits.open(FITS_image)
@@ -1101,10 +1102,19 @@ def Jarrett_Table_2_to_WISE_table(Jarrett_table2):
     # NGC 584:  52".9
     # NGC 777:  64".0
     # NGC 4486: 154".7 
-    astropy_table_row(converted_table, "objstr_01", "NGC 584")["w3rsemi"] = 52.9
-    astropy_table_row(converted_table, "objstr_01", "NGC 777")["w3rsemi"] = 64.0
-    astropy_table_row(converted_table, "objstr_01", "NGC 4486")["w3rsemi"] = \
-        154.7
+    ## ASTROPY_BUG: We should have the commands:
+    ## converted_table["w3rsemi"][astropy_table_index(converted_table,
+    ## "objstr_01", "NGC 584")[0][0]] = 52.9
+    ## and
+    ## converted_table[astropy_table_index(converted_table,
+    ## "objstr_01", "NGC 584")[0][0]]["w3rsemi"] = 52.9
+    ## be equivalent. But they don't appear to be. Look into that!
+    converted_table["w3rsemi"][astropy_table_index(converted_table, "objstr_01", 
+            "NGC 584")[0][0]] = 52.9
+    converted_table["w3rsemi"][astropy_table_index(converted_table, "objstr_01", 
+            "NGC 777")[0][0]] = 64.0
+    converted_table["w3rsemi"][astropy_table_index(converted_table, "objstr_01", 
+            "NGC 4486")[0][0]] = 154.7
     return converted_table
 
 def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi, 
