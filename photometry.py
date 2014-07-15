@@ -631,7 +631,9 @@ def extractEllipseParamsfromWISE(BASEDIR, WISErow, band):
     objectdir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     pixelscale = getPixelScale(band)
     # We first want the ellipticity:
-    ellipticity = 1 - WISErow["{0}ba".format("w1")]
+    # There's a minimum value to the ellipticity, so we can't have it be less
+    # than 0.05.
+    ellipticity = max(0.05, 1 - WISErow["{0}ba".format("w1")])
     # Now for the semimajor axis
     sma = WISErow["{0}rsemi".format("w1")] / pixelscale
     # Now the position angle
