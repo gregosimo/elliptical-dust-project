@@ -1090,6 +1090,7 @@ def Jarrett_Table_2_to_WISE_table(Jarrett_table2):
     # We'll first create the WISE table, and then change the W3 values as
     # needed. This is to prevent any weird aliasing issues.
     objstr = jt2["Name"]
+    ra, dec = jt2["R.A."], jt2["Decl."]
     w1rsemi = w2rsemi = w3rsemi = jt2["R1_iso"]
     w4rsemi = jt2["R4_iso"]
     w1pa = w2pa = w3pa = w4pa = jt2["P.A."]
@@ -1106,15 +1107,16 @@ def Jarrett_Table_2_to_WISE_table(Jarrett_table2):
         154.7
     return converted_table
 
-def Convert_to_WISE_Table(objstr, w1rsemi, w2rsemi, w3rsemi, w4rsemi, w1pa,
-        w2pa, w3pa, w4pa, w1ba, w2ba, w3ba, w4ba):
+def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi, 
+        w1pa, w2pa, w3pa, w4pa, w1ba, w2ba, w3ba, w4ba):
     '''Creates a WISE table from given arrays of objects.
 
     The table should be able to be found at
     $WISE/Jarrett_DB/WISE_Isophotal-Aperture_Photometry.txt.
     '''
-    fulltable = [objstr, w1rsemi, w2rsemi, w3rsemi, w4rsemi, w1pa, w2pa, w3pa,
-        w4pa, w1ba, w2ba, w3ba, w4ba]
-    names = ("objstr_01", "w1rsemi", "w2rsemi", "w3rsemi", "w4rsemi", "w1pa", 
-            "w2pa", "w3pa", "w4pa", "w1ba", "w2ba", "w3ba", "w4ba")
+    fulltable = [objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi, w1pa, w2pa,
+            w3pa, w4pa, w1ba, w2ba, w3ba, w4ba]
+    names = ("objstr_01", "ra", "dec", "w1rsemi", "w2rsemi", "w3rsemi", 
+            "w4rsemi", "w1pa", "w2pa", "w3pa", "w4pa", "w1ba", "w2ba", "w3ba", 
+            "w4ba")
     return Table(fulltable , names=names)
