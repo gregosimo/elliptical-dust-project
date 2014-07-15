@@ -1095,8 +1095,8 @@ def Jarrett_Table_2_to_WISE_table(Jarrett_table2):
     w4rsemi = jt2["R4_iso"]
     w1pa = w2pa = w3pa = w4pa = jt2["P.A."]
     w1ba = w2ba = w3ba = w4ba = jt2["Axis"]
-    converted_table = Convert_to_WISE_Table(objstr, w1rsemi, w2rsemi, w3rsemi,
-            w4rsemi, w1pa, w2pa, w3pa, w4pa, w1ba, w2ba, w3ba, w4ba)
+    converted_table = Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, 
+            w3rsemi, w4rsemi, w1pa, w2pa, w3pa, w4pa, w1ba, w2ba, w3ba, w4ba)
     # We now apply the W3 corrections to the elliptical galaxies, given by:
     # NGC 584:  52".9
     # NGC 777:  64".0
