@@ -479,7 +479,7 @@ def genSkyParam(BASEDIR, WISErow, baseoutput="sky_aperture", minsep=2.0,
     # Now we run the ellipse routine in a sampling mode.
     elliptical_fit(galaxydir, match_filter(galaxydir, "W1"), (photprops["X0"],
         photprops["Y0"]), photprops["ELLIP"], photprops["PA"], photprops["SMA"],
-        outputname="sky_output.tab", holdParamsFixed=False)
+        outputname="sky_output.tab", holdParamsFixed=True)
     skyprops = STSDAS_to_Astropy_Table(galaxydir, 
             "sky_output.tab")[-1:]
     # We measure sky for infrared and UV differently. Therefore, we'll
