@@ -121,6 +121,8 @@ def extract_subtable_from_column(table, column, selections):
 # by running:
 # >>> galaxy_photometry(BASEDIR, objname, band)
 # 
+# If you want a table of magnitudes for all objects, use the command:
+# >>> aperturePhotometryTable(BASEDIR, objnames)
 
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
         mask="foreground.pl", useskybase="sky_aperture", 
@@ -450,7 +452,7 @@ def genSkytables(BASEDIR, WISErow, baseparamname="sky_params",
         run_ellipse(galaxydir, skyimage, format_band_dependence(baseparamname,
             band), outputname=format_band_dependence(baseoutput, band), mask="")
 
-def genSkyParam(BASEDIR, WISErow, baseoutput="sky_aperture", minsep=1.1,
+def genSkyParam(BASEDIR, WISErow, baseoutput="sky_aperture", minsep=2.0,
         axisOverride=0, runbands=bands):
     '''Generates the parameter file for sky using the widest W1 isophote.
     
@@ -477,7 +479,7 @@ def genSkyParam(BASEDIR, WISErow, baseoutput="sky_aperture", minsep=1.1,
     # Now we run the ellipse routine in a sampling mode.
     elliptical_fit(galaxydir, match_filter(galaxydir, "W1"), (photprops["X0"],
         photprops["Y0"]), photprops["ELLIP"], photprops["PA"], photprops["SMA"],
-        outputname="sky_output.tab")
+        outputname="sky_output.tab", holdParamsFixed=False)
     skyprops = STSDAS_to_Astropy_Table(galaxydir, 
             "sky_output.tab")[-1:]
     # We measure sky for infrared and UV differently. Therefore, we'll
@@ -638,6 +640,8 @@ def extractEllipseParamsfromWISE(BASEDIR, WISErow, band):
     sma = WISErow["{0}rsemi".format("w1")] / pixelscale
     # Now the position angle
     # Adding a small value in order to prevent convergence problems with PA=0
+    if pa > 90:
+        pa -= 180
     pa = WISErow["{0}pa".format("w1")]+0.001
     # The next two items are the X center and Y center.
     FITS_image = match_filter(objectdir, band)
@@ -1040,6 +1044,8 @@ def elliptical_fit(galaxydir, image, center, ellipticity, position_angle,
         fix = "Yes"
     else:
         fix = "No"
+    if position_angle > 90:
+        position_angle -= 180
     iraf.stsdas()
     iraf.stsdas.analysis()
     iraf.stsdas.analysis.isophote()
