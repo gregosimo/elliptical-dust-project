@@ -167,6 +167,23 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     Vegamag = DNflux2WISEmag(band, objectflux)
     return Vegamag
 
+def photometric_error(galaxydir, band, ellipsebase="ellipse_aperture",
+        skybase="sky_level"):
+    '''Calculates the photometric error of a magnitude calculation.
+
+    This measurement uses the photometric pipeline to look up values of the
+    quantities needed for a reliable error estimate. Note that this calculation
+    requires the uncertainty Atlas images. Those will need to be downloaded as
+    part of the pipeline as well.
+    '''
+    ellipseParams = STSDAS_to_Astropy_Table(galaxydir, 
+            format_band_dependence(ellipsebase, band, "tab"))[0]
+    skyParams = Table.read(os.path.join(galaxydir,
+        format_band_dependence(skybase, band, "txt")), format="ascii.daophot")
+
+    NA = ellipseParams["NPIX"]
+    NB = skyParams["NSKY"]
+
 def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
     return objectname.replace(' ', "")
