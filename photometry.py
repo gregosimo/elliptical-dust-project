@@ -26,6 +26,9 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
 
+LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4": 
+        -0.029}
+
 ###############################################################################
 # Astropy Utilities                                                           #
 ###############################################################################
@@ -165,7 +168,26 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
         print "\nGot negative flux for {0}.\n".format(name)
         objectflux *= -1
     Vegamag = DNflux2WISEmag(band, objectflux)
+    # Not implementing this yet because other things are more important right
+    # now, and the Jarrett calculations don't need this correction.
+    corrmag = correct_mag(Vegamag, band)
     return Vegamag
+
+def correct_mag(uncormag, band, large_aperture_atlas=True):
+    '''Performs aperture corrections on a magnitude.
+
+    The aperture correction is band-dependent, so the band is required.
+
+    Components of the aperture correction include:
+
+    large_aperture_atlas: This correction comes from the fact that a small
+    amount of light is lost in the creation of the WISE Atlas images. As a
+    result, any aperture photometry, even with large apertures, should implement
+    this flag to correct for the missing light.
+    '''
+    if large_aperture_atlas:
+        uncormag -= LARGE_APERTURE_CORRECTION[band]
+    return uncormag
 
 def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
