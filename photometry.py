@@ -278,23 +278,19 @@ def run_fitsky(galaxydir, image, annulus, coords, output, dannulus=10,
     iraf.fitsky(imagepath)
 
 
-def run_ellipse(galaxydir, image, ellipsepars, mask="foreground.pl", 
-        outputname="ellipse.tbl"):
+def run_ellipse(image, ellipsepars, output, mask=""):
     '''Generates an ellipse table on the image from given parameters.
 
     The table of aperture parameters should be in the form of an STSDAS
     table. The necessary values are ellipticity, semimajor axis,
-    position angle, X0, and Y0 (in pixels). This function will create 
-    an STSDAS table at galaxydir/outputname.
+    position angle, X0, and Y0 (in pixels).
     
     A mask file can be specified for the ellipse routine. If a mask
     file is specified, this function will throw an error if the mask
     file isn't found. Therefore, if you wish to ignore masking, the
-    mask parameter should be the empty string.'''
-    maskpath = os.path.join(galaxydir, mask)
-    tablepath = os.path.join(galaxydir, ellipsepars)
-    outputtbl = os.path.join(galaxydir, outputname)
-    imagepath = os.path.join(galaxydir, image)
+    mask parameter should be the empty string.
+    
+    NOTE: All filenames should contain full paths to the files.'''
     # IRAF will throw a cryptic error, or simply ignore the fact that
     # the mask doesn't exist. I want to enforce it to avoid silently
     # ignoring masking when I intend to mask.
@@ -304,9 +300,9 @@ def run_ellipse(galaxydir, image, ellipsepars, mask="foreground.pl",
     iraf.stsdas.analysis()
     iraf.stsdas.analysis.isophote()
     #iraf.unlearn("ellipse")
-    iraf.ellipse.setParam("inellip", tablepath)
-    iraf.ellipse.setParam("dqf", maskpath)
-    iraf.ellipse(imagepath, outputtbl)
+    iraf.ellipse.setParam("inellip", ellipsepars)
+    iraf.ellipse.setParam("dqf", mask)
+    iraf.ellipse(image, output)
 
 def generate_elliptical_aperture(inputfile, outputfile):
     '''Generates a polygonal aperture from ellipse table.
@@ -518,6 +514,7 @@ def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
 
 
 
+
 def run_imfunc(infile, outfile, func):
     '''Runs imfunc on the given image.
 
@@ -539,9 +536,10 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
     # taking too much effort, and I want to just have this part done.
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     for band in runbands:
-        objimage = match_filter(galaxydir, band, fullpath=False)
-        run_ellipse(galaxydir, objimage, format_band_dependence(baseparamname,
-            band), outputname=format_band_dependence(baseoutput, band), mask="")
+        objimage = match_filter(galaxydir, band, fullpath=True)
+        run_ellipse(objimage, format_band_dependence(baseparamname, band, 'tab',
+            galaxydir), outputname=format_band_dependence(baseoutput, band,
+            'tab', galaxydir))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         ellipsebase="ellipse_aperture", baseskyfile="sky_level", skyratio=2.0,
@@ -609,11 +607,13 @@ def genSkytables(BASEDIR, WISErow, baseparamname="sky_params",
     '''
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     for band in runbands:
-        skyimage = match_filter(galaxydir, band, fullpath=False)
+        skyimage = match_filter(galaxydir, band, fullpath=True)
         if band in UVBANDS:
-            skyimage = skyimage.replace("-int", "-skybg")
-        run_ellipse(galaxydir, skyimage, format_band_dependence(baseparamname,
-            band), outputname=format_band_dependence(baseoutput, band), mask="")
+            skyimage = rreplace(skyimage, "-int", "-skybg", 1)
+        run_ellipse(skyimage, format_band_dependence(baseparamname,
+            band, 'tab', galaxydir),
+            outputname=format_band_dependence(baseoutput, band, "tab", 
+            galaxydir))
 
 def genSkyParam(BASEDIR, WISErow, baseoutput="sky_aperture", minsep=2.0,
         axisOverride=0, runbands=bands):
