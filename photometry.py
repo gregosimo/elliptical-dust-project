@@ -294,7 +294,8 @@ def run_ellipse(image, ellipsepars, output, mask=""):
     # IRAF will throw a cryptic error, or simply ignore the fact that
     # the mask doesn't exist. I want to enforce it to avoid silently
     # ignoring masking when I intend to mask.
-    if not os.path.exists(maskpath):
+    # NOTE: This breaks compability with Windows. Boo hoo.
+    if not os.path.exists(os.path.join("/", mask)):
         raise ValueError("Mask file does not exist.")
     iraf.stsdas()
     iraf.stsdas.analysis()
@@ -538,8 +539,8 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
     for band in runbands:
         objimage = match_filter(galaxydir, band, fullpath=True)
         run_ellipse(objimage, format_band_dependence(baseparamname, band, 'tab',
-            galaxydir), outputname=format_band_dependence(baseoutput, band,
-            'tab', galaxydir))
+            galaxydir), format_band_dependence(baseoutput, band, 'tab', 
+            galaxydir))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         ellipsebase="ellipse_aperture", baseskyfile="sky_level", skyratio=2.0,
@@ -577,93 +578,6 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
 
         run_fitsky(galaxydir, image, annulus, coordpath, skypath, 
                 dannulus=dannulus)
-
-
-
-
-
-
-def genSkytables(BASEDIR, WISErow, baseparamname="sky_params", 
-        baseoutput="sky_aperture", runbands=bands):
-    '''Generates table with sky at widest W1 isophote.
-
-    A problem with generating sky at each band is that the "sky"
-    isophote moves in at high wavelength, which doesn't make physical
-    sense given that the galaxy should have the same extent. To
-    compensate for this, we will generate our sky background by taking
-    the largest elliptical isophote in W1, and evaluating the mean
-    isophotal intensity of that ellipse in the other bands, regardless
-    of how wide the object appears to be in those bands. That way, we
-    measure the sky background in the same way we measure the flux
-    within the W1 isophote.
-
-    If the ratio between the sky isophote semimajor axis, and the
-    photometric isophote semimajor axis is smaller than minsep, then it
-    will be set so that it is minsep.
-
-    For cases where the sky axis just isn't being chosen correctly,
-    the axisOverride keyword will set the semimajor axis to the value
-    given, in pixels.
-    '''
-    galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    for band in runbands:
-        skyimage = match_filter(galaxydir, band, fullpath=True)
-        if band in UVBANDS:
-            skyimage = rreplace(skyimage, "-int", "-skybg", 1)
-        run_ellipse(skyimage, format_band_dependence(baseparamname,
-            band, 'tab', galaxydir),
-            outputname=format_band_dependence(baseoutput, band, "tab", 
-            galaxydir))
-
-def genSkyParam(BASEDIR, WISErow, baseoutput="sky_aperture", minsep=2.0,
-        axisOverride=0, runbands=bands):
-    '''Generates the parameter file for sky using the widest W1 isophote.
-    
-    We don't want to generate sky for each band separately because we
-    want the same amount of light coming in from the galaxy. The
-    objects tend to be brightest at W1, so we'll use that to determine
-    where the object ends and the sky background begins.
-    
-    The output file is specified in baseoutput, and by default will be 
-    "sky_aperture.{band}.tab".
-    
-    If minsep is provided, it specifies the minimum ratio between the 
-    sky aperture semimajor axis and the photometry aperture semimajor
-    axis. If the ratio is less than this, the sky aperture will be
-    adjusted so that the ratio is minsep.'''
-    # The sky is going to be measured by running the ellipse routine on the
-    # W1 image with the aperture parameters as the initial condition. We want to
-    # use the widest aperture which the ellipse routine can still count as an
-    # isophote. If it turns out that aperture isn't much bigger, then we use the
-    # minsep flag to set the sky to be at least that large.
-
-    galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    photprops = STSDAS_to_Astropy_Table(galaxydir, "ellipse_aperture.W1.tab")[0]
-    # Now we run the ellipse routine in a sampling mode.
-    elliptical_fit(galaxydir, match_filter(galaxydir, "W1"), (photprops["X0"],
-        photprops["Y0"]), photprops["ELLIP"], photprops["PA"], photprops["SMA"],
-        outputname="sky_output.tab", holdParamsFixed=True)
-    skyprops = STSDAS_to_Astropy_Table(galaxydir, 
-            "sky_output.tab")[-1:]
-    # We measure sky for infrared and UV differently. Therefore, we'll
-    # have two different cases.
-    for band in runbands:
-        table_name = format_band_dependence("sky_params", band)
-        skyimage = match_filter(galaxydir, band)
-        if band in IRBANDS:
-            if axisOverride:
-                skyprops["SMA"] = axisOverride
-            elif skyprops["SMA"]/ photprops["SMA"] < minsep:
-                skyprops["SMA"] = photprops["SMA"]*minsep
-        else:
-            skyprops = STSDAS_to_Astropy_Table(galaxydir,
-                    format_band_dependence("ellipsepars", band))
-            skyimage = skyimage.replace("-int", "-skybg")
-        # Using all of skyprops causes the columns to be mislabeled. In
-        # order to bypass this, I will create a table that only has
-        # columns relevant to fitting the ellipse routine.
-        createEllipseParamTable(galaxydir, skyprops[["ELLIP", "SMA", "PA", "X0",
-            "Y0"]], table_name)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS):
     '''Runs through all objects and creates cutouts in their folder.
