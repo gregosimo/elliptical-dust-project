@@ -110,6 +110,7 @@ def extract_subtable_from_column(table, column, selections):
 # This can be done by running:
 # >>> allEllipseTables(BASEDIR, WISE_Table)
 #
+# TODO: Update this doc.
 # After generating ellipse tables, we now want to generate tables for sky
 # measurements. We first do this by generating the parameter files. This can be
 # done as before by running:
@@ -123,6 +124,20 @@ def extract_subtable_from_column(table, column, selections):
 # 
 # If you want a table of magnitudes for all objects, use the command:
 # >>> aperturePhotometryTable(BASEDIR, objnames)
+
+def build_pipeline(BASEDIR, WISETable):
+    '''Basically runs all the commands necessary to build the ellipse aperture
+    and sky measurement pipeline. It consists of running:
+    allApertureTables
+    allEllipseTables
+    allSkyValues
+
+    If you want a table of photometry, you'll have to run
+    aperturePhotometryTable yourself.
+    ''' 
+    allApertureTables(BASEDIR, WISETable)
+    allEllipseTables(BASEDIR, WISETable)
+    allSkyValues(BASEDIR, WISETable)
 
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
         mask="foreground.pl", useskybase="sky_aperture", 
@@ -249,7 +264,7 @@ def complete_for_bands(BASEDIR, objname, checkbands=bands):
             return False
     return True
 
-def run_fitsky(galaxydir, image, annulus, coords, output, dannulus=10,
+def run_fitsky(image, annulus, coords, output, dannulus=10,
         algorithm="centroid"):
     '''Runs the fitsky procedure in IRAF in order to measure the sky background.
 
@@ -258,24 +273,20 @@ def run_fitsky(galaxydir, image, annulus, coords, output, dannulus=10,
     from the coords argument. Each line in the coords argument will correspond
     to a line in output.
     '''
-    imagepath = os.path.join(galaxydir, image)
-    coordpath = os.path.join(galaxydir, coords)
-    outputpath = os.path.join(galaxydir, output)
-
     #Fitskypar parameters.
     iraf.apphot()
     iraf.fitskypars.setParam("salgorithm", algorithm)
     iraf.fitskypars.setParam("annulus", annulus)
     iraf.fitskypars.setParam("dannulus", dannulus)
     # Fitsky parameters.
-    iraf.fitsky.setParam("coords", coordpath)
-    iraf.fitsky.setParam("output", outputpath)
+    iraf.fitsky.setParam("coords", coords)
+    iraf.fitsky.setParam("output", output)
     iraf.fitsky.setParam("interactive", "No")
     iraf.fitsky.setParam("verify", "No")
     iraf.fitsky.setParam("update", "No")
     iraf.fitsky.setParam("radplots", "No")
 
-    iraf.fitsky(imagepath)
+    iraf.fitsky(image)
 
 
 def run_ellipse(image, ellipsepars, output, mask=""):
@@ -537,7 +548,7 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
     # taking too much effort, and I want to just have this part done.
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     for band in runbands:
-        objimage = match_filter(galaxydir, band, fullpath=True)
+        objimage = match_filter(galaxydir, band)
         run_ellipse(objimage, format_band_dependence(baseparamname, band, 'tab',
             galaxydir), format_band_dependence(baseoutput, band, 'tab', 
             galaxydir))
@@ -566,7 +577,7 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     for band in runbands:
         coordpath = format_band_dependence(coordbase, band, "coo", galaxydir)
         skypath = format_band_dependence(baseskyfile, band, "txt", galaxydir)
-        image = match_filter(galaxydir, band, fullpath=False)
+        image = match_filter(galaxydir, band)
         ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
                 format_band_dependence(ellipsebase, band, "tab"))
 
@@ -576,7 +587,7 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         with open(coordpath, 'w') as f:
             f.write("{0} {1}".format(ellipsepars["X0"][0], ellipsepars["Y0"][0]))
 
-        run_fitsky(galaxydir, image, annulus, coordpath, skypath, 
+        run_fitsky(image, annulus, coordpath, skypath, 
                 dannulus=dannulus)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS):
