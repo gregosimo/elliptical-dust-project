@@ -523,6 +523,7 @@ def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
                 galaxydir)
         output = format_path_dependence(baseuncertainty,
             band, "tab", galaxydir)
+        run_ellipse(varfile, ellipse_file, output)
 
 
 
