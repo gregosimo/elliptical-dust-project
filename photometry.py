@@ -168,7 +168,7 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     return Vegamag
 
 def photometric_error(galaxydir, band, ellipsebase="ellipse_aperture",
-        skybase="sky_level"):
+        skybase="sky_level", uncertainty_base="uncertainty"):
     '''Calculates the photometric error of a magnitude calculation.
 
     This measurement uses the photometric pipeline to look up values of the
@@ -183,6 +183,13 @@ def photometric_error(galaxydir, band, ellipsebase="ellipse_aperture",
 
     NA = ellipseParams["NPIX"]
     NB = skyParams["NSKY"]
+    total_sigi = summed_uncertainty_in_aperture(galaxydir, uncertainty_base,
+            ellipse_base)
+
+def summed_uncertainty_in_aperture(galaxydir, uncertainty_base="uncertainty",
+        ellipse_base="ellipse_aperture"):
+    '''Calculates the sum of the variances for each pixel within the aperture. 
+    '''
 
 def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
@@ -196,13 +203,13 @@ def change_to_galaxy_dir(BASEDIR, objectname):
     '''
     return os.path.join(BASEDIR, object_name_to_dir(objectname))
 
-def format_band_dependence(basename, band, extension="tab"):
+def format_band_dependence(basename, band, extension="tab", pathto=''):
     '''Generates a table file which is dependent on a band name.
 
     The returned filename will have a format of 
     "{basename}.{band}.{extension}".
     '''
-    return "{0}.{1}.{2}".format(basename, band, extension)
+    return os.path.join(pathto, "{0}.{1}.{2}".format(basename, band, extension))
     
 def match_filter(directory, filter, fullpath=True):
     '''Finds the image which corresponds to the filter.
@@ -373,8 +380,7 @@ def estimate_WISE_background(galaxydir, band, area, baseskyfile="sky_level"):
     
     The output of fitsky should be in the object's folder with base name given
     in baseskyfile, and a '.txt' extension.'''
-    skypath = os.path.join(galaxydir, format_band_dependence(baseskyfile, band,
-        "txt"))
+    skypath = format_band_dependence(baseskyfile, band, "txt", pathto=galaxydir)
     skydata = Table.read(skypath, format="ascii.daophot")
     skylevel = skydata["MSKY"]
     totalsky = skylevel * area
@@ -484,6 +490,48 @@ def ellipseOnBands(BASEDIR, WISErow, baseparamname, output, mask=""):
     then run the ellipse package for all bands in that galaxy folder. 
     '''
 
+def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
+        ellipsebase="ellipse_aperture", runbands=bands):
+    '''Sums the variance of uncertainty pixels over an aperture.
+
+    This function requires uncertainty files to be located within the galaxy
+    folder. These files will be discovered by running match_filter, and then
+    replacing the "int" with "unc".
+
+    The uncertainty file will then be squared, and placed in a file with the
+    same name, but with "unc" replaced by "var".
+
+    The table which will be output by the ellipse package will have a base
+    filename given by baseuncertainty.
+    '''
+    galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
+    for band in runbands:
+        intfile = match_filter(galaxydir, band)
+        uncfile = rreplace(intfile, "int", "unc", 1)
+        varfile = rreplace(uncfile, "unc", "var", 1)
+        run_imfunc(uncfile, varfile, "square")
+
+        ellipse_file = format_path_dependence(ellipsebase, band, "tab",
+                galaxydir)
+        output = format_path_dependence(baseuncertainty,
+            band, "tab", galaxydir)
+
+
+
+def run_imfunc(infile, outfile, func):
+    '''Runs imfunc on the given image.
+
+    All possible functions can be viewed in the imfunc documentation. The
+    currently relevant ones are:
+
+    square - Square the image.
+    '''
+    iraf.images()
+    iraf.imutil()
+    iraf.imfunc(infile, outfile, func)
+
+
+
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
         baseoutput="ellipse_aperture", runbands=bands):
     '''Generates a table on the object for each band.'''
@@ -517,10 +565,8 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     # annulus for W1 is disable resetting it for W2-4.
     annulus_override = annulus
     for band in runbands:
-        coordpath = os.path.join(galaxydir, format_band_dependence(coordbase,
-            band, "coo"))
-        skypath = os.path.join(galaxydir, format_band_dependence(baseskyfile,
-            band, "txt"))
+        coordpath = format_band_dependence(coordbase, band, "coo", galaxydir)
+        skypath = format_band_dependence(baseskyfile, band, "txt", galaxydir)
         image = match_filter(galaxydir, band, fullpath=False)
         ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
                 format_band_dependence(ellipsebase, band, "tab"))
@@ -664,9 +710,8 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS):
         gc.show_circles([Xval]*2, [Yval]*2, [radius_in, radius_out],
                 edgecolor="cyan")
 
-        gc.save(os.path.join(galaxydir, 
-            format_band_dependence(object_name_to_dir(WISErow["objstr_01"]), 
-            band, "png")))
+        gc.save(format_band_dependence(object_name_to_dir(WISErow["objstr_01"]), 
+            band, "png", galaxydir))
 
 def generatePixelMasks(galaxydir, masterfile="foreground.reg",
         maskbasename="foreground", execbands=bands):
@@ -683,8 +728,7 @@ def generatePixelMasks(galaxydir, masterfile="foreground.reg",
     regionfile = os.path.join(galaxydir, masterfile)
     iraf.proto()
     for band in execbands:
-        outputfile = os.path.join(galaxydir,
-                format_band_dependence(maskbasename, band, "pl"))
+        outputfile = format_band_dependence(maskbasename, band, "pl", galaxydir)
         imagefile = match_filter(galaxydir, band)
     # On second thought, this won't work. Never mind.
 
@@ -1251,3 +1295,12 @@ def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi,
             "w4rsemi", "w1pa", "w2pa", "w3pa", "w4pa", "w1ba", "w2ba", "w3ba", 
             "w4ba")
     return Table(fulltable , names=names)
+
+def rreplace(s, old, new, occurrence):
+    '''Behaves like string.replace(), except replaces from the right rather than
+    from the left. This code taken from:
+
+    http://stackoverflow.com/questions/2556108/how-to-replace-the-last-occurence-of-an-expression-in-a-string
+    '''
+    li = s.rsplit(old, occurrence)
+    return new.join(li)
