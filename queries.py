@@ -146,8 +146,8 @@ def download_image(galaxydir, image_query, band):
     # the file. However, the current version of wget installed on this machine
     # is 1.12, and I'm running into a bug with it. When wget is upgraded to
     # 1.15, we'll see if that is still a problem.
-    wget_command = ["wget", "--output-document={0}".format(compressed_path), 
-            image_query]
+    wget_command = ["/usr/current/wget/bin/wget", "--directory-prefix={0}".format(galaxydir), 
+            "--content-disposition", image_query]
     subprocess.call(wget_command)
     # Once the image is downloaded, we want to uncompress it, and then
     # delete the compressed file.
