@@ -14,6 +14,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 import queries as query
+import synthetic_photometry as synphot
 
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
@@ -141,7 +142,7 @@ def build_pipeline(BASEDIR, WISETable):
 
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
         mask="foreground.pl", useskybase="sky_aperture", 
-        ellipsebase="ellipsepars"):
+        ellipsebase="ellipsepars", flux=False):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -180,8 +181,16 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
         print "\nGot negative flux for {0}.\n".format(name)
         objectflux *= -1
     Vegamag = DNflux2WISEmag(band, objectflux)
-    return Vegamag
 
+    if flux:
+        flux = synphot.ZP_freq[band].value*10**(-Vegamag/2.5)
+        return flux
+    else:
+        return Vegamag
+
+EFFECTIVE_NOISE_PIXELS = {"W1": 13.772, "W2": 17.636, "W3": 35.476, "W4":
+        24.462}
+INPUT_TO_OUTPUT_PIXEL_RATIO = {"W1": 2, "W2": 2, "W3": 2, "W4": 4}
 def photometric_error(galaxydir, band, ellipsebase="ellipse_aperture",
         skybase="sky_level", uncertainty_base="uncertainty"):
     '''Calculates the photometric error of a magnitude calculation.
@@ -195,17 +204,30 @@ def photometric_error(galaxydir, band, ellipsebase="ellipse_aperture",
             format_band_dependence(ellipsebase, band, "tab"))[0]
     skyParams = Table.read(os.path.join(galaxydir,
         format_band_dependence(skybase, band, "txt")), format="ascii.daophot")
+    imageUncertainty = STSDAS_to_Astropy_Table(galaxydir,
+            format_band_dependence(uncertainty_base, band, "tab"))[0]
 
-    NA = ellipseParams["NPIX"]
+    fapcor = 1
+    NA = ellipseParams["NPIX_E"]
     NB = skyParams["NSKY"]
-    total_sigi = summed_uncertainty_in_aperture(galaxydir, uncertainty_base,
-            ellipse_base)
+    total_sigi = imageUncertainty["TFLUX_E"]
+    Fcorr = (EFFECTIVE_NOISE_PIXELS[band] *
+        (INPUT_TO_OUTPUT_PIXEL_RATIO[band])**2)
+    # We get the background level from centroiding, which seems like a
+    # mean-related measure.
+    k = 1   
+    sig_B = skyParams["STDEV"]**2
+    # We can try to measure this and compare it to other errors later, but right
+    # now this is not easily measurable in an automated way. I believe that this
+    # should be minimal because of the large size of the aperture.
+    sig_conf = 0
 
-def summed_uncertainty_in_aperture(galaxydir, uncertainty_base="uncertainty",
-        ellipse_base="ellipse_aperture"):
-    '''Calculates the sum of the variances for each pixel within the aperture. 
-    '''
+    fluxerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B) +
+            sig_conf)**(0.5)
 
+    return fluxerr[0]
+
+            
 def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
     return objectname.replace(' ', "")
@@ -525,6 +547,8 @@ def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
         # which already exists, it will simply add on another layer, which
         # confuses the hell out of ellipse. So if a previous file exists, I'll
         # delete it manually.
+        if os.path.isfile(varfile):
+            os.remove(varfile)
         run_imfunc(uncfile, varfile, "square")
 
         ellipse_file = format_band_dependence(ellipsebase, band, "tab",
@@ -774,9 +798,13 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
     coaddID = query.query_metadata(ra, dec)
     query.query_image(BASEDIR, objstr, coaddID)
 
+# This can be fixed pretty easily by making runbands a mandatory argument, and
+# then constructing Columns while iterating. I'm pretty sure those can be added 
+# to a Table more easily than Rows.
 def aperturePhotometryTable(BASEDIR, objectnames,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_aperture", ellipsebase="ellipsepars", runbands=bands):
+        skybase="sky_aperture", ellipsebase="ellipsepars", flux=False, 
+        runbands=bands):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
@@ -785,11 +813,11 @@ def aperturePhotometryTable(BASEDIR, objectnames,
     # This function should have a better way of specifying which bands should be
     # used to create the table.
     w1apmags = photometryOnBand(BASEDIR, objectnames, "W1", baseobjectfile, 
-            mask, skybase, ellipsebase)
+            mask, skybase, ellipsebase, flux)
     w2apmags = photometryOnBand(BASEDIR, objectnames, "W2", baseobjectfile, 
-            mask, skybase, ellipsebase)
+            mask, skybase, ellipsebase, flux)
     w3apmags = photometryOnBand(BASEDIR, objectnames, "W3", baseobjectfile, 
-            mask, skybase, ellipsebase)
+            mask, skybase, ellipsebase, flux)
     #NUVapmags = photometryOnBand(BASEDIR, objectnames, "NUV", baseobjectfile, 
     #        mask, skybase, ellipsebase)
     #FUVapmags = photometryOnBand(BASEDIR, objectnames, "FUV", baseobjectfile, 
@@ -804,10 +832,10 @@ def aperturePhotometryTable(BASEDIR, objectnames,
 
 def photometryOnBand(BASEDIR, objectnames, band,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_aperture", ellipsebase="ellipsepars"):
+        skybase="sky_aperture", ellipsebase="ellipsepars", flux=False):
     '''Creates an array of object magnitudes in a particular band.'''
     return np.array([galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-        mask, skybase, ellipsebase) for galname in objectnames])
+        mask, skybase, ellipsebase, flux) for galname in objectnames])
 
 def createDifferencePlot(xval, valtocompare, errors, xlabel, ylabel, title):
     '''Plots the difference between two values against the value.
