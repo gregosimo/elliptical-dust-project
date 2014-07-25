@@ -23,7 +23,8 @@ METADATA_SERVER ="http://irsa.ipac.caltech.edu/ibe/search/wise/allwise/p3am_cdd"
 # This query will return an IPAC table which contains the coaddgrp, coadd_ra,
 # coadd_id and bands available for that location. We then place the images into
 # the correct folder in the BASEDIR.
-IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-{type:s}-3.fits"
+IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
+UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-unc-3.fits.gz"
 
 # This is the code which corresponds to the latest WISE catalog. In this case,
 # it is for ALLWISE.
@@ -85,7 +86,7 @@ def query_image(BASEDIR, objstr, coaddID, ra, dec, size=600, upgrade=False,
     '''
     galaxydir = phot.change_to_galaxy_dir(BASEDIR, objstr)
     coadddic = {"coaddgrp": get_coaddgrp(coaddID), "coadd_ra":
-        get_coadd_ra(coaddID), "coadd_id": coaddID, "type": "int"}
+        get_coadd_ra(coaddID), "coadd_id": coaddID}
     # If the folder exists, check to see if we want to upgrade. If we do, then
     # check if the images are up to date. If they aren't, then download them
     # using upgrade_images.
@@ -127,7 +128,8 @@ def download_images(galaxydir, coadddic, ra, dec, size, uncertainty=True):
         image_query = get_url(image_url, urllib.urlencode(query_params))
         download_image(galaxydir, image_query, "w{0}".format(i))
         if uncertainty:
-            uncert_query = image_query.replace("int", "unc")
+            uncert_url = UNCERTAINTY_SERVER.format(**coadddic)
+            uncert_query = get_url(uncert_url, urllib.urlencode(query_params))
             download_image(galaxydir, uncert_query, "w{0}".format(i))
                 
 def download_image(galaxydir, image_query, band):
@@ -136,24 +138,19 @@ def download_image(galaxydir, image_query, band):
     The image_query argument can be any valid HTTP request which resolves into an
     image which can be downloaded. Band should be the name of the band e.g. W1.
     '''
+    downloaded_filename = os.path.basename(image_query).split("?")[0]
+    compressed_path = os.path.join(galaxydir, downloaded_filename)
     # The -P sets the prefix for the downloaded files. So we want them to be
     # located in galaxydir.
-    command = "wget"
-    wget_flags = "-P{0}".format(galaxydir)
-    subprocess.call([command, wget_flags, image_query])
+    # The better way of doing this will be to use --content-disposition to name
+    # the file. However, the current version of wget installed on this machine
+    # is 1.12, and I'm running into a bug with it. When wget is upgraded to
+    # 1.15, we'll see if that is still a problem.
+    wget_command = ["wget", "--output-document={0}".format(compressed_path), 
+            image_query]
+    subprocess.call(wget_command)
     # Once the image is downloaded, we want to uncompress it, and then
     # delete the compressed file.
-    #
-    # This function finds the filename for the url string, and then appends
-    # that to the path with a .gz extension.
-    urlparts = urlparse.urlsplit(image_query)
-    downloaded_filename = glob.glob(os.path.join(galaxydir,
-        band.lower()))[0]
-    compressed_image_filename = ".".join([os.path.split(urlparts.path)[1], 
-        "gz"])
-    compressed_path = os.path.join(os.path.split(downloaded_filename)[0],
-            compressed_image_filename)
-    os.rename(downloaded_filename, compressed_path)
     subprocess.call(["gunzip", compressed_path])
 
 def check_galaxy_images_version(galaxydir):
