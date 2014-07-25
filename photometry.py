@@ -226,15 +226,18 @@ def format_band_dependence(basename, band, extension="tab", pathto=''):
     '''
     return os.path.join(pathto, "{0}.{1}.{2}".format(basename, band, extension))
     
-def match_filter(directory, filter, fullpath=True):
+def match_filter(directory, filter, fullpath=True, uncertainty=False):
     '''Finds the image which corresponds to the filter.
 
     For WISE images, this will require searching for "w?" in the
     strings.'''
-    filtermap = {"W1": "w1", "W2": "w2", "W3": "w3", "W4": "w4", "FUV": 
-            "fd-int", "NUV": "nd-int"}
+    filtermap = {"W1": "w1-int", "W2": "w2-int", "W3": "w3-int", "W4": "w4-int", 
+            "FUV": "fd-int", "NUV": "nd-int"}
+    filterstring = filtermap[filter]
+    if uncertainty:
+        filterstring.replace("int", "unc")
     filelist = glob.glob(os.path.join(directory, 
-            "*{0}*.fits".format(filtermap[filter])))
+            "*{0}*.fits".format(filterstring)))
     if len(filelist) > 1:
         raise RuntimeError("Image conflict for {0}.".format(directory))
     elif len(filelist) == 0:
@@ -517,11 +520,16 @@ def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
         intfile = match_filter(galaxydir, band)
         uncfile = rreplace(intfile, "int", "unc", 1)
         varfile = rreplace(uncfile, "unc", "var", 1)
+
+        # There's a really shitty IRAF "feature" where if imfunc acts on a file
+        # which already exists, it will simply add on another layer, which
+        # confuses the hell out of ellipse. So if a previous file exists, I'll
+        # delete it manually.
         run_imfunc(uncfile, varfile, "square")
 
-        ellipse_file = format_path_dependence(ellipsebase, band, "tab",
+        ellipse_file = format_band_dependence(ellipsebase, band, "tab",
                 galaxydir)
-        output = format_path_dependence(baseuncertainty,
+        output = format_band_dependence(baseuncertainty,
             band, "tab", galaxydir)
         run_ellipse(varfile, ellipse_file, output)
 
