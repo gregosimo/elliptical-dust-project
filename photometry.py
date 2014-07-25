@@ -141,8 +141,8 @@ def build_pipeline(BASEDIR, WISETable):
     allSkyValues(BASEDIR, WISETable)
 
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
-        mask="foreground.pl", useskybase="sky_aperture", 
-        ellipsebase="ellipsepars", flux=False):
+        mask="foreground.pl", useskybase="sky_aperture", DNflux=False,
+        flux=False):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -171,28 +171,54 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     # Right now we will only support sky backgrounds done through the pipeline.
     # No support for on-the-fly calculations unless there is a use case for
     # them.
+    # TODO: Make sure UV sky background hasn't been broken.
     if band in IRBANDS:
-        background = estimate_WISE_background(galaxyfolder, band, aperture_area)
+        background = estimate_WISE_background(galaxyfolder, band, 
+                aperture_area)
     else:
         background = estimate_UV_background(galaxyfolder, band,
-                baseellipsefile=ellipsebase)
+                baseellipsefile=baseobjectfile)
     objectflux = DNflux - background
     if objectflux < 0:
         print "\nGot negative flux for {0}.\n".format(name)
         objectflux *= -1
-    Vegamag = DNflux2WISEmag(band, objectflux)
 
     if flux:
-        flux = synphot.ZP_freq[band].value*10**(-Vegamag/2.5)
+        flux = DN_to_Jy_conversions(band) * objectflux
         return flux
     else:
+        Vegamag = DNflux2WISEmag(band, objectflux)
         return Vegamag
 
-EFFECTIVE_NOISE_PIXELS = {"W1": 13.772, "W2": 17.636, "W3": 35.476, "W4":
+def DN_to_Jy_conversions(band):
+    '''Returns conversion factors between Data Numbers and Janskys. [Jy/DN]
+
+    Taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    '''
+    DN_to_Jy = {"W1": 1.9350e-6, "W2": 2.7048e-06, "W3": 1.8326e-06, "W4":
+            5.2269e-05}
+    return DN_to_Jy[band]
+
+def calculate_correlated_pixel_noise(band):
+    '''Calculated Fcorr for a particular band.
+
+    Values taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#corrnoise
+    for s_in/s_out
+    and
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec4_6ci.html
+    for N_p
+    '''
+    EFFECTIVE_NOISE_PIXELS = {"W1": 13.772, "W2": 17.636, "W3": 35.476, "W4":
         24.462}
-INPUT_TO_OUTPUT_PIXEL_RATIO = {"W1": 2, "W2": 2, "W3": 2, "W4": 4}
-def photometric_error(galaxydir, band, ellipsebase="ellipse_aperture",
-        skybase="sky_level", uncertainty_base="uncertainty"):
+    INPUT_TO_OUTPUT_PIXEL_RATIO = {"W1": 2, "W2": 2, "W3": 2, "W4": 4}
+    return  (EFFECTIVE_NOISE_PIXELS[band] * 
+            (INPUT_TO_OUTPUT_PIXEL_RATIO[band])**2)
+
+def photometric_error(BASEDIR, name, band, ellipsebase="ellipse_aperture",
+        skybase="sky_level", uncertainty_base="uncertainty", mask="", 
+        flux=False):
     '''Calculates the photometric error of a magnitude calculation.
 
     This measurement uses the photometric pipeline to look up values of the
@@ -200,6 +226,7 @@ def photometric_error(galaxydir, band, ellipsebase="ellipse_aperture",
     requires the uncertainty Atlas images. Those will need to be downloaded as
     part of the pipeline as well.
     '''
+    galaxydir = change_to_galaxy_dir(BASEDIR, name)
     ellipseParams = STSDAS_to_Astropy_Table(galaxydir, 
             format_band_dependence(ellipsebase, band, "tab"))[0]
     skyParams = Table.read(os.path.join(galaxydir,
@@ -211,8 +238,7 @@ def photometric_error(galaxydir, band, ellipsebase="ellipse_aperture",
     NA = ellipseParams["NPIX_E"]
     NB = skyParams["NSKY"]
     total_sigi = imageUncertainty["TFLUX_E"]
-    Fcorr = (EFFECTIVE_NOISE_PIXELS[band] *
-        (INPUT_TO_OUTPUT_PIXEL_RATIO[band])**2)
+    Fcorr = calculate_correlated_pixel_noise(band)
     # We get the background level from centroiding, which seems like a
     # mean-related measure.
     k = 1   
@@ -222,11 +248,51 @@ def photometric_error(galaxydir, band, ellipsebase="ellipse_aperture",
     # should be minimal because of the large size of the aperture.
     sig_conf = 0
 
-    fluxerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B) +
+    sourceerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B) +
             sig_conf)**(0.5)
 
-    return fluxerr[0]
+    object_flux = galaxy_photometry(BASEDIR, name, band,
+            baseobjectfile=ellipsebase, mask=mask, useskybase=skybase,
+            DNflux=True)
 
+    if flux:
+        fluxerr = DN_to_Jy_conversions(band) * (object_flux**2 *
+                (get_zero_point_flux_uncertainty(band)**2 / 
+                get_zero_point_flux_level(band)**2 + 
+                0.8483 * get_zero_point_magnitude_uncertainty(band)**2) +
+                fluxerr**2)**(0.5)
+        return fluxerr
+    else: 
+        magerr = (get_zero_point_magnitude_uncertainty(band)**2 + 1.179 * 
+            fluxerr**2 / object_flux**2)**(0.5)
+        return magerr
+
+def get_zero_point_flux_level(band):
+    '''Returns the zero-point flux level for a band in Janskys.
+
+    Taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    '''
+    f0 = {"W1": 306.682, "W2": 170.663, "W3": 29.0448, "W4": 8.2839}
+    return f0[band]
+
+def get_zero_point_flux_uncertainty(band):
+    '''Returns the zero-point flux uncertainty for a band in Janskys.
+
+    Taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    '''
+    sig_f0 = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124}
+    return sig_f0[band]
+
+def get_zero_point_magnitude_uncertainty(band):
+    '''Returns the zero point magnitude uncertainty for a particular band.
+
+    The uncertainties are taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    '''
+    MAGZPUNC = {"W1": 0.006, "W2": 0.007, "W3": 0.015, "W4": 0.012}
+    return MAGZPUNC[band]
             
 def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
@@ -803,7 +869,8 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
 # to a Table more easily than Rows.
 def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_aperture", ellipsebase="ellipsepars", flux=False):
+        skybase="sky_level", uncertaintybase="uncertainty",  
+        ellipsebase="ellipsepars", flux=False):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
@@ -811,30 +878,42 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     '''
     fulltable = Table()
     for band in runbands:
-        bandmags = photometryOnBand(BASEDIR, objectnames, band, baseobjectfile,
-                mask, skybase, ellipsebase, flux)
+        bandmags, magerrs = photometryOnBand(BASEDIR, objectnames, band, 
+                baseobjectfile, mask, skybase, uncertaintybase, flux, 
+                errors=True)
 
         # How to keep the column name within our standard. Though I suppose we
         # could just change the standard. Look into that. See if the current
         # standard is hard-coded somewhere, or if that's just what I've been
         # doing to stay consistent with the WISE values.
         # We want w1apmag and NUVapmag.
-        templatecolname = "{0}apmag"
+        magtemplate = "{0}apmag"
+        errtemplate = "{0}aperr"
         if band in IRBANDS:
-            nameband = templatecolname.format(band.lower())
+            magname, errname = tuple([template.format(band.lower()) for template
+                in [magtemplate, errtemplate]])
         else:
-            nameband = templatecolname.format(band)
+            magname, errname = tuple([template.format(band) for template
+                in [magtemplate, errtemplate]])
 
-        fulltable[nameband] = bandmags
+        fulltable[magname] = bandmags
+        fulltable[errname] = magerrs
     
     return fulltable
 
 def photometryOnBand(BASEDIR, objectnames, band,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_aperture", ellipsebase="ellipsepars", flux=False):
+        skybase="sky_aperture", uncertaintybase="uncertainty", flux=False, 
+        errors=False):
     '''Creates an array of object magnitudes in a particular band.'''
-    return np.array([galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-        mask, skybase, ellipsebase, flux) for galname in objectnames])
+    if errors:
+        return (np.array([galaxy_photometry(BASEDIR, galname, band, 
+            baseobjectfile, mask, skybase, flux) for galname in objectnames]),
+            np.array([photometric_error(BASEDIR, galname, band,
+            baseobjectfile, skybase, uncertaintybase, mask, flux) for galname in objectnames]))
+    else: 
+        return np.array([galaxy_photometry(BASEDIR, galname, band, 
+            baseobjectfile, mask, skybase, flux) for galname in objectnames])
 
 def createDifferencePlot(xval, valtocompare, errors, xlabel, ylabel, title):
     '''Plots the difference between two values against the value.
