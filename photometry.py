@@ -7,7 +7,7 @@ import glob
 from pyraf import iraf
 from astropy import wcs
 from astropy.io import fits
-from astropy.table import Table
+from astropy.table import Table, Column
 import numpy as np
 import aplpy
 import matplotlib
@@ -801,34 +801,33 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
 # This can be fixed pretty easily by making runbands a mandatory argument, and
 # then constructing Columns while iterating. I'm pretty sure those can be added 
 # to a Table more easily than Rows.
-def aperturePhotometryTable(BASEDIR, objectnames,
+def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_aperture", ellipsebase="ellipsepars", flux=False, 
-        runbands=bands):
+        skybase="sky_aperture", ellipsebase="ellipsepars", flux=False):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
     will be given in the AB system.
     '''
-    # This function should have a better way of specifying which bands should be
-    # used to create the table.
-    w1apmags = photometryOnBand(BASEDIR, objectnames, "W1", baseobjectfile, 
-            mask, skybase, ellipsebase, flux)
-    w2apmags = photometryOnBand(BASEDIR, objectnames, "W2", baseobjectfile, 
-            mask, skybase, ellipsebase, flux)
-    w3apmags = photometryOnBand(BASEDIR, objectnames, "W3", baseobjectfile, 
-            mask, skybase, ellipsebase, flux)
-    #NUVapmags = photometryOnBand(BASEDIR, objectnames, "NUV", baseobjectfile, 
-    #        mask, skybase, ellipsebase)
-    #FUVapmags = photometryOnBand(BASEDIR, objectnames, "FUV", baseobjectfile, 
-    #        mask, skybase, ellipsebase)
-    #finalTable = Table([objectnames, w1apmags, w2apmags, w3apmags, NUVapmags, 
-    #        FUVapmags], names=("objstr_01", "w1apmag", "w2apmag", "w3apmag",
-    #        "NUVapmags", "FUVapmags"))
+    fulltable = Table()
+    for band in runbands:
+        bandmags = photometryOnBand(BASEDIR, objectnames, band, baseobjectfile,
+                mask, skybase, ellipsebase, flux)
+
+        # How to keep the column name within our standard. Though I suppose we
+        # could just change the standard. Look into that. See if the current
+        # standard is hard-coded somewhere, or if that's just what I've been
+        # doing to stay consistent with the WISE values.
+        # We want w1apmag and NUVapmag.
+        templatecolname = "{0}apmag"
+        if band in IRBANDS:
+            nameband = templatecolname.format(band.lower())
+        else:
+            nameband = templatecolname.format(band)
+
+        fulltable[nameband] = bandmags
     
-    finalTable = Table([objectnames, w1apmags, w2apmags, w3apmags], 
-            names=("objstr_01", "w1apmag", "w2apmag", "w3apmag"))
-    return finalTable
+    return fulltable
 
 def photometryOnBand(BASEDIR, objectnames, band,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
