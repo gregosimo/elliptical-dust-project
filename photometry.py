@@ -27,65 +27,6 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
 
-###############################################################################
-# Astropy Utilities                                                           #
-###############################################################################
-
-def combine_WISE_aperture_tables(apertureTable, wisetable, MIR_column):
-    '''Combines the Aperture Photometry table with a WISE photometry table.
-    '''
-    return make_relevant_table(apertureTable["objstr_01"],
-            apertureTable["w1apmag"], wisetable["w1gmag"],
-            apertureTable["w2apmag"], wisetable["w2gmag"],
-            apertureTable["w3apmag"], wisetable["w3gmag"],
-            apertureTable["NUVapmags"], apertureTable["FUVapmags"], MIR_column)
-
-def make_relevant_table(objstr, w1ap, w1wise, w2ap, w2wise, w3ap, w3wise, NUVap,
-        FUVap, MIR):
-    '''Extracts relevant columns from the raw WISE and GALEX tables.
-
-    Relevant information includes elliptical aperture parameters,
-    measured magnitudes, and exposure times.'''
-    w1w2ap = w1ap - w2ap
-    w2w3ap = w2ap - w3ap
-
-    w1w2wise = w1wise - w2wise
-    w2w3wise = w2wise - w3wise
-
-    return Table((objstr, w1ap, w2ap, w3ap, w1wise, w2wise, w3wise, w1w2ap,
-        w2w3ap, w1w2wise, w2w3wise, NUVap, FUVap, MIR), names=("objstr_01", 
-        "w1apmag", "w2apmag", "w3apmag", "w1gmag", "w2gmag", "w3gmag", 
-        "w1w2apcol", "w2w3apcol", "w1w2gcol", "w2w3gcol", "NUVapmag", 
-        "FUVapmag", "MIR"))
-
-def astropy_table_index(table, column, value):
-    '''Returns the row index of the table which has the value in column.
-
-    There are often times when you want to know the index of the row
-    where a certain column has a value. This function will return a 
-    list of row indices that match the value in the column.'''
-    return np.where(table[column] == value)
-
-def astropy_table_row(table, column, value):
-    '''Returns the row of the table which has the value in column.
-
-    If you want to know the row in an astropy table where a value in a
-    column corresponds to a given value, this function will return that
-    row. If there are multiple rows which match the value in the 
-    column, you will get all of them. If no rows match the value, this
-    function will throw a ValueError.'''
-    return table[astropy_table_index(table, column, value)]
-
-def extract_subtable_from_column(table, column, selections):
-    '''Returns a table which only contains values in selections.
-
-    This function will create a Table whose values in column are only
-    those found in selections.
-    '''
-    indices = []
-    for object in selections:
-        indices.append(astropy_table_index(table, column, object)[0][0])
-    return table[indices]
 
 ###############################################################################
 # Aperture Photometry Routines                                                #
@@ -96,49 +37,41 @@ def extract_subtable_from_column(table, column, selections):
 # of the galaxies as folders, with the images having names which follow the
 # rules in match_filter(). 
 #
-# With a table of WISE catalog entries, you then use those to create ellipse
-# parameter files. This can be done by running:
-# >>> allApertureTables(BASEDIR, WISE_Table)
-# This command will go through all the directories for objects in WISE_Table
-# and then use the aperture photometry information from the Catalog to create
-# ellipsepars.tab files. It will also do this for all bands which are located
-# in the bands list at the top of this file. These files only have 5 columns, 
-# the SMA, ELLIP, PA, X0, and Y0 values.
-# 
-# Once the parameter files are written, we then need to feed them to the
-# ellipse package so that they will be run, and the full information about the
-# photometry will be made. These will be located in ellipse_aperture.tab files.
-# This can be done by running:
-# >>> allEllipseTables(BASEDIR, WISE_Table)
+# The best way to get BASEDIR set up correctly is to take the object coordinates
+# and use the batch_image_download function to set up the BASEDIR folder.
 #
-# TODO: Update this doc.
-# After generating ellipse tables, we now want to generate tables for sky
-# measurements. We first do this by generating the parameter files. This can be
-# done as before by running:
-# >>> allSkyParams(BASEDIR, WISE_Table)
-# And then generate the tables through the ellipse routine by running:
-# >>> allSkyTables(BASEDIR, WISE_Table)
-# 
-# Now that the object and sky tables are set, we can now run aperture photometry
-# by running:
-# >>> galaxy_photometry(BASEDIR, objname, band)
-# 
-# If you want a table of magnitudes for all objects, use the command:
-# >>> aperturePhotometryTable(BASEDIR, objnames)
+# The way to set up BASEDIR for the photometric pipeline is to run
+# build_pipeline().
 
-def build_pipeline(BASEDIR, WISETable):
-    '''Basically runs all the commands necessary to build the ellipse aperture
-    and sky measurement pipeline. It consists of running:
-    allApertureTables
-    allEllipseTables
-    allSkyValues
+def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
+        mask="", useskybase="sky_aperture"):
+    '''Calculates the flux of a galaxy in Data Numbers.
 
-    If you want a table of photometry, you'll have to run
-    aperturePhotometryTable yourself.
-    ''' 
-    allApertureTables(BASEDIR, WISETable)
-    allEllipseTables(BASEDIR, WISETable)
-    allSkyValues(BASEDIR, WISETable)
+    This function uses the output from the ellipse package to calculate the
+    background-subtracted flux of the galaxy. The total flux is calculated from
+    the ellipse package and is stored in the table named with baseobjectfile.
+    The sky values are determined from the file named with useskybase.
+
+    Masking is not implemented yet.
+    '''
+    ellipsetable = STSDAS_to_Astropy_Table(galaxyfolder,
+            format_band_dependence(baseobjectfile, band, "tab"))
+    DNflux = ellipsetable[0]["TFLUX_E"]
+    aperture_area = ellipsetable[0]["NPIX_E"]
+    # Right now we will only support sky backgrounds done through the pipeline.
+    # No support for on-the-fly calculations unless there is a use case for
+    # them.
+    # TODO: Make sure UV sky background hasn't been broken.
+    if band in IRBANDS:
+        background = estimate_WISE_background(galaxyfolder, band, 
+                aperture_area)
+    else:
+        background = estimate_UV_background(galaxyfolder, band,
+                baseellipsefile=baseobjectfile)
+    objectflux = DNflux - background
+    return objectflux
+    
+
 
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
         mask="foreground.pl", useskybase="sky_aperture", DNflux=False,
@@ -267,6 +200,79 @@ def photometric_error(BASEDIR, name, band, ellipsebase="ellipse_aperture",
             fluxerr**2 / object_flux**2)**(0.5)
         return magerr
 
+###############################################################################
+# Astropy Utilities                                                           #
+###############################################################################
+
+def combine_WISE_aperture_tables(apertureTable, wisetable, MIR_column):
+    '''Combines the Aperture Photometry table with a WISE photometry table.
+    '''
+    return make_relevant_table(apertureTable["objstr_01"],
+            apertureTable["w1apmag"], wisetable["w1gmag"],
+            apertureTable["w2apmag"], wisetable["w2gmag"],
+            apertureTable["w3apmag"], wisetable["w3gmag"],
+            apertureTable["NUVapmags"], apertureTable["FUVapmags"], MIR_column)
+
+def make_relevant_table(objstr, w1ap, w1wise, w2ap, w2wise, w3ap, w3wise, NUVap,
+        FUVap, MIR):
+    '''Extracts relevant columns from the raw WISE and GALEX tables.
+
+    Relevant information includes elliptical aperture parameters,
+    measured magnitudes, and exposure times.'''
+    w1w2ap = w1ap - w2ap
+    w2w3ap = w2ap - w3ap
+
+    w1w2wise = w1wise - w2wise
+    w2w3wise = w2wise - w3wise
+
+    return Table((objstr, w1ap, w2ap, w3ap, w1wise, w2wise, w3wise, w1w2ap,
+        w2w3ap, w1w2wise, w2w3wise, NUVap, FUVap, MIR), names=("objstr_01", 
+        "w1apmag", "w2apmag", "w3apmag", "w1gmag", "w2gmag", "w3gmag", 
+        "w1w2apcol", "w2w3apcol", "w1w2gcol", "w2w3gcol", "NUVapmag", 
+        "FUVapmag", "MIR"))
+
+def astropy_table_index(table, column, value):
+    '''Returns the row index of the table which has the value in column.
+
+    There are often times when you want to know the index of the row
+    where a certain column has a value. This function will return a 
+    list of row indices that match the value in the column.'''
+    return np.where(table[column] == value)
+
+def build_pipeline(BASEDIR, WISETable):
+    '''Basically runs all the commands necessary to build the ellipse aperture
+    and sky measurement pipeline. It consists of running:
+    allApertureTables
+    allEllipseTables
+    allSkyValues
+
+    If you want a table of photometry, you'll have to run
+    aperturePhotometryTable yourself.
+    ''' 
+    allApertureTables(BASEDIR, WISETable)
+    allEllipseTables(BASEDIR, WISETable)
+    allSkyValues(BASEDIR, WISETable)
+
+def astropy_table_row(table, column, value):
+    '''Returns the row of the table which has the value in column.
+
+    If you want to know the row in an astropy table where a value in a
+    column corresponds to a given value, this function will return that
+    row. If there are multiple rows which match the value in the 
+    column, you will get all of them. If no rows match the value, this
+    function will throw a ValueError.'''
+    return table[astropy_table_index(table, column, value)]
+
+def extract_subtable_from_column(table, column, selections):
+    '''Returns a table which only contains values in selections.
+
+    This function will create a Table whose values in column are only
+    those found in selections.
+    '''
+    indices = []
+    for object in selections:
+        indices.append(astropy_table_index(table, column, object)[0][0])
+    return table[indices]
 def get_zero_point_flux_level(band):
     '''Returns the zero-point flux level for a band in Janskys.
 
