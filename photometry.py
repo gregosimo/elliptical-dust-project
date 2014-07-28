@@ -29,8 +29,238 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
 LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4": 
         -0.029}
 
-LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4": 
-        -0.029}
+
+###############################################################################
+# Aperture Photometry Routines                                                #
+###############################################################################
+# 
+# There's a lot to remember to get the aperture photometry routine done. First
+# make sure the BASEDIR is set up correctly. It should have the identifications
+# of the galaxies as folders, with the images having names which follow the
+# rules in match_filter(). 
+#
+# The best way to get BASEDIR set up correctly is to take the object coordinates
+# and use the batch_image_download function to set up the BASEDIR folder.
+#
+# The way to set up BASEDIR for the photometric pipeline is to run
+# build_pipeline().
+
+def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
+        mask="", useskybase="sky_aperture"):
+    '''Calculates the flux of a galaxy in Data Numbers.
+
+    This function uses the output from the ellipse package to calculate the
+    background-subtracted flux of the galaxy. The total flux is calculated from
+    the ellipse package and is stored in the table named with baseobjectfile.
+    The sky values are determined from the file named with useskybase.
+
+    Masking is not implemented yet.
+    '''
+    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
+            format_band_dependence(baseobjectfile, band, "tab"))
+    DNflux = ellipsetable[0]["TFLUX_E"]
+    aperture_area = ellipsetable[0]["NPIX_E"]
+    # Right now we will only support sky backgrounds done through the pipeline.
+    # No support for on-the-fly calculations unless there is a use case for
+    # them.
+    # TODO: Make sure UV sky background hasn't been broken.
+    if band in IRBANDS:
+        background = estimate_WISE_background(galaxydir, band, 
+                aperture_area)
+    else:
+        background = estimate_UV_background(galaxydir, band,
+                baseellipsefile=baseobjectfile)
+    objectflux = DNflux - background
+    if objectflux < 0:
+        raise ValueError("Measured negative flux for object.")
+    return objectflux
+    
+
+
+def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
+        mask="", useskybase="sky_aperture", uncertaintybase="uncertainty", 
+        flux=False, errors=True):
+    '''Returns the elliptical aperture photometry-determined magnitude.
+
+    This function requires that the adequate pipeline be constructed, where
+    there is a folder tree under BASEDIR where each object maps to a folder
+    labeled as the object name without spaces. For example, "NGC 1111" would be
+    under the folder "NGC1111".
+
+    Under each folder, there should be two sets of files outputted by the
+    ellipse package. One should be called ellipse_aperture.{band}.tab, which
+    contains the calculated total flux of the object, and the other should be
+    named sky_level.{band}.tab. These should have information about the sky
+    background; This should either be the output of the fitsky routine for
+    WISE bands, or the output of the ellipse routine for UV bands (still under
+    construction).
+
+    Features which are under construction are on-the-fly aperture photometry and
+    sky calculation without needing the sky_aperture and ellipse_aperture files,
+    along with masking. If you lave the useskybase parameter alone, it will
+    perform regular sky estimation.
+    '''
+    galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
+    try:
+        objectflux = calc_DNflux(galaxydir, band, baseobjectfile, mask,
+                useskybase)
+    except ValueError:
+        print "\nGot negative flux for {0}.\n".format(name)
+        objectflux *= -1
+
+    if errors:
+        objectError = calc_DNerr(galaxydir, band)
+        print flux
+        if flux:
+            photvalue = DN_flux_to_Jy(band, objectflux)
+            err = DN_err_to_Jansky_err(galaxydir, band, objectError,
+                    DNflux=objectflux)
+        else:
+            photvalue = DNflux2WISEmag(band, objectflux)
+            err = DN_err_to_mag_err(galaxydir, band, objectError,
+                    DNflux=objectflux)
+        return (photvalue, err)
+    else:
+        if flux:
+            photvalue = DN_flux_to_Jy(band, objectflux)
+        else:
+            photvalue = DNflux2WISEmag(band, objectflux)
+        return flux
+
+def DN_to_Jy_conversion(band):
+    '''Returns the conversion factor between Data Numbers and Janskys for band.
+
+    Taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    '''
+    DN_to_Jy = {"W1": 1.9350e-6, "W2": 2.7048e-06, "W3": 1.8326e-06, "W4":
+            5.2269e-05}
+    return DN_to_Jy[band]
+
+
+def DN_flux_to_Jy(band, objectflux):
+    '''Converts a flux from Data Numbers to Janskys.
+    '''
+    return objectflux * DN_to_Jy_conversion(band)
+
+def calculate_correlated_pixel_noise(band):
+    '''Calculated Fcorr for a particular band.
+
+    Values taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#corrnoise
+    for s_in/s_out
+    and
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec4_6ci.html
+    for N_p
+    '''
+    EFFECTIVE_NOISE_PIXELS = {"W1": 13.772, "W2": 17.636, "W3": 35.476, "W4":
+        24.462}
+    INPUT_TO_OUTPUT_PIXEL_RATIO = {"W1": 2, "W2": 2, "W3": 2, "W4": 4}
+    return  (EFFECTIVE_NOISE_PIXELS[band] * 
+            (INPUT_TO_OUTPUT_PIXEL_RATIO[band])**2)
+
+def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
+        skybase="sky_level", uncertainty_base="uncertainty", mask=""):
+    '''Calculates the uncertainty of a Data Number flux.
+
+    This function requires bases for the ellipse routine, sky routine, and
+    uncertainty routine. It will use values from these files to calculate the
+    uncertainty of the flux based on the description given in the WISE All-sky
+    explanatory Supplement:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html
+    '''
+    ellipseParams = STSDAS_to_Astropy_Table(galaxydir, 
+            format_band_dependence(ellipsebase, band, "tab"))[0]
+    skyParams = Table.read(os.path.join(galaxydir,
+        format_band_dependence(skybase, band, "txt")), format="ascii.daophot")
+    imageUncertainty = STSDAS_to_Astropy_Table(galaxydir,
+            format_band_dependence(uncertainty_base, band, "tab"))[0]
+
+    fapcor = 1
+    NA = ellipseParams["NPIX_E"]
+    NB = skyParams["NSKY"][0]
+    total_sigi = imageUncertainty["TFLUX_E"]
+    Fcorr = calculate_correlated_pixel_noise(band)
+    # We get the background level from centroiding, which seems like a
+    # mean-related measure.
+    k = 1   
+    sig_B = skyParams["STDEV"][0]**2
+    # We can try to measure this and compare it to other errors later, but right
+    # now this is not easily measurable in an automated way. I believe that this
+    # should be minimal because of the large size of the aperture.
+    sig_conf = 0
+
+    sourceerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B) +
+            sig_conf)**(0.5)
+    return sourceerr
+
+def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
+        mask="", useskybase="sky_level", DNflux=0):
+    '''Converts an error in Data Number to an error in magnitudes.
+
+    If DNflux is given, this function will use it as the value for the object's
+    flux in data numbers. If it isn't, then it will calculate it on its own.
+    '''
+
+    if not DNflux:
+        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, mask, useskybase)
+    sigma_mag = (get_zero_point_magnitude_uncertainty(band)**2 + 1.179 *
+            (DNerr**2 / DNflux **2))**0.5
+    return sigma_mag
+
+def DN_err_to_Jansky_err(galaxydir, band, DNerr, 
+        baseobjectfile="ellipse_aperture", mask="", useskybase="sky_level", 
+        DNflux=0):
+    '''Converts an error in Data Numbers to an error in Janskys.
+
+    If DNflux is given, this function will use it as the value for the object's
+    flux in data numbers. If it isn't, then it will calculate it on its own.
+    '''
+
+    if not DNflux:
+        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, mask, useskybase)
+    sigma_Jy = DN_to_Jy_conversion(band) * (DNflux**2 *
+            (get_zero_point_flux_uncertainty(band)**2 / 
+            get_zero_point_flux_level(band)**2 + 
+            0.8483 * get_zero_point_magnitude_uncertainty(band)**2) +
+            DNerr**2)**(0.5)
+    return sigma_Jy
+
+def get_zero_point_magnitude_uncertainty(band):
+    '''Returns the zero-point magnitude uncertainty in a given band.
+
+    The uncertainties in the zero-point magnitudes are taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    '''
+    MAGZPUNC = {"W1": 0.006, "W2": 0.007, "W3": 0.015, "W4": 0.012}
+    return MAGZPUNC[band]
+
+def object_name_to_dir(objectname):
+    '''Converts the object name with spaces to the directory name.'''
+    return objectname.replace(' ', "")
+
+def photometric_error(BASEDIR, name, band, ellipsebase="ellipse_aperture",
+        skybase="sky_level", uncertainty_base="uncertainty", mask="", 
+        flux=False):
+    '''Calculates the photometric error of a magnitude calculation.
+
+    This measurement uses the photometric pipeline to look up values of the
+    quantities needed for a reliable error estimate. Note that this calculation
+    requires the uncertainty Atlas images. Those will need to be downloaded as
+    part of the pipeline as well.
+    '''
+    galaxydir = change_to_galaxy_dir(BASEDIR, name)
+
+    object_flux = galaxy_photometry(BASEDIR, name, band,
+            baseobjectfile=ellipsebase, mask=mask, useskybase=skybase,
+            DNflux=True)
+
+    if flux:
+        return fluxerr
+    else: 
+        magerr = (get_zero_point_magnitude_uncertainty(band)**2 + 1.179 * 
+            fluxerr**2 / object_flux**2)**(0.5)
+        return magerr
 
 ###############################################################################
 # Aperture Photometry Routines                                                #
