@@ -23,21 +23,26 @@ METADATA_SERVER ="http://irsa.ipac.caltech.edu/ibe/search/wise/allwise/p3am_cdd"
 # This query will return an IPAC table which contains the coaddgrp, coadd_ra,
 # coadd_id and bands available for that location. We then place the images into
 # the correct folder in the BASEDIR.
-IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits"
+IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
+UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-unc-3.fits.gz"
 
 # This is the code which corresponds to the latest WISE catalog. In this case,
 # it is for ALLWISE.
 LATEST_WISE_CODE = "ac"
 
-def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False):
+def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
+        uncertainty=True):
     '''Downloads all images for many objects.
 
     The objects, ras, and decs variables should be arrays with the same length.
-    It will download square cutouts with length given by size arcseconds.
+    It will download square cutouts with length given by size arcseconds. If the
+    uncertainty keyword is given as true, it will additionally download the
+    corresponding uncertainty files.
     '''
     for object, ra, dec in zip(objects, ras, decs):
         coaddID = query_metadata(ra, dec)
-        query_image(BASEDIR, object, coaddID, ra, dec, size=size)
+        query_image(BASEDIR, object, coaddID, ra, dec, size=size,
+                uncertainty=uncertainty)
 
 def query_metadata(ra, dec):
     '''Queries the WISE Image Metadata service for image information.
@@ -63,28 +68,38 @@ def query_metadata(ra, dec):
         raise ValueError("More than one coadd found")
     return coaddID[0]
 
-def query_image(BASEDIR, objstr, coaddID, ra, dec, size=600, upgrade=False):
+def query_image(BASEDIR, objstr, coaddID, ra, dec, size=600, upgrade=False,
+        uncertainty=True, overwrite=True):
     '''Downloads WISE images into the correct directories.
 
     Objstr should be the full name of the object. If the directory corresponding
     to the object does no exist, this function will create it. If it does exist,
     this function will either skip the download, or replace it with a more
-    recent version.
+    recent version. If you want to overwrite an existing folder, use the
+    overwrite flag.
 
     All that's needed is the name of the object in order to correctly detect the
     directory, and the coaddID to fetch the images from the server.
+
+    If the uncertainty keyword is set to true, then uncertainty images will also
+    be downloaded from the Atlas web site.
     '''
     galaxydir = phot.change_to_galaxy_dir(BASEDIR, objstr)
     coadddic = {"coaddgrp": get_coaddgrp(coaddID), "coadd_ra":
         get_coadd_ra(coaddID), "coadd_id": coaddID}
-    try:
-        if not check_galaxy_images_version(galaxydir):
-            if upgrade:
-                print "Upgrading images for {0}".format(objstr)
-                upgrade_images(galaxydir, coadddic, ra, dec, size)
+    # If the folder exists, check to see if we want to upgrade. If we do, then
+    # check if the images are up to date. If they aren't, then download them
+    # using upgrade_images.
+    if os.path.isdir(galaxydir):
+        if overwrite:
+            download_images(galaxydir, coadddic, ra, dec, size)
+        elif upgrade and not check_galaxy_images_version(galaxydir):
+            print "Upgrading images for {0}".format(objstr)
+            upgrade_images(galaxydir, coadddic, ra, dec, size)
         else:
             print "Skipping {0}: Folder exists.".format(objstr)
-    except RuntimeError:
+    # If the folder doesn't exist, make it and download the images into it.
+    else:
         os.mkdir(galaxydir)
         download_images(galaxydir, coadddic, ra, dec, size)
     print "Images for {0} downloaded".format(objstr)
@@ -98,7 +113,7 @@ def upgrade_images(galaxydir, coadddic, ra, dec, size=600):
         os.remove(os.path.join(galaxydir, phot.match_filter(galaxydir, band)))
     download_images(galaxydir, coadddic, ra, dec, size)
 
-def download_images(galaxydir, coadddic, ra, dec, size):
+def download_images(galaxydir, coadddic, ra, dec, size, uncertainty=True):
     '''Downloads the images into the given directory.
     
     This function will download cutouts. Therefore, it will need to know the RA,
@@ -111,26 +126,32 @@ def download_images(galaxydir, coadddic, ra, dec, size):
         query_params = {"center": "{0},{1}".format(ra, dec), "size":
                 "{0}arcsec".format(size)}
         image_query = get_url(image_url, urllib.urlencode(query_params))
-        # The -P sets the prefix for the downloaded files. So we want them to be
-        # located in galaxydir.
-        command = "wget"
-        wget_flags = "-P{0}".format(galaxydir)
-        subprocess.call([command, wget_flags, image_query])
-        # Once the image is downloaded, we want to uncompress it, and then
-        # delete the compressed file.
-        #
-        # This function finds the filename for the url string, and then appends
-        # that to the path with a .gz extension.
-        urlparts = urlparse.urlsplit(image_query)
-        downloaded_filename = glob.glob(os.path.join(galaxydir,
-            "*w{0}*".format(i)))[0]
-        compressed_image_filename = ".".join([os.path.split(urlparts.path)[1], 
-            "gz"])
-        compressed_path = os.path.join(os.path.split(downloaded_filename)[0],
-                compressed_image_filename)
-        os.rename(downloaded_filename, compressed_path)
-        subprocess.call(["gunzip", compressed_path])
+        download_image(galaxydir, image_query, "w{0}".format(i))
+        if uncertainty:
+            uncert_url = UNCERTAINTY_SERVER.format(**coadddic)
+            uncert_query = get_url(uncert_url, urllib.urlencode(query_params))
+            download_image(galaxydir, uncert_query, "w{0}".format(i))
                 
+def download_image(galaxydir, image_query, band):
+    '''Downloads an image into galaxydir.
+
+    The image_query argument can be any valid HTTP request which resolves into an
+    image which can be downloaded. Band should be the name of the band e.g. W1.
+    '''
+    downloaded_filename = os.path.basename(image_query).split("?")[0]
+    compressed_path = os.path.join(galaxydir, downloaded_filename)
+    # The -P sets the prefix for the downloaded files. So we want them to be
+    # located in galaxydir.
+    # The better way of doing this will be to use --content-disposition to name
+    # the file. However, the current version of wget installed on this machine
+    # is 1.12, and I'm running into a bug with it. When wget is upgraded to
+    # 1.15, we'll see if that is still a problem.
+    wget_command = ["/usr/current/wget/bin/wget", "--directory-prefix={0}".format(galaxydir), 
+            "--content-disposition", image_query]
+    subprocess.call(wget_command)
+    # Once the image is downloaded, we want to uncompress it, and then
+    # delete the compressed file.
+    subprocess.call(["gunzip", compressed_path])
 
 def check_galaxy_images_version(galaxydir):
     '''Checks if the WISE images are from the latest catalog.

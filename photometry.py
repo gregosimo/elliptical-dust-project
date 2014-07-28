@@ -7,13 +7,14 @@ import glob
 from pyraf import iraf
 from astropy import wcs
 from astropy.io import fits
-from astropy.table import Table
+from astropy.table import Table, Column
 import numpy as np
 import aplpy
 import matplotlib
 import matplotlib.pyplot as plt
 
 import queries as query
+import synthetic_photometry as synphot
 
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
@@ -26,8 +27,238 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
 
-LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4": 
-        -0.029}
+
+###############################################################################
+# Aperture Photometry Routines                                                #
+###############################################################################
+# 
+# There's a lot to remember to get the aperture photometry routine done. First
+# make sure the BASEDIR is set up correctly. It should have the identifications
+# of the galaxies as folders, with the images having names which follow the
+# rules in match_filter(). 
+#
+# The best way to get BASEDIR set up correctly is to take the object coordinates
+# and use the batch_image_download function to set up the BASEDIR folder.
+#
+# The way to set up BASEDIR for the photometric pipeline is to run
+# build_pipeline().
+
+def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
+        mask="", useskybase="sky_aperture"):
+    '''Calculates the flux of a galaxy in Data Numbers.
+
+    This function uses the output from the ellipse package to calculate the
+    background-subtracted flux of the galaxy. The total flux is calculated from
+    the ellipse package and is stored in the table named with baseobjectfile.
+    The sky values are determined from the file named with useskybase.
+
+    Masking is not implemented yet.
+    '''
+    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
+            format_band_dependence(baseobjectfile, band, "tab"))
+    DNflux = ellipsetable[0]["TFLUX_E"]
+    aperture_area = ellipsetable[0]["NPIX_E"]
+    # Right now we will only support sky backgrounds done through the pipeline.
+    # No support for on-the-fly calculations unless there is a use case for
+    # them.
+    # TODO: Make sure UV sky background hasn't been broken.
+    if band in IRBANDS:
+        background = estimate_WISE_background(galaxydir, band, 
+                aperture_area)
+    else:
+        background = estimate_UV_background(galaxydir, band,
+                baseellipsefile=baseobjectfile)
+    objectflux = DNflux - background
+    if objectflux < 0:
+        raise ValueError("Measured negative flux for object.")
+    return objectflux
+    
+
+
+def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
+        mask="", useskybase="sky_aperture", uncertaintybase="uncertainty", 
+        flux=False, errors=True):
+    '''Returns the elliptical aperture photometry-determined magnitude.
+
+    This function requires that the adequate pipeline be constructed, where
+    there is a folder tree under BASEDIR where each object maps to a folder
+    labeled as the object name without spaces. For example, "NGC 1111" would be
+    under the folder "NGC1111".
+
+    Under each folder, there should be two sets of files outputted by the
+    ellipse package. One should be called ellipse_aperture.{band}.tab, which
+    contains the calculated total flux of the object, and the other should be
+    named sky_level.{band}.tab. These should have information about the sky
+    background; This should either be the output of the fitsky routine for
+    WISE bands, or the output of the ellipse routine for UV bands (still under
+    construction).
+
+    Features which are under construction are on-the-fly aperture photometry and
+    sky calculation without needing the sky_aperture and ellipse_aperture files,
+    along with masking. If you lave the useskybase parameter alone, it will
+    perform regular sky estimation.
+    '''
+    galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
+    try:
+        objectflux = calc_DNflux(galaxydir, band, baseobjectfile, mask,
+                useskybase)
+    except ValueError:
+        print "\nGot negative flux for {0}.\n".format(name)
+        objectflux *= -1
+
+    if errors:
+        objectError = calc_DNerr(galaxydir, band)
+        print flux
+        if flux:
+            photvalue = DN_flux_to_Jy(band, objectflux)
+            err = DN_err_to_Jansky_err(galaxydir, band, objectError,
+                    DNflux=objectflux)
+        else:
+            photvalue = DNflux2WISEmag(band, objectflux)
+            err = DN_err_to_mag_err(galaxydir, band, objectError,
+                    DNflux=objectflux)
+        return (photvalue, err)
+    else:
+        if flux:
+            photvalue = DN_flux_to_Jy(band, objectflux)
+        else:
+            photvalue = DNflux2WISEmag(band, objectflux)
+        return flux
+
+def DN_to_Jy_conversion(band):
+    '''Returns the conversion factor between Data Numbers and Janskys for band.
+
+    Taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    '''
+    DN_to_Jy = {"W1": 1.9350e-6, "W2": 2.7048e-06, "W3": 1.8326e-06, "W4":
+            5.2269e-05}
+    return DN_to_Jy[band]
+
+
+def DN_flux_to_Jy(band, objectflux):
+    '''Converts a flux from Data Numbers to Janskys.
+    '''
+    return objectflux * DN_to_Jy_conversion(band)
+
+def calculate_correlated_pixel_noise(band):
+    '''Calculated Fcorr for a particular band.
+
+    Values taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#corrnoise
+    for s_in/s_out
+    and
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec4_6ci.html
+    for N_p
+    '''
+    EFFECTIVE_NOISE_PIXELS = {"W1": 13.772, "W2": 17.636, "W3": 35.476, "W4":
+        24.462}
+    INPUT_TO_OUTPUT_PIXEL_RATIO = {"W1": 2, "W2": 2, "W3": 2, "W4": 4}
+    return  (EFFECTIVE_NOISE_PIXELS[band] * 
+            (INPUT_TO_OUTPUT_PIXEL_RATIO[band])**2)
+
+def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
+        skybase="sky_level", uncertainty_base="uncertainty", mask=""):
+    '''Calculates the uncertainty of a Data Number flux.
+
+    This function requires bases for the ellipse routine, sky routine, and
+    uncertainty routine. It will use values from these files to calculate the
+    uncertainty of the flux based on the description given in the WISE All-sky
+    explanatory Supplement:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html
+    '''
+    ellipseParams = STSDAS_to_Astropy_Table(galaxydir, 
+            format_band_dependence(ellipsebase, band, "tab"))[0]
+    skyParams = Table.read(os.path.join(galaxydir,
+        format_band_dependence(skybase, band, "txt")), format="ascii.daophot")
+    imageUncertainty = STSDAS_to_Astropy_Table(galaxydir,
+            format_band_dependence(uncertainty_base, band, "tab"))[0]
+
+    fapcor = 1
+    NA = ellipseParams["NPIX_E"]
+    NB = skyParams["NSKY"][0]
+    total_sigi = imageUncertainty["TFLUX_E"]
+    Fcorr = calculate_correlated_pixel_noise(band)
+    # We get the background level from centroiding, which seems like a
+    # mean-related measure.
+    k = 1   
+    sig_B = skyParams["STDEV"][0]**2
+    # We can try to measure this and compare it to other errors later, but right
+    # now this is not easily measurable in an automated way. I believe that this
+    # should be minimal because of the large size of the aperture.
+    sig_conf = 0
+
+    sourceerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B) +
+            sig_conf)**(0.5)
+    return sourceerr
+
+def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
+        mask="", useskybase="sky_level", DNflux=0):
+    '''Converts an error in Data Number to an error in magnitudes.
+
+    If DNflux is given, this function will use it as the value for the object's
+    flux in data numbers. If it isn't, then it will calculate it on its own.
+    '''
+
+    if not DNflux:
+        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, mask, useskybase)
+    sigma_mag = (get_zero_point_magnitude_uncertainty(band)**2 + 1.179 *
+            (DNerr**2 / DNflux **2))**0.5
+    return sigma_mag
+
+def DN_err_to_Jansky_err(galaxydir, band, DNerr, 
+        baseobjectfile="ellipse_aperture", mask="", useskybase="sky_level", 
+        DNflux=0):
+    '''Converts an error in Data Numbers to an error in Janskys.
+
+    If DNflux is given, this function will use it as the value for the object's
+    flux in data numbers. If it isn't, then it will calculate it on its own.
+    '''
+
+    if not DNflux:
+        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, mask, useskybase)
+    sigma_Jy = DN_to_Jy_conversion(band) * (DNflux**2 *
+            (get_zero_point_flux_uncertainty(band)**2 / 
+            get_zero_point_flux_level(band)**2 + 
+            0.8483 * get_zero_point_magnitude_uncertainty(band)**2) +
+            DNerr**2)**(0.5)
+    return sigma_Jy
+
+def get_zero_point_magnitude_uncertainty(band):
+    '''Returns the zero-point magnitude uncertainty in a given band.
+
+    The uncertainties in the zero-point magnitudes are taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    '''
+    MAGZPUNC = {"W1": 0.006, "W2": 0.007, "W3": 0.015, "W4": 0.012}
+    return MAGZPUNC[band]
+
+def object_name_to_dir(objectname):
+    '''Converts the object name with spaces to the directory name.'''
+    return objectname.replace(' ', "")
+
+def photometric_error(BASEDIR, name, band, ellipsebase="ellipse_aperture",
+        skybase="sky_level", uncertainty_base="uncertainty", mask="", 
+        flux=False):
+    '''Calculates the photometric error of a magnitude calculation.
+
+    This measurement uses the photometric pipeline to look up values of the
+    quantities needed for a reliable error estimate. Note that this calculation
+    requires the uncertainty Atlas images. Those will need to be downloaded as
+    part of the pipeline as well.
+    '''
+    galaxydir = change_to_galaxy_dir(BASEDIR, name)
+
+    object_flux = galaxy_photometry(BASEDIR, name, band,
+            baseobjectfile=ellipsebase, mask=mask, useskybase=skybase,
+            DNflux=True)
+
+    if flux:
+        return fluxerr
+    else: 
+        magerr = (get_zero_point_magnitude_uncertainty(band)**2 + 1.179 * 
+            fluxerr**2 / object_flux**2)**(0.5)
+        return magerr
 
 ###############################################################################
 # Astropy Utilities                                                           #
@@ -68,6 +299,21 @@ def astropy_table_index(table, column, value):
     list of row indices that match the value in the column.'''
     return np.where(table[column] == value)
 
+def build_pipeline(BASEDIR, WISETable, runbands=bands):
+    '''Basically runs all the commands necessary to build the ellipse aperture
+    and sky measurement pipeline. It consists of running:
+    allApertureTables
+    allEllipseTables
+    allSkyValues
+
+    If you want a table of photometry, you'll have to run
+    aperturePhotometryTable yourself.
+    ''' 
+    allApertureTables(BASEDIR, WISETable, runbands=runbands)
+    allEllipseTables(BASEDIR, WISETable, runbands=runbands)
+    allSkyValues(BASEDIR, WISETable, runbands=runbands)
+    allUncertaintyTables(BASEDIR, WISETable, runbands=runbands)
+
 def astropy_table_row(table, column, value):
     '''Returns the row of the table which has the value in column.
 
@@ -88,90 +334,23 @@ def extract_subtable_from_column(table, column, selections):
     for object in selections:
         indices.append(astropy_table_index(table, column, object)[0][0])
     return table[indices]
+def get_zero_point_flux_level(band):
+    '''Returns the zero-point flux level for a band in Janskys.
 
-###############################################################################
-# Aperture Photometry Routines                                                #
-###############################################################################
-# 
-# There's a lot to remember to get the aperture photometry routine done. First
-# make sure the BASEDIR is set up correctly. It should have the identifications
-# of the galaxies as folders, with the images having names which follow the
-# rules in match_filter(). 
-#
-# With a table of WISE catalog entries, you then use those to create ellipse
-# parameter files. This can be done by running:
-# >>> allApertureTables(BASEDIR, WISE_Table)
-# This command will go through all the directories for objects in WISE_Table
-# and then use the aperture photometry information from the Catalog to create
-# ellipsepars.tab files. It will also do this for all bands which are located
-# in the bands list at the top of this file. These files only have 5 columns, 
-# the SMA, ELLIP, PA, X0, and Y0 values.
-# 
-# Once the parameter files are written, we then need to feed them to the
-# ellipse package so that they will be run, and the full information about the
-# photometry will be made. These will be located in ellipse_aperture.tab files.
-# This can be done by running:
-# >>> allEllipseTables(BASEDIR, WISE_Table)
-#
-# After generating ellipse tables, we now want to generate tables for sky
-# measurements. We first do this by generating the parameter files. This can be
-# done as before by running:
-# >>> allSkyParams(BASEDIR, WISE_Table)
-# And then generate the tables through the ellipse routine by running:
-# >>> allSkyTables(BASEDIR, WISE_Table)
-# 
-# Now that the object and sky tables are set, we can now run aperture photometry
-# by running:
-# >>> galaxy_photometry(BASEDIR, objname, band)
-# 
-# If you want a table of magnitudes for all objects, use the command:
-# >>> aperturePhotometryTable(BASEDIR, objnames)
-
-def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
-        mask="foreground.pl", useskybase="sky_aperture", 
-        ellipsebase="ellipsepars"):
-    '''Returns the elliptical aperture photometry-determined magnitude.
-
-    This function requires that the adequate pipeline be constructed, where
-    there is a folder tree under BASEDIR where each object maps to a folder
-    labeled as the object name without spaces. For example, "NGC 1111" would be
-    under the folder "NGC1111".
-
-    Under each folder, there should be two sets of files outputted by the
-    ellipse package. One should be called ellipse_aperture.{band}.tab, which
-    contains the calculated total flux of the object, and the other should be
-    named sky_aperture.{band}.tab. These should have information about the sky
-    background; either direct measurement from background images, or a mean
-    background value which can be multiplied by the area and subtracted from the
-    object's flux.
-
-    Features which are under construction are on-the-fly aperture photometry and
-    sky calculation without needing the sky_aperture and ellipse_aperture files,
-    along with masking. If you lave the useskybase parameter alone, it will
-    perform regular sky estimation.
+    Taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
     '''
-    galaxyfolder = os.path.join(BASEDIR, object_name_to_dir(name))
-    ellipsetable = STSDAS_to_Astropy_Table(galaxyfolder,
-            format_band_dependence(baseobjectfile, band, "tab"))
-    DNflux = ellipsetable[0]["TFLUX_E"]
-    aperture_area = ellipsetable[0]["NPIX_E"]
-    # Right now we will only support sky backgrounds done through the pipeline.
-    # No support for on-the-fly calculations unless there is a use case for
-    # them.
-    if band in IRBANDS:
-        background = estimate_WISE_background(galaxyfolder, band, aperture_area)
-    else:
-        background = estimate_UV_background(galaxyfolder, band,
-                baseellipsefile=ellipsebase)
-    objectflux = DNflux - background
-    if objectflux < 0:
-        print "\nGot negative flux for {0}.\n".format(name)
-        objectflux *= -1
-    Vegamag = DNflux2WISEmag(band, objectflux)
-    # Not implementing this yet because other things are more important right
-    # now, and the Jarrett calculations don't need this correction.
-    corrmag = correct_mag(Vegamag, band)
-    return Vegamag
+    f0 = {"W1": 306.682, "W2": 170.663, "W3": 29.0448, "W4": 8.2839}
+    return f0[band]
+
+def get_zero_point_flux_uncertainty(band):
+    '''Returns the zero-point flux uncertainty for a band in Janskys.
+
+    Taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    '''
+    sig_f0 = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124}
+    return sig_f0[band]
 
 def correct_mag(uncormag, band, large_aperture_atlas=True):
     '''Performs aperture corrections on a magnitude.
@@ -185,13 +364,11 @@ def correct_mag(uncormag, band, large_aperture_atlas=True):
     result, any aperture photometry, even with large apertures, should implement
     this flag to correct for the missing light.
     '''
+    LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4": 
+            -0.029}
     if large_aperture_atlas:
         uncormag -= LARGE_APERTURE_CORRECTION[band]
     return uncormag
-
-def object_name_to_dir(objectname):
-    '''Converts the object name with spaces to the directory name.'''
-    return objectname.replace(' ', "")
 
 def change_to_galaxy_dir(BASEDIR, objectname):
     '''Returns the path of a galaxy's directory.
@@ -201,23 +378,26 @@ def change_to_galaxy_dir(BASEDIR, objectname):
     '''
     return os.path.join(BASEDIR, object_name_to_dir(objectname))
 
-def format_band_dependence(basename, band, extension="tab"):
+def format_band_dependence(basename, band, extension="tab", pathto=''):
     '''Generates a table file which is dependent on a band name.
 
     The returned filename will have a format of 
     "{basename}.{band}.{extension}".
     '''
-    return "{0}.{1}.{2}".format(basename, band, extension)
+    return os.path.join(pathto, "{0}.{1}.{2}".format(basename, band, extension))
     
-def match_filter(directory, filter, fullpath=True):
+def match_filter(directory, filter, fullpath=True, uncertainty=False):
     '''Finds the image which corresponds to the filter.
 
     For WISE images, this will require searching for "w?" in the
     strings.'''
-    filtermap = {"W1": "w1", "W2": "w2", "W3": "w3", "W4": "w4", "FUV": 
-            "fd-int", "NUV": "nd-int"}
+    filtermap = {"W1": "w1-int", "W2": "w2-int", "W3": "w3-int", "W4": "w4-int", 
+            "FUV": "fd-int", "NUV": "nd-int"}
+    filterstring = filtermap[filter]
+    if uncertainty:
+        filterstring.replace("int", "unc")
     filelist = glob.glob(os.path.join(directory, 
-            "*{0}*.fits".format(filtermap[filter])))
+            "*{0}*.fits".format(filterstring)))
     if len(filelist) > 1:
         raise RuntimeError("Image conflict for {0}.".format(directory))
     elif len(filelist) == 0:
@@ -247,7 +427,7 @@ def complete_for_bands(BASEDIR, objname, checkbands=bands):
             return False
     return True
 
-def run_fitsky(galaxydir, image, annulus, coords, output, dannulus=10,
+def run_fitsky(image, annulus, coords, output, dannulus=10,
         algorithm="centroid"):
     '''Runs the fitsky procedure in IRAF in order to measure the sky background.
 
@@ -256,55 +436,48 @@ def run_fitsky(galaxydir, image, annulus, coords, output, dannulus=10,
     from the coords argument. Each line in the coords argument will correspond
     to a line in output.
     '''
-    imagepath = os.path.join(galaxydir, image)
-    coordpath = os.path.join(galaxydir, coords)
-    outputpath = os.path.join(galaxydir, output)
-
     #Fitskypar parameters.
     iraf.apphot()
     iraf.fitskypars.setParam("salgorithm", algorithm)
     iraf.fitskypars.setParam("annulus", annulus)
     iraf.fitskypars.setParam("dannulus", dannulus)
     # Fitsky parameters.
-    iraf.fitsky.setParam("coords", coordpath)
-    iraf.fitsky.setParam("output", outputpath)
+    iraf.fitsky.setParam("coords", coords)
+    iraf.fitsky.setParam("output", output)
     iraf.fitsky.setParam("interactive", "No")
     iraf.fitsky.setParam("verify", "No")
     iraf.fitsky.setParam("update", "No")
     iraf.fitsky.setParam("radplots", "No")
 
-    iraf.fitsky(imagepath)
+    iraf.fitsky(image)
 
 
-def run_ellipse(galaxydir, image, ellipsepars, mask="foreground.pl", 
-        outputname="ellipse.tbl"):
+def run_ellipse(image, ellipsepars, output, mask=""):
     '''Generates an ellipse table on the image from given parameters.
 
     The table of aperture parameters should be in the form of an STSDAS
     table. The necessary values are ellipticity, semimajor axis,
-    position angle, X0, and Y0 (in pixels). This function will create 
-    an STSDAS table at galaxydir/outputname.
+    position angle, X0, and Y0 (in pixels).
     
     A mask file can be specified for the ellipse routine. If a mask
     file is specified, this function will throw an error if the mask
     file isn't found. Therefore, if you wish to ignore masking, the
-    mask parameter should be the empty string.'''
-    maskpath = os.path.join(galaxydir, mask)
-    tablepath = os.path.join(galaxydir, ellipsepars)
-    outputtbl = os.path.join(galaxydir, outputname)
-    imagepath = os.path.join(galaxydir, image)
+    mask parameter should be the empty string.
+    
+    NOTE: All filenames should contain full paths to the files.'''
     # IRAF will throw a cryptic error, or simply ignore the fact that
     # the mask doesn't exist. I want to enforce it to avoid silently
     # ignoring masking when I intend to mask.
-    if not os.path.exists(maskpath):
+    # NOTE: This breaks compability with Windows. Boo hoo.
+    if not os.path.exists(os.path.join("/", mask)):
         raise ValueError("Mask file does not exist.")
     iraf.stsdas()
     iraf.stsdas.analysis()
     iraf.stsdas.analysis.isophote()
     #iraf.unlearn("ellipse")
-    iraf.ellipse.setParam("inellip", tablepath)
-    iraf.ellipse.setParam("dqf", maskpath)
-    iraf.ellipse(imagepath, outputtbl)
+    iraf.ellipse.setParam("inellip", ellipsepars)
+    iraf.ellipse.setParam("dqf", mask)
+    iraf.ellipse(image, output)
 
 def generate_elliptical_aperture(inputfile, outputfile):
     '''Generates a polygonal aperture from ellipse table.
@@ -378,10 +551,9 @@ def estimate_WISE_background(galaxydir, band, area, baseskyfile="sky_level"):
     
     The output of fitsky should be in the object's folder with base name given
     in baseskyfile, and a '.txt' extension.'''
-    skypath = os.path.join(galaxydir, format_band_dependence(baseskyfile, band,
-        "txt"))
+    skypath = format_band_dependence(baseskyfile, band, "txt", pathto=galaxydir)
     skydata = Table.read(skypath, format="ascii.daophot")
-    skylevel = skydata["MSKY"]
+    skylevel = skydata["MSKY"][0]
     totalsky = skylevel * area
     return totalsky
 
@@ -457,6 +629,10 @@ def allSkyTables(BASEDIR, fulltable, runbands=bands):
     '''
     runOnImages(BASEDIR, fulltable, genSkytables, runbands=runbands)
 
+def allUncertaintyTables(BASEDIR, fulltable, runbands=bands):
+    '''Goes through BASEDIR and generates all uncertainty tables.'''
+    runOnImages(BASEDIR, fulltable, genImageUncertainty, runbands=runbands)
+
 def allSkyValues(BASEDIR, fulltable, runbands=bands):
     '''Goes through BASEDIR and generates all sky tables.
 
@@ -489,6 +665,57 @@ def ellipseOnBands(BASEDIR, WISErow, baseparamname, output, mask=""):
     then run the ellipse package for all bands in that galaxy folder. 
     '''
 
+def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
+        ellipsebase="ellipse_aperture", runbands=bands):
+    '''Sums the variance of uncertainty pixels over an aperture.
+
+    This function requires uncertainty files to be located within the galaxy
+    folder. These files will be discovered by running match_filter, and then
+    replacing the "int" with "unc".
+
+    The uncertainty file will then be squared, and placed in a file with the
+    same name, but with "unc" replaced by "var".
+
+    The table which will be output by the ellipse package will have a base
+    filename given by baseuncertainty.
+    '''
+    galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
+    for band in runbands:
+        intfile = match_filter(galaxydir, band)
+        uncfile = rreplace(intfile, "int", "unc", 1)
+        varfile = rreplace(uncfile, "unc", "var", 1)
+
+        # There's a really shitty IRAF "feature" where if imfunc acts on a file
+        # which already exists, it will simply add on another layer, which
+        # confuses the hell out of ellipse. So if a previous file exists, I'll
+        # delete it manually.
+        if os.path.isfile(varfile):
+            os.remove(varfile)
+        run_imfunc(uncfile, varfile, "square")
+
+        ellipse_file = format_band_dependence(ellipsebase, band, "tab",
+                galaxydir)
+        output = format_band_dependence(baseuncertainty,
+            band, "tab", galaxydir)
+        run_ellipse(varfile, ellipse_file, output)
+
+
+
+
+def run_imfunc(infile, outfile, func):
+    '''Runs imfunc on the given image.
+
+    All possible functions can be viewed in the imfunc documentation. The
+    currently relevant ones are:
+
+    square - Square the image.
+    '''
+    iraf.images()
+    iraf.imutil()
+    iraf.imfunc(infile, outfile, func)
+
+
+
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
         baseoutput="ellipse_aperture", runbands=bands):
     '''Generates a table on the object for each band.'''
@@ -496,9 +723,10 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
     # taking too much effort, and I want to just have this part done.
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     for band in runbands:
-        objimage = match_filter(galaxydir, band, fullpath=False)
-        run_ellipse(galaxydir, objimage, format_band_dependence(baseparamname,
-            band), outputname=format_band_dependence(baseoutput, band), mask="")
+        objimage = match_filter(galaxydir, band)
+        run_ellipse(objimage, format_band_dependence(baseparamname, band, 'tab',
+            galaxydir), format_band_dependence(baseoutput, band, 'tab', 
+            galaxydir))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         ellipsebase="ellipse_aperture", baseskyfile="sky_level", skyratio=2.0,
@@ -522,11 +750,9 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     # annulus for W1 is disable resetting it for W2-4.
     annulus_override = annulus
     for band in runbands:
-        coordpath = os.path.join(galaxydir, format_band_dependence(coordbase,
-            band, "coo"))
-        skypath = os.path.join(galaxydir, format_band_dependence(baseskyfile,
-            band, "txt"))
-        image = match_filter(galaxydir, band, fullpath=False)
+        coordpath = format_band_dependence(coordbase, band, "coo", galaxydir)
+        skypath = format_band_dependence(baseskyfile, band, "txt", galaxydir)
+        image = match_filter(galaxydir, band)
         ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
                 format_band_dependence(ellipsebase, band, "tab"))
 
@@ -536,93 +762,8 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         with open(coordpath, 'w') as f:
             f.write("{0} {1}".format(ellipsepars["X0"][0], ellipsepars["Y0"][0]))
 
-        run_fitsky(galaxydir, image, annulus, coordpath, skypath, 
+        run_fitsky(image, annulus, coordpath, skypath, 
                 dannulus=dannulus)
-
-
-
-
-
-
-def genSkytables(BASEDIR, WISErow, baseparamname="sky_params", 
-        baseoutput="sky_aperture", runbands=bands):
-    '''Generates table with sky at widest W1 isophote.
-
-    A problem with generating sky at each band is that the "sky"
-    isophote moves in at high wavelength, which doesn't make physical
-    sense given that the galaxy should have the same extent. To
-    compensate for this, we will generate our sky background by taking
-    the largest elliptical isophote in W1, and evaluating the mean
-    isophotal intensity of that ellipse in the other bands, regardless
-    of how wide the object appears to be in those bands. That way, we
-    measure the sky background in the same way we measure the flux
-    within the W1 isophote.
-
-    If the ratio between the sky isophote semimajor axis, and the
-    photometric isophote semimajor axis is smaller than minsep, then it
-    will be set so that it is minsep.
-
-    For cases where the sky axis just isn't being chosen correctly,
-    the axisOverride keyword will set the semimajor axis to the value
-    given, in pixels.
-    '''
-    galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    for band in runbands:
-        skyimage = match_filter(galaxydir, band, fullpath=False)
-        if band in UVBANDS:
-            skyimage = skyimage.replace("-int", "-skybg")
-        run_ellipse(galaxydir, skyimage, format_band_dependence(baseparamname,
-            band), outputname=format_band_dependence(baseoutput, band), mask="")
-
-def genSkyParam(BASEDIR, WISErow, baseoutput="sky_aperture", minsep=2.0,
-        axisOverride=0, runbands=bands):
-    '''Generates the parameter file for sky using the widest W1 isophote.
-    
-    We don't want to generate sky for each band separately because we
-    want the same amount of light coming in from the galaxy. The
-    objects tend to be brightest at W1, so we'll use that to determine
-    where the object ends and the sky background begins.
-    
-    The output file is specified in baseoutput, and by default will be 
-    "sky_aperture.{band}.tab".
-    
-    If minsep is provided, it specifies the minimum ratio between the 
-    sky aperture semimajor axis and the photometry aperture semimajor
-    axis. If the ratio is less than this, the sky aperture will be
-    adjusted so that the ratio is minsep.'''
-    # The sky is going to be measured by running the ellipse routine on the
-    # W1 image with the aperture parameters as the initial condition. We want to
-    # use the widest aperture which the ellipse routine can still count as an
-    # isophote. If it turns out that aperture isn't much bigger, then we use the
-    # minsep flag to set the sky to be at least that large.
-
-    galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    photprops = STSDAS_to_Astropy_Table(galaxydir, "ellipse_aperture.W1.tab")[0]
-    # Now we run the ellipse routine in a sampling mode.
-    elliptical_fit(galaxydir, match_filter(galaxydir, "W1"), (photprops["X0"],
-        photprops["Y0"]), photprops["ELLIP"], photprops["PA"], photprops["SMA"],
-        outputname="sky_output.tab", holdParamsFixed=True)
-    skyprops = STSDAS_to_Astropy_Table(galaxydir, 
-            "sky_output.tab")[-1:]
-    # We measure sky for infrared and UV differently. Therefore, we'll
-    # have two different cases.
-    for band in runbands:
-        table_name = format_band_dependence("sky_params", band)
-        skyimage = match_filter(galaxydir, band)
-        if band in IRBANDS:
-            if axisOverride:
-                skyprops["SMA"] = axisOverride
-            elif skyprops["SMA"]/ photprops["SMA"] < minsep:
-                skyprops["SMA"] = photprops["SMA"]*minsep
-        else:
-            skyprops = STSDAS_to_Astropy_Table(galaxydir,
-                    format_band_dependence("ellipsepars", band))
-            skyimage = skyimage.replace("-int", "-skybg")
-        # Using all of skyprops causes the columns to be mislabeled. In
-        # order to bypass this, I will create a table that only has
-        # columns relevant to fitting the ellipse routine.
-        createEllipseParamTable(galaxydir, skyprops[["ELLIP", "SMA", "PA", "X0",
-            "Y0"]], table_name)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS):
     '''Runs through all objects and creates cutouts in their folder.
@@ -669,9 +810,8 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS):
         gc.show_circles([Xval]*2, [Yval]*2, [radius_in, radius_out],
                 edgecolor="cyan")
 
-        gc.save(os.path.join(galaxydir, 
-            format_band_dependence(object_name_to_dir(WISErow["objstr_01"]), 
-            band, "png")))
+        gc.save(format_band_dependence(object_name_to_dir(WISErow["objstr_01"]), 
+            band, "png", galaxydir))
 
 def generatePixelMasks(galaxydir, masterfile="foreground.reg",
         maskbasename="foreground", execbands=bands):
@@ -688,8 +828,7 @@ def generatePixelMasks(galaxydir, masterfile="foreground.reg",
     regionfile = os.path.join(galaxydir, masterfile)
     iraf.proto()
     for band in execbands:
-        outputfile = os.path.join(galaxydir,
-                format_band_dependence(maskbasename, band, "pl"))
+        outputfile = format_band_dependence(maskbasename, band, "pl", galaxydir)
         imagefile = match_filter(galaxydir, band)
     # On second thought, this won't work. Never mind.
 
@@ -801,40 +940,64 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
     coaddID = query.query_metadata(ra, dec)
     query.query_image(BASEDIR, objstr, coaddID)
 
-def aperturePhotometryTable(BASEDIR, objectnames,
+# This can be fixed pretty easily by making runbands a mandatory argument, and
+# then constructing Columns while iterating. I'm pretty sure those can be added 
+# to a Table more easily than Rows.
+def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_aperture", ellipsebase="ellipsepars", runbands=bands):
+        skybase="sky_level", uncertaintybase="uncertainty",  
+        ellipsebase="ellipsepars", flux=False):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
     will be given in the AB system.
     '''
-    # This function should have a better way of specifying which bands should be
-    # used to create the table.
-    w1apmags = photometryOnBand(BASEDIR, objectnames, "W1", baseobjectfile, 
-            mask, skybase, ellipsebase)
-    w2apmags = photometryOnBand(BASEDIR, objectnames, "W2", baseobjectfile, 
-            mask, skybase, ellipsebase)
-    w3apmags = photometryOnBand(BASEDIR, objectnames, "W3", baseobjectfile, 
-            mask, skybase, ellipsebase)
-    #NUVapmags = photometryOnBand(BASEDIR, objectnames, "NUV", baseobjectfile, 
-    #        mask, skybase, ellipsebase)
-    #FUVapmags = photometryOnBand(BASEDIR, objectnames, "FUV", baseobjectfile, 
-    #        mask, skybase, ellipsebase)
-    #finalTable = Table([objectnames, w1apmags, w2apmags, w3apmags, NUVapmags, 
-    #        FUVapmags], names=("objstr_01", "w1apmag", "w2apmag", "w3apmag",
-    #        "NUVapmags", "FUVapmags"))
+    fulltable = Table([objectnames], names=["objstr_01"])
+    for band in runbands:
+        bandmags, magerrs = photometryOnBand(BASEDIR, objectnames, band, 
+                baseobjectfile, mask, skybase, uncertaintybase, flux=flux, 
+                errors=True)
+
+        # How to keep the column name within our standard. Though I suppose we
+        # could just change the standard. Look into that. See if the current
+        # standard is hard-coded somewhere, or if that's just what I've been
+        # doing to stay consistent with the WISE values.
+        # We want w1apmag and NUVapmag.
+        magtemplate = "{0}apmag"
+        errtemplate = "{0}aperr"
+        if band in IRBANDS:
+            magname, errname = tuple([template.format(band.lower()) for template
+                in [magtemplate, errtemplate]])
+        else:
+            magname, errname = tuple([template.format(band) for template
+                in [magtemplate, errtemplate]])
+
+        fulltable[magname] = bandmags
+        fulltable[errname] = magerrs
     
-    finalTable = Table([objectnames, w1apmags, w2apmags, w3apmags], 
-            names=("objstr_01", "w1apmag", "w2apmag", "w3apmag"))
-    return finalTable
+    return fulltable
 
 def photometryOnBand(BASEDIR, objectnames, band,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_aperture", ellipsebase="ellipsepars"):
-    '''Creates an array of object magnitudes in a particular band.'''
-    return np.array([galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-        mask, skybase, ellipsebase) for galname in objectnames])
+        skybase="sky_aperture", uncertaintybase="uncertainty", flux=False, 
+        errors=False):
+    '''Performs photometry on an array of objects in a given band.
+    
+    If flux is given as true, the flux of the object will be given in Janskys
+    rather than the default magnitudes.
+    
+    If errors is true, then instead of simply returning an array of values, this
+    function will return a 2-tuple with the flux/mag value in the first
+    position, and the error in the second position.'''
+    # This object can either be a list, or a list of 2-tuples if error was
+    # specified.
+    photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, mask,
+        skybase, flux=flux, errors=errors) for galname in objectnames]
+    if errors:
+        magsAndErrs = zip(*photOutput)
+        return np.array(magsAndErrs[0]), np.array(magsAndErrs[1])
+    else: 
+        return np.array(photOutput)
 
 def createDifferencePlot(xval, valtocompare, errors, xlabel, ylabel, title):
     '''Plots the difference between two values against the value.
@@ -1256,3 +1419,12 @@ def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi,
             "w4rsemi", "w1pa", "w2pa", "w3pa", "w4pa", "w1ba", "w2ba", "w3ba", 
             "w4ba")
     return Table(fulltable , names=names)
+
+def rreplace(s, old, new, occurrence):
+    '''Behaves like string.replace(), except replaces from the right rather than
+    from the left. This code taken from:
+
+    http://stackoverflow.com/questions/2556108/how-to-replace-the-last-occurence-of-an-expression-in-a-string
+    '''
+    li = s.rsplit(old, occurrence)
+    return new.join(li)
