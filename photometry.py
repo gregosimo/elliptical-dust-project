@@ -54,7 +54,7 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
 
     Masking is not implemented yet.
     '''
-    ellipsetable = STSDAS_to_Astropy_Table(galaxyfolder,
+    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(baseobjectfile, band, "tab"))
     DNflux = ellipsetable[0]["TFLUX_E"]
     aperture_area = ellipsetable[0]["NPIX_E"]
@@ -63,19 +63,21 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     # them.
     # TODO: Make sure UV sky background hasn't been broken.
     if band in IRBANDS:
-        background = estimate_WISE_background(galaxyfolder, band, 
+        background = estimate_WISE_background(galaxydir, band, 
                 aperture_area)
     else:
-        background = estimate_UV_background(galaxyfolder, band,
+        background = estimate_UV_background(galaxydir, band,
                 baseellipsefile=baseobjectfile)
     objectflux = DNflux - background
+    if objectflux < 0:
+        raise ValueError("Measured negative flux for object.")
     return objectflux
     
 
 
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
-        mask="foreground.pl", useskybase="sky_aperture", DNflux=False,
-        flux=False):
+        mask="", useskybase="sky_aperture", uncertaintybase="uncertainty", 
+        flux=False, errors=True):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -86,45 +88,45 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     Under each folder, there should be two sets of files outputted by the
     ellipse package. One should be called ellipse_aperture.{band}.tab, which
     contains the calculated total flux of the object, and the other should be
-    named sky_aperture.{band}.tab. These should have information about the sky
-    background; either direct measurement from background images, or a mean
-    background value which can be multiplied by the area and subtracted from the
-    object's flux.
+    named sky_level.{band}.tab. These should have information about the sky
+    background; This should either be the output of the fitsky routine for
+    WISE bands, or the output of the ellipse routine for UV bands (still under
+    construction).
 
     Features which are under construction are on-the-fly aperture photometry and
     sky calculation without needing the sky_aperture and ellipse_aperture files,
     along with masking. If you lave the useskybase parameter alone, it will
     perform regular sky estimation.
     '''
-    galaxyfolder = os.path.join(BASEDIR, object_name_to_dir(name))
-    ellipsetable = STSDAS_to_Astropy_Table(galaxyfolder,
-            format_band_dependence(baseobjectfile, band, "tab"))
-    DNflux = ellipsetable[0]["TFLUX_E"]
-    aperture_area = ellipsetable[0]["NPIX_E"]
-    # Right now we will only support sky backgrounds done through the pipeline.
-    # No support for on-the-fly calculations unless there is a use case for
-    # them.
-    # TODO: Make sure UV sky background hasn't been broken.
-    if band in IRBANDS:
-        background = estimate_WISE_background(galaxyfolder, band, 
-                aperture_area)
-    else:
-        background = estimate_UV_background(galaxyfolder, band,
-                baseellipsefile=baseobjectfile)
-    objectflux = DNflux - background
-    if objectflux < 0:
+    galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
+    try:
+        objectflux = calc_DNflux(galaxydir, band, baseobjectfile, mask,
+                useskybase)
+    except ValueError:
         print "\nGot negative flux for {0}.\n".format(name)
         objectflux *= -1
 
-    if flux:
-        flux = DN_to_Jy_conversions(band) * objectflux
-        return flux
+    if errors:
+        objectError = calc_DNerr(galaxydir, band)
+        print flux
+        if flux:
+            photvalue = DN_flux_to_Jy(band, objectflux)
+            err = DN_err_to_Jansky_err(galaxydir, band, objectError,
+                    DNflux=objectflux)
+        else:
+            photvalue = DNflux2WISEmag(band, objectflux)
+            err = DN_err_to_mag_err(galaxydir, band, objectError,
+                    DNflux=objectflux)
+        return (photvalue, err)
     else:
-        Vegamag = DNflux2WISEmag(band, objectflux)
-        return Vegamag
+        if flux:
+            photvalue = DN_flux_to_Jy(band, objectflux)
+        else:
+            photvalue = DNflux2WISEmag(band, objectflux)
+        return flux
 
-def DN_to_Jy_conversions(band):
-    '''Returns conversion factors between Data Numbers and Janskys. [Jy/DN]
+def DN_to_Jy_conversion(band):
+    '''Returns the conversion factor between Data Numbers and Janskys for band.
 
     Taken from:
     http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
@@ -132,6 +134,12 @@ def DN_to_Jy_conversions(band):
     DN_to_Jy = {"W1": 1.9350e-6, "W2": 2.7048e-06, "W3": 1.8326e-06, "W4":
             5.2269e-05}
     return DN_to_Jy[band]
+
+
+def DN_flux_to_Jy(band, objectflux):
+    '''Converts a flux from Data Numbers to Janskys.
+    '''
+    return objectflux * DN_to_Jy_conversion(band)
 
 def calculate_correlated_pixel_noise(band):
     '''Calculated Fcorr for a particular band.
@@ -149,6 +157,86 @@ def calculate_correlated_pixel_noise(band):
     return  (EFFECTIVE_NOISE_PIXELS[band] * 
             (INPUT_TO_OUTPUT_PIXEL_RATIO[band])**2)
 
+def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
+        skybase="sky_level", uncertainty_base="uncertainty", mask=""):
+    '''Calculates the uncertainty of a Data Number flux.
+
+    This function requires bases for the ellipse routine, sky routine, and
+    uncertainty routine. It will use values from these files to calculate the
+    uncertainty of the flux based on the description given in the WISE All-sky
+    explanatory Supplement:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html
+    '''
+    ellipseParams = STSDAS_to_Astropy_Table(galaxydir, 
+            format_band_dependence(ellipsebase, band, "tab"))[0]
+    skyParams = Table.read(os.path.join(galaxydir,
+        format_band_dependence(skybase, band, "txt")), format="ascii.daophot")
+    imageUncertainty = STSDAS_to_Astropy_Table(galaxydir,
+            format_band_dependence(uncertainty_base, band, "tab"))[0]
+
+    fapcor = 1
+    NA = ellipseParams["NPIX_E"]
+    NB = skyParams["NSKY"][0]
+    total_sigi = imageUncertainty["TFLUX_E"]
+    Fcorr = calculate_correlated_pixel_noise(band)
+    # We get the background level from centroiding, which seems like a
+    # mean-related measure.
+    k = 1   
+    sig_B = skyParams["STDEV"][0]**2
+    # We can try to measure this and compare it to other errors later, but right
+    # now this is not easily measurable in an automated way. I believe that this
+    # should be minimal because of the large size of the aperture.
+    sig_conf = 0
+
+    sourceerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B) +
+            sig_conf)**(0.5)
+    return sourceerr
+
+def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
+        mask="", useskybase="sky_level", DNflux=0):
+    '''Converts an error in Data Number to an error in magnitudes.
+
+    If DNflux is given, this function will use it as the value for the object's
+    flux in data numbers. If it isn't, then it will calculate it on its own.
+    '''
+
+    if not DNflux:
+        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, mask, useskybase)
+    sigma_mag = (get_zero_point_magnitude_uncertainty(band)**2 + 1.179 *
+            (DNerr**2 / DNflux **2))**0.5
+    return sigma_mag
+
+def DN_err_to_Jansky_err(galaxydir, band, DNerr, 
+        baseobjectfile="ellipse_aperture", mask="", useskybase="sky_level", 
+        DNflux=0):
+    '''Converts an error in Data Numbers to an error in Janskys.
+
+    If DNflux is given, this function will use it as the value for the object's
+    flux in data numbers. If it isn't, then it will calculate it on its own.
+    '''
+
+    if not DNflux:
+        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, mask, useskybase)
+    sigma_Jy = DN_to_Jy_conversion(band) * (DNflux**2 *
+            (get_zero_point_flux_uncertainty(band)**2 / 
+            get_zero_point_flux_level(band)**2 + 
+            0.8483 * get_zero_point_magnitude_uncertainty(band)**2) +
+            DNerr**2)**(0.5)
+    return sigma_Jy
+
+def get_zero_point_magnitude_uncertainty(band):
+    '''Returns the zero-point magnitude uncertainty in a given band.
+
+    The uncertainties in the zero-point magnitudes are taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    '''
+    MAGZPUNC = {"W1": 0.006, "W2": 0.007, "W3": 0.015, "W4": 0.012}
+    return MAGZPUNC[band]
+
+def object_name_to_dir(objectname):
+    '''Converts the object name with spaces to the directory name.'''
+    return objectname.replace(' ', "")
+
 def photometric_error(BASEDIR, name, band, ellipsebase="ellipse_aperture",
         skybase="sky_level", uncertainty_base="uncertainty", mask="", 
         flux=False):
@@ -160,40 +248,12 @@ def photometric_error(BASEDIR, name, band, ellipsebase="ellipse_aperture",
     part of the pipeline as well.
     '''
     galaxydir = change_to_galaxy_dir(BASEDIR, name)
-    ellipseParams = STSDAS_to_Astropy_Table(galaxydir, 
-            format_band_dependence(ellipsebase, band, "tab"))[0]
-    skyParams = Table.read(os.path.join(galaxydir,
-        format_band_dependence(skybase, band, "txt")), format="ascii.daophot")
-    imageUncertainty = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(uncertainty_base, band, "tab"))[0]
-
-    fapcor = 1
-    NA = ellipseParams["NPIX_E"]
-    NB = skyParams["NSKY"]
-    total_sigi = imageUncertainty["TFLUX_E"]
-    Fcorr = calculate_correlated_pixel_noise(band)
-    # We get the background level from centroiding, which seems like a
-    # mean-related measure.
-    k = 1   
-    sig_B = skyParams["STDEV"]**2
-    # We can try to measure this and compare it to other errors later, but right
-    # now this is not easily measurable in an automated way. I believe that this
-    # should be minimal because of the large size of the aperture.
-    sig_conf = 0
-
-    sourceerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B) +
-            sig_conf)**(0.5)
 
     object_flux = galaxy_photometry(BASEDIR, name, band,
             baseobjectfile=ellipsebase, mask=mask, useskybase=skybase,
             DNflux=True)
 
     if flux:
-        fluxerr = DN_to_Jy_conversions(band) * (object_flux**2 *
-                (get_zero_point_flux_uncertainty(band)**2 / 
-                get_zero_point_flux_level(band)**2 + 
-                0.8483 * get_zero_point_magnitude_uncertainty(band)**2) +
-                fluxerr**2)**(0.5)
         return fluxerr
     else: 
         magerr = (get_zero_point_magnitude_uncertainty(band)**2 + 1.179 * 
@@ -239,7 +299,7 @@ def astropy_table_index(table, column, value):
     list of row indices that match the value in the column.'''
     return np.where(table[column] == value)
 
-def build_pipeline(BASEDIR, WISETable):
+def build_pipeline(BASEDIR, WISETable, runbands=bands):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -249,9 +309,10 @@ def build_pipeline(BASEDIR, WISETable):
     If you want a table of photometry, you'll have to run
     aperturePhotometryTable yourself.
     ''' 
-    allApertureTables(BASEDIR, WISETable)
-    allEllipseTables(BASEDIR, WISETable)
-    allSkyValues(BASEDIR, WISETable)
+    allApertureTables(BASEDIR, WISETable, runbands=runbands)
+    allEllipseTables(BASEDIR, WISETable, runbands=runbands)
+    allSkyValues(BASEDIR, WISETable, runbands=runbands)
+    allUncertaintyTables(BASEDIR, WISETable, runbands=runbands)
 
 def astropy_table_row(table, column, value):
     '''Returns the row of the table which has the value in column.
@@ -291,18 +352,6 @@ def get_zero_point_flux_uncertainty(band):
     sig_f0 = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124}
     return sig_f0[band]
 
-def get_zero_point_magnitude_uncertainty(band):
-    '''Returns the zero point magnitude uncertainty for a particular band.
-
-    The uncertainties are taken from:
-    http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
-    '''
-    MAGZPUNC = {"W1": 0.006, "W2": 0.007, "W3": 0.015, "W4": 0.012}
-    return MAGZPUNC[band]
-            
-def object_name_to_dir(objectname):
-    '''Converts the object name with spaces to the directory name.'''
-    return objectname.replace(' ', "")
 
 def change_to_galaxy_dir(BASEDIR, objectname):
     '''Returns the path of a galaxy's directory.
@@ -487,7 +536,7 @@ def estimate_WISE_background(galaxydir, band, area, baseskyfile="sky_level"):
     in baseskyfile, and a '.txt' extension.'''
     skypath = format_band_dependence(baseskyfile, band, "txt", pathto=galaxydir)
     skydata = Table.read(skypath, format="ascii.daophot")
-    skylevel = skydata["MSKY"]
+    skylevel = skydata["MSKY"][0]
     totalsky = skylevel * area
     return totalsky
 
@@ -562,6 +611,10 @@ def allSkyTables(BASEDIR, fulltable, runbands=bands):
     This function also allows for single-object corrections to be made.
     '''
     runOnImages(BASEDIR, fulltable, genSkytables, runbands=runbands)
+
+def allUncertaintyTables(BASEDIR, fulltable, runbands=bands):
+    '''Goes through BASEDIR and generates all uncertainty tables.'''
+    runOnImages(BASEDIR, fulltable, genImageUncertainty, runbands=runbands)
 
 def allSkyValues(BASEDIR, fulltable, runbands=bands):
     '''Goes through BASEDIR and generates all sky tables.
@@ -882,10 +935,10 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
     will be given in the AB system.
     '''
-    fulltable = Table()
+    fulltable = Table([objectnames], names=["objstr_01"])
     for band in runbands:
         bandmags, magerrs = photometryOnBand(BASEDIR, objectnames, band, 
-                baseobjectfile, mask, skybase, uncertaintybase, flux, 
+                baseobjectfile, mask, skybase, uncertaintybase, flux=flux, 
                 errors=True)
 
         # How to keep the column name within our standard. Though I suppose we
@@ -911,15 +964,23 @@ def photometryOnBand(BASEDIR, objectnames, band,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
         skybase="sky_aperture", uncertaintybase="uncertainty", flux=False, 
         errors=False):
-    '''Creates an array of object magnitudes in a particular band.'''
+    '''Performs photometry on an array of objects in a given band.
+    
+    If flux is given as true, the flux of the object will be given in Janskys
+    rather than the default magnitudes.
+    
+    If errors is true, then instead of simply returning an array of values, this
+    function will return a 2-tuple with the flux/mag value in the first
+    position, and the error in the second position.'''
+    # This object can either be a list, or a list of 2-tuples if error was
+    # specified.
+    photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, mask,
+        skybase, flux=flux, errors=errors) for galname in objectnames]
     if errors:
-        return (np.array([galaxy_photometry(BASEDIR, galname, band, 
-            baseobjectfile, mask, skybase, flux) for galname in objectnames]),
-            np.array([photometric_error(BASEDIR, galname, band,
-            baseobjectfile, skybase, uncertaintybase, mask, flux) for galname in objectnames]))
+        magsAndErrs = zip(*photOutput)
+        return np.array(magsAndErrs[0]), np.array(magsAndErrs[1])
     else: 
-        return np.array([galaxy_photometry(BASEDIR, galname, band, 
-            baseobjectfile, mask, skybase, flux) for galname in objectnames])
+        return np.array(photOutput)
 
 def createDifferencePlot(xval, valtocompare, errors, xlabel, ylabel, title):
     '''Plots the difference between two values against the value.
