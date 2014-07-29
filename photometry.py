@@ -79,7 +79,7 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
 
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
         mask="", useskybase="sky_aperture", uncertaintybase="uncertainty", 
-        flux=False, errors=True):
+        flux=False, errors=True, apertureCorrection=True, colorIndex=None):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -107,25 +107,47 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     except ValueError:
         print "\nGot negative flux for {0}.\n".format(name)
         objectflux *= -1
+    
+    correctedFlux = correct_flux(objectflux, band, apertureCorrection, 
+            colorIndex)
 
     if errors:
         objectError = calc_DNerr(galaxydir, band)
         print flux
         if flux:
-            photvalue = DN_flux_to_Jy(band, objectflux)
+            photvalue = DN_flux_to_Jy(band, correctedFlux)
             err = DN_err_to_Jansky_err(galaxydir, band, objectError,
-                    DNflux=objectflux)
+                    DNflux=correctedFlux)
         else:
-            photvalue = DNflux2WISEmag(band, objectflux)
+            photvalue = DNflux2WISEmag(band, correctedFlux)
             err = DN_err_to_mag_err(galaxydir, band, objectError,
-                    DNflux=objectflux)
+                    DNflux=correctedFlux)
         return (photvalue, err)
     else:
         if flux:
-            photvalue = DN_flux_to_Jy(band, objectflux)
+            photvalue = DN_flux_to_Jy(band, correctedFlux)
         else:
-            photvalue = DNflux2WISEmag(band, objectflux)
+            photvalue = DNflux2WISEmag(band, correctedFlux)
         return flux
+
+def color_correction(band, index):
+    '''Returns the color correction appropriate for a power law.
+
+    This function will take a power law index and select the correct flux
+    correction factor for the band. To use the correction factor, divide the
+    uncorrected flux by the factor to obtain the corrected flux.
+    '''
+    fluxcorrection = {2: {"W1": 1.0084, "W2": 1.0066, "W3": 1.0088, 
+                          "W4": 1.0013}, 
+                      1: {"W1": 0.9961, "W2": 0.9976, "W3": 0.9393, 
+                          "W4": 0.9934}, 
+                      0: {"W1": 0.9907, "W2": 0.9935, "W3": 0.9169, 
+                          "W4": 0.9905},
+                      -1: {"W1": 0.9921, "W2": 0.9943, "W3": 0.9373,
+                           "W4": 0.9926},
+                      -2: {"W1": 1.0000, "W2": 1.0000, "W3": 1.0000, 
+                          "W4": 1.0000}}
+    return fluxcorrection[index][band]
 
 def DN_to_Jy_conversion(band):
     '''Returns the conversion factor between Data Numbers and Janskys for band.
@@ -239,28 +261,6 @@ def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
     return objectname.replace(' ', "")
 
-def photometric_error(BASEDIR, name, band, ellipsebase="ellipse_aperture",
-        skybase="sky_level", uncertainty_base="uncertainty", mask="", 
-        flux=False):
-    '''Calculates the photometric error of a magnitude calculation.
-
-    This measurement uses the photometric pipeline to look up values of the
-    quantities needed for a reliable error estimate. Note that this calculation
-    requires the uncertainty Atlas images. Those will need to be downloaded as
-    part of the pipeline as well.
-    '''
-    galaxydir = change_to_galaxy_dir(BASEDIR, name)
-
-    object_flux = galaxy_photometry(BASEDIR, name, band,
-            baseobjectfile=ellipsebase, mask=mask, useskybase=skybase,
-            DNflux=True)
-
-    if flux:
-        return fluxerr
-    else: 
-        magerr = (get_zero_point_magnitude_uncertainty(band)**2 + 1.179 * 
-            fluxerr**2 / object_flux**2)**(0.5)
-        return magerr
 
 ###############################################################################
 # Aperture Photometry Routines                                                #
@@ -1163,7 +1163,8 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
 def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
         skybase="sky_level", uncertaintybase="uncertainty",  
-        ellipsebase="ellipsepars", flux=False):
+        ellipsebase="ellipsepars", flux=False, apertureCorrection=True,
+        colorIndices=None):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
@@ -1173,7 +1174,8 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     for band in runbands:
         bandmags, magerrs = photometryOnBand(BASEDIR, objectnames, band, 
                 baseobjectfile, mask, skybase, uncertaintybase, flux=flux, 
-                errors=True)
+                errors=True, apertureCorrection=apertureCorrection,
+                colorIndices=colorIndices)
 
         # How to keep the column name within our standard. Though I suppose we
         # could just change the standard. Look into that. See if the current
@@ -1197,7 +1199,7 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
 def photometryOnBand(BASEDIR, objectnames, band,
         baseobjectfile="ellipse_aperture", mask="foreground.pl",
         skybase="sky_aperture", uncertaintybase="uncertainty", flux=False, 
-        errors=False):
+        errors=False, apertureCorrection=True, colorIndices=None):
     '''Performs photometry on an array of objects in a given band.
     
     If flux is given as true, the flux of the object will be given in Janskys
@@ -1206,10 +1208,18 @@ def photometryOnBand(BASEDIR, objectnames, band,
     If errors is true, then instead of simply returning an array of values, this
     function will return a 2-tuple with the flux/mag value in the first
     position, and the error in the second position.'''
-    # This object can either be a list, or a list of 2-tuples if error was
+    # photOutput can either be a list, or a list of 2-tuples if error was
     # specified.
-    photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, mask,
-        skybase, flux=flux, errors=errors) for galname in objectnames]
+    if colorIndices is not None:
+        photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
+            mask, skybase, flux=flux, errors=errors,
+            apertureCorrection=apertureCorrection, colorIndex=colorIndex) for 
+            galname, colorIndex in zip(objectnames, colorIndices)]
+    else:
+        photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
+            mask, skybase, flux=flux, errors=errors,
+            apertureCorrection=apertureCorrection, colorIndex=None) for galname 
+            in objectnames]
     if errors:
         magsAndErrs = zip(*photOutput)
         return np.array(magsAndErrs[0]), np.array(magsAndErrs[1])
@@ -1582,6 +1592,13 @@ def DNflux2WISEmag(band, flux):
     zeropoints = {"W1": 20.5, "W2": 19.5, "W3": 18.0, "W4": 13.0, "NUV": 20.08,
                   "FUV": 18.82}
     return flux2mag(flux, zeropoints[band])
+
+def Jansky2WISEmag(band, flux):
+    '''Converts a flux in Janskys to a WISE magnitude.'''
+    # There may be a unifying way of doing this. But I'm not feeling it right
+    # now.
+    return -2.5 * np.log10(flux/get_zero_point_flux_level(band))
+
 
 ###############################################################################
 # Miscellaneous Photometry Routines
