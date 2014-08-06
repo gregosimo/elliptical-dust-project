@@ -46,7 +46,7 @@ LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4":
 # build_pipeline().
 
 def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
-        mask="", useskybase="sky_aperture"):
+        mask="", useskybase="sky_aperture", apertureCorrection=True):
     '''Calculates the flux of a galaxy in Data Numbers.
 
     This function uses the output from the ellipse package to calculate the
@@ -65,12 +65,13 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     # them.
     # TODO: Make sure UV sky background hasn't been broken.
     if band in IRBANDS:
-        background = estimate_WISE_background(galaxydir, band, 
-                aperture_area)
+        background = estimate_WISE_background(galaxydir, band)
     else:
         background = estimate_UV_background(galaxydir, band,
                 baseellipsefile=baseobjectfile)
-    objectflux = DNflux - background
+
+    fapcor = aperture_correction_factor(band)
+    objectflux = fapcor * (DNflux - background * aperture_area)
     if objectflux < 0:
         raise ValueError("Measured negative flux for object.")
     return objectflux
@@ -100,30 +101,28 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     '''
     galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
     try:
-        objectflux = calc_DNflux(galaxydir, band, baseobjectfile, mask,
+        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, mask,
                 useskybase)
     except ValueError:
         print "\nGot negative flux for {0}.\n".format(name)
-        objectflux *= -1
-
-    correctedFlux = correct_flux(band, objectflux)
+        DNflux *= -1
     
     if errors:
         objectError = calc_DNerr(galaxydir, band)
         if flux:
-            photvalue = DN_flux_to_Jy(band, correctedFlux, colorIndex)
+            photvalue = DN_flux_to_Jy(band, DNflux, colorIndex)
             err = DN_err_to_Jansky_err(galaxydir, band, objectError,
-                    DNflux=correctedFlux, colorIndex=colorIndex)
+                    DNflux=DNflux, colorIndex=colorIndex)
         else:
-            photvalue = DNflux2WISEmag(band, correctedFlux)
+            photvalue = DNflux2WISEmag(band, DNflux)
             err = DN_err_to_mag_err(galaxydir, band, objectError,
-                    DNflux=correctedFlux)
+                    DNflux=DNflux)
         return (photvalue, err)
     else:
         if flux:
-            photvalue = DN_flux_to_Jy(band, correctedFlux, colorIndex)
+            photvalue = DN_flux_to_Jy(band, DNflux, colorIndex)
         else:
-            photvalue = DNflux2WISEmag(band, correctedFlux)
+            photvalue = DNflux2WISEmag(band, DNflux)
         return flux
 
 def color_correction(band, index):
@@ -194,7 +193,7 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     imageUncertainty = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(uncertainty_base, band, "tab"))[0]
 
-    fapcor = 1
+    fapcor = aperture_correction_factor(band)
     NA = ellipseParams["NPIX_E"]
     NB = skyParams["NSKY"][0]
     total_sigi = imageUncertainty["TFLUX_E"]
@@ -760,7 +759,7 @@ def estimate_WISE_background_old(galaxydir, band, area,
             format_band_dependence(baseellipsefile, band, "tab"))
     return ellipsetable[0]["INTENS"] * area
 
-def estimate_WISE_background(galaxydir, band, area, baseskyfile="sky_level"):
+def estimate_WISE_background(galaxydir, band, baseskyfile="sky_level"):
     '''Returns the estimated background for a particular galaxy. 
 
     This function utilizes the fitsky routine from IRAF.apphot to determine the
@@ -774,8 +773,7 @@ def estimate_WISE_background(galaxydir, band, area, baseskyfile="sky_level"):
     skypath = format_band_dependence(baseskyfile, band, "txt", pathto=galaxydir)
     skydata = Table.read(skypath, format="ascii.daophot")
     skylevel = skydata["MSKY"][0]
-    totalsky = skylevel * area
-    return totalsky
+    return skylevel
 
 def estimate_UV_background(galaxydir, band, baseellipsefile="sky_aperture"):
     '''Returns the estimated background for a galax in GALEX bands.
@@ -784,7 +782,7 @@ def estimate_UV_background(galaxydir, band, baseellipsefile="sky_aperture"):
     names contain the string given in skymarker.'''
     ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(baseobjectfile, band, "tab"))
-    return ellipsetable[0]["TFLUX_E"]
+    return ellipsetable[0]["TFLUX_E"] / ellipsetable[0]["NPIX_E"]
 
 
 def objectHasImage(BASEDIR, objname):
