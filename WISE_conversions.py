@@ -14,7 +14,7 @@ import photometry as phot
 def DN_flux_to_Jy(band, objectflux, colorIndex=-2):
     '''Converts a flux from Data Numbers to Janskys.
     '''
-    return objectflux * DN_to_Jy_conversion(band, colorIndex)
+    return objectflux * DN_to_Jy_conversion_factor(band, colorIndex)
 
 def DN_err_to_Jansky_err(galaxydir, band, DNerr, 
         baseobjectfile="ellipse_aperture", mask="", useskybase="sky_level", 
@@ -26,13 +26,25 @@ def DN_err_to_Jansky_err(galaxydir, band, DNerr,
     '''
 
     if not DNflux:
-        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, mask, useskybase)
-    sigma_Jy = DN_to_Jy_conversion(band, colorIndex) * (DNflux**2 *
+        DNflux = phot.calc_DNflux(galaxydir, band, baseobjectfile, mask, 
+                useskybase)
+    sigma_Jy = DN_to_Jy_conversion_factor(band, colorIndex) * (DNflux**2 *
             (get_zero_point_flux_uncertainty(band)**2 / 
             get_zero_point_flux_level(band, colorIndex)**2 + 
             0.8483 * get_zero_point_magnitude_uncertainty(band)**2) +
             DNerr**2)**(0.5)
     return sigma_Jy
+
+
+
+def DNflux2WISEmag(band, flux):
+    '''Converts the flux from a WISE Atlas image to a WISE magnitude.
+
+    The flux needs to be given in units of data numbers. The infrared
+    fluxes will be returned in the Vega system while the UV fluxes will
+    be returned in the AB system.
+    '''
+    return flux2mag(flux, 1, get_zero_point_flux_level(band))
 
 def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
         mask="", useskybase="sky_level", DNflux=0):
@@ -43,12 +55,14 @@ def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
     '''
 
     if not DNflux:
-        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, mask, useskybase)
-    sigma_mag = (get_zero_point_magnitude_uncertainty(band)**2 + 1.179 *
-            (DNerr**2 / DNflux **2))**0.5
+        DNflux = phot.calc_DNflux(galaxydir, band, baseobjectfile, mask, 
+                useskybase)
+    sigma_mag = fluxerr2magerr(DNflux, DNerr, 1, 0,
+            get_zero_point_magnitude_level(band),
+            get_zero_point_magnitude_uncertainty(band))
     return sigma_mag
 
-def DN_to_Jy_conversion(band, colorIndex=-2):
+def DN_to_Jy_conversion_factor(band, colorIndex=-2):
     '''Returns the conversion factor between Data Numbers and Janskys for band.
 
     Taken from:
@@ -62,9 +76,67 @@ def DN_to_Jy_conversion(band, colorIndex=-2):
 # Flux-Magnitude Conversions
 ###############################################################################
 
-def flux2mag(flux, zeropoint):
-    '''Converts from a flux to a magnitude given a zero-point.'''
-    return zeropoint - 2.5 * math.log10(flux)
+# Actually, I think there should be a way to calibrate flux to an arbitrary
+# magnitude. This will give us the most flexible method of converting between
+# fluxes and magnitudes. This will also enable units to be used, but I don't
+# think we're really ready to do that.
+def flux2mag(flux, calibflux, calibmag):
+    '''Converts from a flux to a magnitude given a calibration point for flux
+    and magnitudes. The calibpoints should be defined such that:
+    mag=calibmag corresponds to flux=calibflux.
+    
+    Most of the time, either calibflux will be one or calibmag will be zero since
+    that's how most photometric systems are defined.'''
+    return zeropoint - 2.5 * math.log10(flux/calibflux)
+
+def fluxerr2magerr(flux, fluxerr, calibflux, calibfluxerr, calibmag,
+        calibmagerr):
+    '''Converts an error in flux to an error in magnitude given calibration
+    errors.
+
+    Usually, only one of calibflux/calibfluxerr or calibmag/calibmagerr will be
+    used.
+    '''
+    magerr = np.sqrt(calibmagerr**2 + 1.179 * (fluxerr / flux)**2 +
+            (calibfluxerr / calibflux)**2)
+    return magerr
+
+def Jansky2WISEmag(band, flux, colorIndex=-2):
+    '''Converts a flux in Janskys to a WISE magnitude.'''
+    # There may be a unifying way of doing this. But I'm not feeling it right
+    # now.
+    return flux2mag(flux, get_zero_point_flux_level(band, colorIndex), 0)
+
+def Jansky_err_to_WISE_mag_err(band, flux, fluxerr):
+    '''Converts an error in Janskys to an error in WISE magnitude.'''
+    return fluxerr2magerr(flux, fluxerr, get_zero_point_flux_level(band),
+            get_zero_point_flux_uncertainty(band), 0, 0)
+
+def mag2flux(mag, calibmag, calibflux):
+    '''Converts a magnitude to a flux.
+
+    This function requires both a calibration magnitude and calibration flux
+    such that calibmag corresponds to calibflux. Oftentimes, either calibmag=0
+    or calibflux=1 because photometric systems use zero-points. However, this
+    does not necessarily have to be the case.
+    '''
+    flux = calibflux * 10**(-(mag-calibmag)/2.5)
+    return flux
+
+def magerr2fluxerr(mag, magerr, calibmag, calibmagerr, calibflux, calibfluxerr):
+    '''Converts magnitude errors to flux errors.'''
+    fluxerr = 10**(-(mag-calibmag)/2.5) * np.sqrt(calibfluxerr**2 + 0.8483 *
+            (magerr**2 + calibmagerr**2))
+    return fluxerr
+
+def WISEmag2Jansky(band, mag, colorIndex=-2):
+    '''Converts a WISE magnitude into Janskys.'''
+    return mag2flux(mag, 0, get_zero_point_flux_level(band))
+
+def WISE_mag_err_to_Jansky_err(band, mag, magerr):
+    '''Converts an error in WISE magnitudes to an error in Janskys.'''
+    return magerr2fluxerr(mag, magerr, 0, 0, get_zero_point_flux(band),
+            get_zero_point_uncertainty(band))
 
 def Vega2ABmag(band, vegamag):
     '''Converts Vega magnitudes to AB magnitudes.
@@ -73,42 +145,6 @@ def Vega2ABmag(band, vegamag):
     Supplement. Section IV.4.h.3.'''
     offsets = {"W1": 2.699, "W2": 3.339, "W3": 5.174, "W4": 6.620}
     return vegamag + offsets[band]
-
-def DNflux2WISEmag(band, flux):
-    '''Converts the flux from a WISE Atlas image to a WISE magnitude.
-
-    The flux needs to be given in units of data numbers. The infrared
-    fluxes will be returned in the Vega system while the UV fluxes will
-    be returned in the AB system.
-    '''
-    zeropoints = {"W1": 20.5, "W2": 19.5, "W3": 18.0, "W4": 13.0, "NUV": 20.08,
-                  "FUV": 18.82}
-    return flux2mag(flux, zeropoints[band])
-
-def Jansky2WISEmag(band, flux, colorIndex=-2):
-    '''Converts a flux in Janskys to a WISE magnitude.'''
-    # There may be a unifying way of doing this. But I'm not feeling it right
-    # now.
-    return -2.5 * np.log10(flux/get_zero_point_flux_level(band, colorIndex))
-
-def Jansky_err_to_WISE_mag_err(band, flux, fluxerr):
-    '''Converts an error in Janskys to an error in WISE magnitude.'''
-    mag_err = np.sqrt(1.179 * ((fluxerr / flux)**2 +
-        (get_zero_point_flux_uncertainty(band) / 
-            get_zero_point_flux_level(band))**2))
-    return mag_err
-
-def WISEmag2Jansky(band, mag, colorIndex=-2):
-    '''Converts a WISE magnitude into Janskys.'''
-    return get_zero_point_flux_level(band, colorIndex) * 10**(-mag/2.5)
-
-def WISE_mag_err_to_Jansky_err(band, mag, magerr):
-    '''Converts an error in WISE magnitudes to an error in Janskys.'''
-    jansky_err = (10**(-mag/2.5) *
-        np.sqrt(get_zero_point_flux_uncertainty(band)**2 +
-        get_zero_point_flux_level(band)**2 * 0.8483))
-    return jansky_err
-
 
 ###############################################################################
 # Zero-point Utilities
@@ -137,6 +173,12 @@ def get_zero_point_flux_uncertainty(band):
     '''
     sig_f0 = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124}
     return sig_f0[band]
+
+def get_zero_point_magnitude_level(band):
+    '''Returns the zero-point between DN and WISE magnitudes.'''
+    zeropoints = {"W1": 20.5, "W2": 19.5, "W3": 18.0, "W4": 13.0, "NUV": 20.08,
+                  "FUV": 18.82}
+    return zeropoints[band]
 
 def get_zero_point_magnitude_uncertainty(band):
     '''Returns the zero-point magnitude uncertainty in a given band.
