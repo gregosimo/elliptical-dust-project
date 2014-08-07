@@ -44,7 +44,7 @@ def DNflux2WISEmag(band, flux):
     fluxes will be returned in the Vega system while the UV fluxes will
     be returned in the AB system.
     '''
-    return flux2mag(flux, 1, get_zero_point_flux_level(band))
+    return flux2mag(flux, 1, get_zero_point_magnitude_level(band))
 
 def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
         mask="", useskybase="sky_level", DNflux=0):
@@ -87,7 +87,7 @@ def flux2mag(flux, calibflux, calibmag):
     
     Most of the time, either calibflux will be one or calibmag will be zero since
     that's how most photometric systems are defined.'''
-    return zeropoint - 2.5 * math.log10(flux/calibflux)
+    return calibmag - 2.5 * math.log10(flux/calibflux)
 
 def fluxerr2magerr(flux, fluxerr, calibflux, calibfluxerr, calibmag,
         calibmagerr):
