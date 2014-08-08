@@ -37,6 +37,40 @@ def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
     stars outside of a radius given by r_high. It then finds stars outside of a
     radius given by the isophotal aperture times lowfrac.
     '''
+    # This will be implemented once we decide which algorithm to use.
+    pass
+
+def w1w3simulmask(w1image, w1weights, w3image, w3weights, w1initthresh, 
+        w3initthresh, interval, diffactor, w1endthresh, w3threshfloor, w1mask, 
+        w3mask, accummask):
+    '''Masking algorithm which runs SExtractor on the w3 image to mask out the
+    galaxy, and then uses the mask generated from the w3 image on the w1 image
+    in order to capture Rayleigh-Jeans foreground sources.
+
+    The algorithm starts out with w1initthresh and w3initthresh being given to 
+    DETECT_THRESH in SExtractor. With each iteration, the threshold for w1 will
+    decrease by interval, while the threshold for w3 will decrease by diffactor
+    * interval. Based on behavior which has been observed, diffactor should
+    probably be >1. The iterating continues until the threshold for w1 drops
+    below w1endthresh.
+
+    In order to deal with cases where the threshold for w3 would drop below
+    zero if diffactor is greater than 1, there will be a w3threshfloor argument
+    which bottoms out the value of w3. This should probably be at around 5
+    sigma.
+
+    Each iteration will have the mask add on to accummask to preserve point
+    sources which may be embedded in the galaxy. The location of the 
+    intermediate w1 and w3 masks can be specified through the w1mask and w3mask
+    arguments.
+    '''
+    w1thresh = w1initthesh
+    w3thresh= w3initthresh
+    while w1thresh >= w1endthresh:
+        if w3thresh < w3threshfloor:
+            w3thresh = w3threshfloor
+        # Generate the W3 mask.
+        sextractor_mask(
 
 
 def mask_circle(image, center, radius, outputfile):
