@@ -260,9 +260,6 @@ def extract_subtable_from_column(table, column, selections):
         indices.append(astropy_table_index(table, column, object)[0][0])
     return table[indices]
 
-
-
-
 def aperture_correction_factor(band):
     '''Returns the aperture correction factor for a given band.
 
