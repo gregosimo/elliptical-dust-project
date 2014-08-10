@@ -2,6 +2,8 @@ import os
 import os.path
 import subprocess
 
+from pyraf import iraf
+
 def run_sextractor(image, weights, config="wise.sex", **options):
     '''Runs SExtractor on an image.
 
@@ -12,9 +14,9 @@ def run_sextractor(image, weights, config="wise.sex", **options):
     specified as additional keyword arguments.
     '''
     command = ["sex", "-c", config, "-WEIGHT_IMAGE", weights]
-    for key, value in options:
+    for key, value in options.iteritems():
         command.append("-"+key)
-        command.append(value)
+        command.append(str(value))
     subprocess.call(command)
 
 def sextractor_mask(image, weights, threshold, config="wise.sex", 
@@ -41,8 +43,8 @@ def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
     pass
 
 def w1w3simulmask(w1image, w1weights, w3image, w3weights, w1initthresh, 
-        w3initthresh, interval, diffactor, w1endthresh, w3threshfloor, w1mask, 
-        w3mask, accummask):
+        w3initthresh, interval, diffactor, w1endthresh, w3threshfloor,
+        masked_image, w1mask, w3mask, accummask):
     '''Masking algorithm which runs SExtractor on the w3 image to mask out the
     galaxy, and then uses the mask generated from the w3 image on the w1 image
     in order to capture Rayleigh-Jeans foreground sources.
@@ -62,16 +64,45 @@ def w1w3simulmask(w1image, w1weights, w3image, w3weights, w1initthresh,
     Each iteration will have the mask add on to accummask to preserve point
     sources which may be embedded in the galaxy. The location of the 
     intermediate w1 and w3 masks can be specified through the w1mask and w3mask
-    arguments.
+    arguments. The masked w1 image will be stored in masked_image.
     '''
-    w1thresh = w1initthesh
+    w1thresh = w1initthresh
     w3thresh= w3initthresh
     while w1thresh >= w1endthresh:
         if w3thresh < w3threshfloor:
             w3thresh = w3threshfloor
         # Generate the W3 mask.
-        sextractor_mask(
+        sextractor_mask(w3image, w3weights, w3thresh, maskoutput=w3mask)
+        # Create the Masked W1 image.
+        apply_mask(w1image, w3mask, masked_image)
+        # Get the point sources from the masked W1 image.
+        sextractor_mask(masked_image, w1weights, w1thresh, maskoutput=w1mask)
+        # Add the current mask to the accumulated mask.
+        # Note that this flies in the face of EAFP, but imarith doesn't throw an
+        # exception in the case of a missing argument. It just prints out that
+        # the argument isn't valid.
+        if os.path.isfile(accummask):
+            # This is not good because it will write tempmask.fits to our local
+            # directory, which may in general be a bad idea.
+            tempfile = "/home/regulus/simonian/year1/wise/sextractor_demo/NGC6946/tempmask.fits"
+            run_imarith(accummask, '+', w1mask, tempfile)
+            print os.path.exists(tempfile)
+            os.rename("tempmask.fits", accummask)
+        else:
+            os.rename(w1mask, accummask)
+        w1thresh -= interval
+        w3thresh -= interval * diffactor
+    print "Finished mask at {0}.".format(accummask)
 
+
+def apply_mask(image, mask, outputfile):
+    '''Applies a mask to an image.
+
+    This will set all the pixels which are nonzero in the mask to be zero in the
+    image. The masked file will then be located at outputfile.
+    '''
+    command = "if im2 then 0 else im1"
+    run_imcalc([image, mask], outputfile, command)
 
 def mask_circle(image, center, radius, outputfile):
     '''Masks a circular region of the image.
@@ -89,3 +120,44 @@ def build_imcalc_circle(xcenter, ycenter, radius):
     command = "if (x-{0})**2 + (y-{1})**2 < {2}**2 then 0 else im1".format(
             xcenter, ycenter, radius)
     return command
+
+def run_imcalc(image, output, command, overwrite=True):
+    '''Runs the IRAF imcalc routine.
+
+    This function takes either an image or a list of images, and then runs the 
+    command given on them, resulting in an image at the location given by output.
+
+    Imcalc normally avoids overwriting an image and instead places the new image
+    as a data cube. This behavior is largely undesired for our purposes. As a
+    result, the overwrite flag will delete the previous file and then will place
+    the output of imcalc onto the next location. If overwrite is true and the
+    output file does not initially exist, this function will behave as expected
+    and simply write the file to the destination.
+    '''
+    try:
+        os.remove(output)
+    except OSError:
+        pass
+    iraf.stsdas()
+    iraf.toolbox()
+    iraf.imgtools()
+    if type(image) is list:
+        imagestring = ','.join(image)
+    else:
+        imagestring = image
+    iraf.imcalc(imagestring, output, command)
+
+def run_imarith(arg1, operator, arg2, output):
+    '''Runs the IRAF imarith routine.
+
+    This function will take image or value given as arg 1, and then perform a
+    binary operation defined by the operator string onto arg2 with it. The
+    output image will then be placed at output.
+    '''
+    try:
+        os.remove(output)
+    except OSError:
+        pass
+    iraf.images()
+    iraf.imutil()
+    iraf.imarith(arg1, operator, arg2, output)
