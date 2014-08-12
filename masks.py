@@ -4,7 +4,7 @@ import subprocess
 
 from pyraf import iraf
 
-def run_sextractor(image, weights, config="wise.sex", **options):
+def run_sextractor(image, weights, config, **options):
     '''Runs SExtractor on an image.
 
     The configuration file to be used can be specified through the config
@@ -13,14 +13,18 @@ def run_sextractor(image, weights, config="wise.sex", **options):
     Other keywords to overwrite the configuration file parameters can be
     specified as additional keyword arguments.
     '''
-    command = ["sex", "-c", config, "-WEIGHT_IMAGE", weights]
+    command = ["sex", image, "-c", config, "-WEIGHT_IMAGE", weights]
     for key, value in options.iteritems():
         command.append("-"+key)
         command.append(str(value))
-    subprocess.call(command)
+    returncode = subprocess.call(command)
+    if returncode:
+        print returncode
+        raise ValueError("Fatal Error in SExtractor.")
 
-def sextractor_mask(image, weights, threshold, config="wise.sex", 
-        thresh_type="RELATIVE", minimum_area=15, maskoutput="mask.fits"):
+
+def sextractor_mask(image, weights, threshold, config, thresh_type="RELATIVE", 
+        minimum_area=15, maskoutput="mask.fits"):
     '''
     Creates a mask for an image.
 
@@ -29,7 +33,7 @@ def sextractor_mask(image, weights, threshold, config="wise.sex",
     '''
     run_sextractor(image, weights, config, DETECT_THRESH=threshold,
             THRESH_TYPE=thresh_type, DETECT_MINAREA=minimum_area, 
-            CHECK_TYPE='BACKGROUND', CHECK_IMAGE=maskoutput)
+            CHECKIMAGE_TYPE='SEGMENTATION', CHECKIMAGE_NAME=maskoutput)
 
 def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
         lowthresh=50, output="foreground.fits"):
@@ -42,7 +46,7 @@ def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
     # This will be implemented once we decide which algorithm to use.
     pass
 
-def w1w3simulmask(w1image, w1weights, w3image, w3weights, w1initthresh, 
+def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh, 
         w3initthresh, interval, diffactor, w1endthresh, w3threshfloor,
         masked_image, w1mask, w3mask, accummask):
     '''Masking algorithm which runs SExtractor on the w3 image to mask out the
@@ -68,27 +72,31 @@ def w1w3simulmask(w1image, w1weights, w3image, w3weights, w1initthresh,
     '''
     w1thresh = w1initthresh
     w3thresh= w3initthresh
+    try:
+        os.remove(accummask)
+    except OSError:
+        pass
     while w1thresh >= w1endthresh:
-        if w3thresh < w3threshfloor:
+        if w3thresh <= w3threshfloor:
             w3thresh = w3threshfloor
+        print "W1 threshold: {0}, W3 threshold: {1}".format(w1thresh, w3thresh)
         # Generate the W3 mask.
-        sextractor_mask(w3image, w3weights, w3thresh, maskoutput=w3mask)
+        sextractor_mask(w3image, w3weights, w3thresh, config, maskoutput=w3mask)
         # Create the Masked W1 image.
         apply_mask(w1image, w3mask, masked_image)
         # Get the point sources from the masked W1 image.
-        sextractor_mask(masked_image, w1weights, w1thresh, maskoutput=w1mask)
+        sextractor_mask(masked_image, w1weights, w1thresh, config, 
+                maskoutput=w1mask)
         # Add the current mask to the accumulated mask.
-        # Note that this flies in the face of EAFP, but imarith doesn't throw an
-        # exception in the case of a missing argument. It just prints out that
-        # the argument isn't valid.
-        if os.path.isfile(accummask):
-            # This is not good because it will write tempmask.fits to our local
-            # directory, which may in general be a bad idea.
-            tempfile = "/home/regulus/simonian/year1/wise/sextractor_demo/NGC6946/tempmask.fits"
+
+        # We'll want to find a way to determine a better location for tempfile.
+        # Probably through an argument.
+        tempfile = "/home/regulus/simonian/year1/wise/sextractor_demo/NGC6946/tempmask.fits"
+        try:
             run_imarith(accummask, '+', w1mask, tempfile)
-            print os.path.exists(tempfile)
-            os.rename("tempmask.fits", accummask)
-        else:
+            os.rename(tempfile, accummask)
+        except OSError:
+            print "Creating {0}.".format(accummask)
             os.rename(w1mask, accummask)
         w1thresh -= interval
         w3thresh -= interval * diffactor
@@ -154,6 +162,8 @@ def run_imarith(arg1, operator, arg2, output):
     binary operation defined by the operator string onto arg2 with it. The
     output image will then be placed at output.
     '''
+    if not os.path.isfile(arg1) and not os.path.isfile(arg2):
+        raise OSError("Neither argument is a valid path.")
     try:
         os.remove(output)
     except OSError:
