@@ -48,7 +48,7 @@ def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
 
 def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh, 
         w3initthresh, interval, diffactor, w1endthresh, w3threshfloor,
-        masked_image, w1mask, w3mask, accummask):
+        masked_image, w1mask, w3mask, accummask, iteration="arithmetic"):
     '''Masking algorithm which runs SExtractor on the w3 image to mask out the
     galaxy, and then uses the mask generated from the w3 image on the w1 image
     in order to capture Rayleigh-Jeans foreground sources.
@@ -98,8 +98,12 @@ def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh,
         except OSError:
             print "Creating {0}.".format(accummask)
             os.rename(w1mask, accummask)
-        w1thresh -= interval
-        w3thresh -= interval * diffactor
+        if iteration is "arithmetic":
+            w1thresh -= interval
+            w3thresh -= interval * diffactor
+        else:
+            w1thresh /= interval
+            w3thresh /= interval * diffactor
     print "Finished mask at {0}.".format(accummask)
 
 
