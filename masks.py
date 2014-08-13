@@ -4,6 +4,8 @@ import subprocess
 
 from pyraf import iraf
 
+import photometry as phot
+
 def run_sextractor(image, weights, config, **options):
     '''Runs SExtractor on an image.
 
@@ -22,6 +24,27 @@ def run_sextractor(image, weights, config, **options):
         print returncode
         raise ValueError("Fatal Error in SExtractor.")
 
+def sextractor_background(image, weights, threshold, config,
+        backgroundoutput="background.fits", mesh_size=480, filter_size=7):
+    '''Creates a background for an image.
+
+    Gives a mesh with size of mesh_size to estimate the background, along with
+    filtering it with filter_size.
+    '''
+    run_sextractor(image, weights, config, BACK_SIZE=mesh_size,
+            BACK_FILTERSIZE=filter_size, CHECKIMAGE_TYPE='BACKGROUND',
+            CHECKIMAGE_NAME=backgroundoutput)
+
+def sextractor_subtracted_background(image, weights, config,
+        output="subtracted.fits", mesh_size=480, filter_size=7):
+    '''Creates a background-subtracted image.
+
+    Gives a mesh with size of mesh_size to estimate the background, along with
+    filtering it with filter_size.
+    '''
+    run_sextractor(image, weights, config, BACK_SIZE=mesh_size,
+            BACK_FILTERSIZE=filter_size, CHECKIMAGE_TYPE='-BACKGROUND',
+            CHECKIMAGE_NAME=output)
 
 def sextractor_mask(image, weights, threshold, config, thresh_type="RELATIVE", 
         minimum_area=15, maskoutput="mask.fits"):
@@ -45,6 +68,40 @@ def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
     '''
     # This will be implemented once we decide which algorithm to use.
     pass
+
+def subtractw3fromw1(config, w1image, w1weights, w3image, w3weights,
+        w1output_nobackground, w3output_nobackground, w3output_scaled, 
+        w1output_convolved, subtracted_output, objcenter, central_radius):
+    '''Subtracts the W3 background from W1 to accentuate point sources.'''
+    # Generate W1 background-subtracted image.
+    print "Subtracting W1 background."
+    sextractor_subtracted_background(w1image, w1weights, config,
+            output=w1output_nobackground)
+    # Generate W3 background-subtracted image.
+    print "Subtracting W3 background."
+    sextractor_subtracted_background(w3image, w3weights, config,
+            output=w3output_nobackground)
+    # Convolve the W1 image.
+    print "Convolving W1 image."
+    run_gauss(w1output_nobackground, w1output_convolved, str(5 /
+            phot.getPixelScale("W1")))
+    # Find the mean values of the image centers
+    # We're not actually using a radius. More of a box.
+    bounds = "[{0}:{1},{2}:{3}]".format(objcenter[0] - central_radius,
+            objcenter[0] + central_radius, objcenter[1] - central_radius,
+            objcenter[1]+central_radius)
+    w1mean = run_immean(w1output_convolved + bounds)
+    w3mean = run_immean(w3output_nobackground + bounds)
+    # Create the scaled W3 image.
+    print "Scaling W3 image."
+    run_imarith(w3output_nobackground, '*', str(w1mean / w3mean),
+            w3output_scaled)
+    # Subtract the two images.
+    print "Subtracting images."
+    run_imarith(w1output_convolved, '-', w3output_scaled, subtracted_output)
+
+
+
 
 def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh, 
         w3initthresh, interval, diffactor, w1endthresh, w3threshfloor,
@@ -101,6 +158,7 @@ def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh,
         w1thresh -= interval
         w3thresh -= interval * diffactor
     print "Finished mask at {0}.".format(accummask)
+
 
 
 def apply_mask(image, mask, outputfile):
@@ -171,3 +229,26 @@ def run_imarith(arg1, operator, arg2, output):
     iraf.images()
     iraf.imutil()
     iraf.imarith(arg1, operator, arg2, output)
+
+def run_gauss(input, output, sigma):
+    '''Performs a gaussian convolution on the input image.'''
+    try:
+        os.remove(output)
+    except OSError:
+        pass
+    iraf.images()
+    iraf.imfilter()
+    iraf.gauss(input, output, sigma)
+
+def run_immean(input):
+    '''Calculates the mean value of the image given.
+
+    If you only want the mean value of a rectangular section of an image, you
+    can pass a slice of the image to only sample the cutout.
+    '''
+    iraf.stsdas()
+    iraf.playpen()
+    print input
+    iraf.immean(input)
+    meanvalue = iraf.immean.getParam("mean")
+    return meanvalue
