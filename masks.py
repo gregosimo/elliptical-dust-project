@@ -1,6 +1,7 @@
 import os
 import os.path
 import subprocess
+import shutil
 
 from pyraf import iraf
 
@@ -24,7 +25,7 @@ def run_sextractor(image, weights, config, **options):
         print returncode
         raise ValueError("Fatal Error in SExtractor.")
 
-def sextractor_background(image, weights, threshold, config,
+def sextractor_background(image, weights, config,
         backgroundoutput="background.fits", mesh_size=480, filter_size=7):
     '''Creates a background for an image.
 
@@ -82,9 +83,11 @@ def subtractw3fromw1(config, w1image, w1weights, w3image, w3weights,
     sextractor_subtracted_background(w3image, w3weights, config,
             output=w3output_nobackground)
     # Convolve the W1 image.
-    print "Convolving W1 image."
-    run_gauss(w1output_nobackground, w1output_convolved, str(5 /
-            phot.getPixelScale("W1")))
+    # Let's see if this causes the problems we expect it to.
+    #print "Convolving W1 image."
+    #run_gauss(w1output_nobackground, w1output_convolved, str(5 /
+    #        phot.getPixelScale("W1")))
+    shutil.copyfile(w1output_nobackground, w1output_convolved)
     # Find the mean values of the image centers
     # We're not actually using a radius. More of a box.
     bounds = "[{0}:{1},{2}:{3}]".format(objcenter[0] - central_radius,
