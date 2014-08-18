@@ -181,11 +181,11 @@ def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh,
             print "Creating {0}.".format(accummask)
             os.rename(w1mask, accummask)
         if iteration is "arithmetic":
-            w1thresh -= interval
-            w3thresh -= interval * diffactor
+            w1thresh -= decfactor
+            w3thresh -= decfactor * diffactor
         else:
-            w1thresh /= interval
-            w3thresh /= interval * diffactor
+            w1thresh /= decfactor
+            w3thresh /= decfactor * diffactor
     print "Finished mask at {0}.".format(accummask)
 
 
