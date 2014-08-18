@@ -107,28 +107,50 @@ def subtractw3fromw1(config, w1image, w1weights, w3image, w3weights,
 
 
 def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh, 
-        w3initthresh, interval, diffactor, w1endthresh, w3threshfloor,
-        masked_image, w1mask, w3mask, accummask):
+        w3initthresh, decfactor, diffactor, w1endthresh, w3threshfloor,
+        masked_image, w1mask, w3mask, accummask, iteration="geometric"):
     '''Masking algorithm which runs SExtractor on the w3 image to mask out the
     galaxy, and then uses the mask generated from the w3 image on the w1 image
     in order to capture Rayleigh-Jeans foreground sources.
 
     The algorithm starts out with w1initthresh and w3initthresh being given to 
     DETECT_THRESH in SExtractor. With each iteration, the threshold for w1 will
-    decrease by interval, while the threshold for w3 will decrease by diffactor
-    * interval. Based on behavior which has been observed, diffactor should
-    probably be >1. The iterating continues until the threshold for w1 drops
-    below w1endthresh.
-
-    In order to deal with cases where the threshold for w3 would drop below
-    zero if diffactor is greater than 1, there will be a w3threshfloor argument
-    which bottoms out the value of w3. This should probably be at around 5
-    sigma.
+    decrease either arithmetically or geometrically by the decfactor, while the 
+    threshold for w3 will decrease by decfactor * diffactor. The iterating 
+    continues until the threshold for w1 drops below w1endthresh. In order to 
+    deal with cases where the threshold for w3 would drop below zero if 
+    diffactor is greater than 1, there will be a w3threshfloor argument which 
+    bottoms out the value of w3. This should probably be at around 5 sigma.
 
     Each iteration will have the mask add on to accummask to preserve point
     sources which may be embedded in the galaxy. The location of the 
     intermediate w1 and w3 masks can be specified through the w1mask and w3mask
     arguments. The masked w1 image will be stored in masked_image.
+
+    The effects of the parameters on the resulting mask can be roughly described
+    as follows:
+    w1initthresh: How sensitive the initial detection is. If you notice that
+        flux from the center of the galaxy is being incorporated into the max,
+        you may want to raise this. Note that raising this will also result in
+        a longer computation.
+    w3initthresh: How large the initial w1 mask is. If you notice that flux from
+        the center of the galaxy is being incorporated into the mask, you may
+        want to lower this. Additionally, if you notice that foreground stars
+        close to the nucleus do not appear in the final mask, you will want to
+        raise this.
+    decfactor: How finely the iteration occurs. If you notice that foreground
+        objects within the galaxy should be detected but aren't, you should 
+        lower this value. Note: Lowering this value will also result in a longer
+        computation.
+    diffactor: How quickly the w3 mask increases over the w1 image. If you
+        notice that objects embedded within the galaxy aren't being masked, then
+        you should lower this value. However, if you notice that somewhere in
+        the middle of the computation, the galaxy flux starts to appear in the
+        final mask, you'll want to raise this value.
+    w1endthresh: The ending threshold for w1. If you are not detecting faint
+        enough objects, you will want to lower this. However, you don't want to
+        lower it so far that it gets to be extremely difficult to avoid
+        measuring galaxy flux.
     '''
     w1thresh = w1initthresh
     w3thresh= w3initthresh
@@ -158,8 +180,12 @@ def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh,
         except OSError:
             print "Creating {0}.".format(accummask)
             os.rename(w1mask, accummask)
-        w1thresh -= interval
-        w3thresh -= interval * diffactor
+        if iteration is "arithmetic":
+            w1thresh -= interval
+            w3thresh -= interval * diffactor
+        else:
+            w1thresh /= interval
+            w3thresh /= interval * diffactor
     print "Finished mask at {0}.".format(accummask)
 
 
