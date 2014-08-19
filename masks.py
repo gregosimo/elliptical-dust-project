@@ -3,7 +3,10 @@ import os.path
 import subprocess
 import shutil
 
+import numpy as np
 from pyraf import iraf
+from astropy.io import fits
+from astropy.table import Table
 
 import photometry as phot
 
@@ -25,16 +28,19 @@ def run_sextractor(image, weights, config, **options):
         print returncode
         raise ValueError("Fatal Error in SExtractor.")
 
-def sextractor_background(image, weights, config,
-        backgroundoutput="background.fits", mesh_size=480, filter_size=7):
+def sextractor_background(image, weights, config, **sexargs):
     '''Creates a background for an image.
 
     Gives a mesh with size of mesh_size to estimate the background, along with
     filtering it with filter_size.
+
+    Relevant keyword arguments are:
+    BACK_SIZE: Specifies the size of the background mesh.
+    BACK_FILTERSIZE: Specifies how much filtering of the background is done.
+    CHECKIMAGE_NAME: The location of the background file.
     '''
-    run_sextractor(image, weights, config, BACK_SIZE=mesh_size,
-            BACK_FILTERSIZE=filter_size, CHECKIMAGE_TYPE='BACKGROUND',
-            CHECKIMAGE_NAME=backgroundoutput)
+    sexargs["CHECKIMAGE_TYPE"] = "BACKGROUND"
+    run_sextractor(image, weights, config, **sexargs)
 
 def sextractor_subtracted_background(image, weights, config,
         output="subtracted.fits", mesh_size=480, filter_size=7):
@@ -42,22 +48,31 @@ def sextractor_subtracted_background(image, weights, config,
 
     Gives a mesh with size of mesh_size to estimate the background, along with
     filtering it with filter_size.
-    '''
-    run_sextractor(image, weights, config, BACK_SIZE=mesh_size,
-            BACK_FILTERSIZE=filter_size, CHECKIMAGE_TYPE='-BACKGROUND',
-            CHECKIMAGE_NAME=output)
 
-def sextractor_mask(image, weights, threshold, config, thresh_type="RELATIVE", 
-        minimum_area=15, maskoutput="mask.fits"):
+    Relevant keyword arguments are:
+    BACK_SIZE: Specifies the size of the background mesh.
+    BACK_FILTERSIZE: Specifies how much filtering of the background is done.
+    CHECKIMAGE_NAME: The location of the background file.
+    '''
+    sexargs["CHECKIMAGE_TYPE"] = "-BACKGROUND"
+    run_sextractor(image, weights, config, **sexargs)
+
+def sextractor_mask(image, weights, threshold, config, **sexargs):
     '''
     Creates a mask for an image.
 
     Uses a threshold value to determine whether an object is a foreground
     objects or part of the galaxy.
+
+    Relevant keyword arguments are:
+    DETECT_THRESH: The detection threshold for objects.
+    THRESH_TYPE: How the detection threshold is defined.
+    DETECT_MINAREA: The minimum area for an object to be detected.
+    CHECKIMAGE_NAME: The location of the mask.
     '''
-    run_sextractor(image, weights, config, DETECT_THRESH=threshold,
-            THRESH_TYPE=thresh_type, DETECT_MINAREA=minimum_area, 
-            CHECKIMAGE_TYPE='SEGMENTATION', CHECKIMAGE_NAME=maskoutput)
+    sexargs["CHECKIMAGE_TYPE"] = "SEGMENTATION"
+    sexargs["DETECT_THRESH"] = threshold
+    run_sextractor(image, weights, config, **sexargs)
 
 def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
         lowthresh=50, output="foreground.fits"):
@@ -77,11 +92,11 @@ def subtractw3fromw1(config, w1image, w1weights, w3image, w3weights,
     # Generate W1 background-subtracted image.
     print "Subtracting W1 background."
     sextractor_subtracted_background(w1image, w1weights, config,
-            output=w1output_nobackground)
+            CHECKIMAGE_NAME=w1output_nobackground)
     # Generate W3 background-subtracted image.
     print "Subtracting W3 background."
     sextractor_subtracted_background(w3image, w3weights, config,
-            output=w3output_nobackground)
+            CHECKIMAGE_NAME=w3output_nobackground)
     # Convolve the W1 image.
     # Let's see if this causes the problems we expect it to.
     #print "Convolving W1 image."
@@ -103,8 +118,62 @@ def subtractw3fromw1(config, w1image, w1weights, w3image, w3weights,
     print "Subtracting images."
     run_imarith(w1output_convolved, '-', w3output_scaled, subtracted_output)
 
+def catalog_mask(config, image, weights, threshold, masked_image, fullmask,
+        coords):
+    '''Creates a mask from a segmentation image and catalog.
+
+    SExtractor is only run once, but is used to generate a segmentation map.
+    After generating the segmentation map, the catalog is used to look up the
+    segmentation number of the galaxy, and then the mask corresponding to the
+    galaxy is removed.
+    '''
+    sextractor_mask(image, weights, threshold, config, 
+            CHECKIMAGE_NAME=masked_image)
+    remove_galaxy_mask(masked_image, fullmask, coords)
+
+def remove_galaxy_mask(imagepath, newimagepath, coord):
+    '''Removes a galaxy from a segmentation image.
+
+    The coordinate of the galaxy in image pixels should be given. After that,
+    the segmentation pixels corresponding to the galaxy will be removed from the
+    image. The image without the galaxy segmentation patches will be saved to
+    newimagepath.
+    '''
+    hdulist = fits.open(imagepath) 
+    raw_mask = hdulist[0].data
+    segment = find_segment(raw_mask, coord)
+    new_mask = remove_segment(raw_mask, segment)
+    newhdu = fits.PrimaryHDU(new_mask)
+    try:
+        newhdu.writeto(newimagepath)
+    except IOError:
+        os.remove(newimagepath)
+        newhdu.writeto(newimagepath)
+    
 
 
+def remove_segment(image, number):
+    '''Takes a FITS image and removes the region corresponding to the segment.
+
+    The image should be a ndarray corresponding to the raw FITS image. The
+    number should be the segmentation number we wish to remove from the image.
+    It will be replaced with 0.
+    '''
+    segindices = np.where(image == number)
+    image_copy = image.copy()
+    image_copy[segindices] = 0
+    return image_copy
+
+def find_segment(segimage, coord):
+    '''Finds the SExtractor segment at a pixel value.
+
+    This function uses the segmentation image to find the segmentation number of
+    an object. The image should be passed as an ndarray, along with the
+    coordinates in image pixel values.
+
+    THE COORDINATES SHOULD NOT BE SPECIFIED AS NUMPY INDICES!
+    '''
+    return segimage[coord[1]-1, coord[0]-1]
 
 def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh, 
         w3initthresh, decfactor, diffactor, w1endthresh, w3threshfloor,

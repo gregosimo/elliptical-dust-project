@@ -522,7 +522,7 @@ def match_filter(directory, filter, fullpath=True, uncertainty=False):
             "FUV": "fd-int", "NUV": "nd-int"}
     filterstring = filtermap[filter]
     if uncertainty:
-        filterstring.replace("int", "unc")
+        filterstring = filterstring.replace("int", "unc")
     filelist = glob.glob(os.path.join(directory, 
             "*{0}*.fits".format(filterstring)))
     if len(filelist) > 1:
