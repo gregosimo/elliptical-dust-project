@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import queries as query
 import synthetic_photometry as synphot
 import WISE_conversions as conv
+import masks
 
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
@@ -44,8 +45,8 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
 # The way to set up BASEDIR for the photometric pipeline is to run
 # build_pipeline().
 
-def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
-        mask="", useskybase="sky_aperture", apertureCorrection=True):
+def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture", 
+        useskybase="sky_aperture", apertureCorrection=True):
     '''Calculates the flux of a galaxy in Data Numbers.
 
     This function uses the output from the ellipse package to calculate the
@@ -76,8 +77,8 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     return objectflux
     
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
-        mask="", useskybase="sky_aperture", uncertaintybase="uncertainty", 
-        flux=False, errors=True, apertureCorrection=True, colorIndex=None):
+        useskybase="sky_aperture", uncertaintybase="uncertainty", flux=False, 
+        errors=True, apertureCorrection=True, colorIndex=None):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -100,8 +101,7 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     '''
     galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
     try:
-        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, mask,
-                useskybase)
+        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, useskybase)
     except ValueError:
         print "\nGot negative flux for {0}.\n".format(name)
         DNflux *= -1
@@ -143,7 +143,7 @@ def calculate_correlated_pixel_noise(band):
             (INPUT_TO_OUTPUT_PIXEL_RATIO[band])**2)
 
 def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
-        skybase="sky_level", uncertainty_base="uncertainty", mask=""):
+        skybase="sky_level", uncertainty_base="uncertainty"):
     '''Calculates the uncertainty of a Data Number flux.
 
     This function requires bases for the ellipse routine, sky routine, and
@@ -234,6 +234,7 @@ def build_pipeline(BASEDIR, WISETable, runbands=bands):
     If you want a table of photometry, you'll have to run
     aperturePhotometryTable yourself.
     ''' 
+    allMasks(BASEDIR, WISETable)
     allApertureTables(BASEDIR, WISETable, runbands=runbands)
     allEllipseTables(BASEDIR, WISETable, runbands=runbands)
     allSkyValues(BASEDIR, WISETable, runbands=runbands)
@@ -515,6 +516,11 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
         except RuntimeError, e:
             print e
 
+def allMasks(BASEDIR, fulltable, threshold=50):
+    '''Goes through BASEDIR and generates all of the foreground masks.'''
+
+    runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold)
+
 def allApertureTables(BASEDIR, fulltable, runbands=bands):
     '''Goes through BASEDIR and generates all the aperture tables.
 
@@ -539,12 +545,14 @@ def allSkyValues(BASEDIR, fulltable, runbands=bands):
     '''
     runOnImages(BASEDIR, fulltable, genSkyValues, runbands=runbands)
 
-def allEllipseTables(BASEDIR, fulltable, runbands=bands):
+def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
+        mask="foreground.fits"):
     '''Goes through BASEDIR and generates all object tables.
 
     This function also allows for single-object corrections to be made.
     '''
-    runOnImages(BASEDIR, fulltable, genEllipsetables, runbands=runbands)
+    runOnImages(BASEDIR, fulltable, genEllipsetables, runbands=runbands,
+            mask=mask)
 
 def allSkyParams(BASEDIR, fulltable, runbands=bands):
     '''Goes through BASEDIR and generates all sky parameter files.'''
@@ -616,7 +624,7 @@ def run_imfunc(infile, outfile, func):
 
 
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
-        baseoutput="ellipse_aperture", runbands=bands):
+        baseoutput="ellipse_aperture", mask="foreground.fits", runbands=bands):
     '''Generates a table on the object for each band.'''
     # There should be a better way of joining this and genSkyTables, but that's
     # taking too much effort, and I want to just have this part done.
@@ -625,7 +633,7 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
         objimage = match_filter(galaxydir, band)
         run_ellipse(objimage, format_band_dependence(baseparamname, band, 'tab',
             galaxydir), format_band_dependence(baseoutput, band, 'tab', 
-            galaxydir))
+            galaxydir), mask=os.path.join(galaxydir, mask))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         ellipsebase="ellipse_aperture", baseskyfile="sky_level", skyratio=2.0,

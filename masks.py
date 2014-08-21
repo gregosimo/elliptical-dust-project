@@ -74,8 +74,7 @@ def sextractor_mask(image, threshold, config, **sexargs):
     sexargs["DETECT_THRESH"] = threshold
     run_sextractor(image, config, **sexargs)
 
-def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
-        lowthresh=50, output="foreground.fits"):
+def mask_algorithm(BASEDIR, WISErow, threshold=50, output="foreground.fits"):
     '''Creates a mask file for the object in WISErow.
 
     The general algorithm for the mask creation algorithm is to find bright
@@ -83,17 +82,27 @@ def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
     radius given by the isophotal aperture times lowfrac.
     '''
     # This will be implemented once we decide which algorithm to use.
-    pass
+    galaxydir = phot.change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
+    mask_elliptical(galaxydir, threshold, fullsegment=output)
 
-def mask_ellipse(galaxydir, inputimage, threshold,
-        maskfile="foregroundmask.fits", coordfile="ellipse_aperture.W1.tab"):
+def mask_elliptical(galaxydir, threshold, maskfile="foregroundmask.fits", 
+        ellipsefile="ellipse_aperture.W1.tab", configfile="../default.W1.sex", 
+        fullsegment="segment.fits"):
     '''Creates a foreground mask for an elliptical galaxy.
 
     This function uses the ellipse output to find the location of the ellipse
     and then remove it from the segmentation map, leaving us with a segmentation
    map of just the foreground objects.
    '''
-    ellipsepath = os.path.join(galaxydir, coordfile)
+    image = phot.match_filter(galaxydir, "W1")
+    masked_image = os.path.join(galaxydir, fullsegment)
+    fullmask = os.path.join(galaxydir, maskfile)
+    config = os.path.join(galaxydir, configfile)
+
+    ellipseparams = phot.STSDAS_to_Astropy_Table(galaxydir, ellipsefile)
+    coords = (int(ellipseparams["X0"][0]), int(ellipseparams["Y0"][0]))
+    segmentation_mask(config, image, threshold, masked_image, fullmask, coords)
+    
 
 
 def subtractw3fromw1(config, w1image, w3image, w1output_nobackground, 
@@ -129,14 +138,17 @@ def subtractw3fromw1(config, w1image, w3image, w1output_nobackground,
     print "Subtracting images."
     run_imarith(w1output_convolved, '-', w3output_scaled, subtracted_output)
 
-def catalog_mask(config, image, threshold, masked_image, fullmask,
+def segmentation_mask(config, image, threshold, masked_image, fullmask,
         coords):
-    '''Creates a mask from a segmentation image and catalog.
+    '''Creates a mask from a segmentation image and object coordinates.
 
     SExtractor is only run once, but is used to generate a segmentation map.
-    After generating the segmentation map, the catalog is used to look up the
-    segmentation number of the galaxy, and then the mask corresponding to the
-    galaxy is removed.
+    After generating the segmentation map, the object is looked up in the pixel
+    coordinate of the image, and all matching pixel values are removed.
+
+    The raw segmentation image is stored at masked_image and the segmentation
+    image with the galaxyy removed is saved in fullmask, which is the desirable
+    product.
     '''
     sextractor_mask(image, threshold, config, 
             CHECKIMAGE_NAME=masked_image)
@@ -184,7 +196,7 @@ def find_segment(segimage, coord):
 
     THE COORDINATES SHOULD NOT BE SPECIFIED AS NUMPY INDICES!
     '''
-    return segimage[np.round(npcoord[1])-1, np.round(coord[0])-1]
+    return segimage[np.round(coord[1])-1, np.round(coord[0])-1]
 
 def w1w3simulmask(config, w1image, w3image, w1initthresh, w3initthresh, 
         decfactor, diffactor, w1endthresh, w3threshfloor, masked_image, w1mask, 
