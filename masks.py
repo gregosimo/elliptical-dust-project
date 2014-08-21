@@ -10,7 +10,7 @@ from astropy.table import Table
 
 import photometry as phot
 
-def run_sextractor(image, weights, config, **options):
+def run_sextractor(image, config, **options):
     '''Runs SExtractor on an image.
 
     The configuration file to be used can be specified through the config
@@ -19,7 +19,7 @@ def run_sextractor(image, weights, config, **options):
     Other keywords to overwrite the configuration file parameters can be
     specified as additional keyword arguments.
     '''
-    command = ["sex", image, "-c", config, "-WEIGHT_IMAGE", weights]
+    command = ["sex", image, "-c", config]
     for key, value in options.iteritems():
         command.append("-"+key)
         command.append(str(value))
@@ -28,7 +28,7 @@ def run_sextractor(image, weights, config, **options):
         print returncode
         raise ValueError("Fatal Error in SExtractor.")
 
-def sextractor_background(image, weights, config, **sexargs):
+def sextractor_background(image, config, **sexargs):
     '''Creates a background for an image.
 
     Gives a mesh with size of mesh_size to estimate the background, along with
@@ -40,9 +40,9 @@ def sextractor_background(image, weights, config, **sexargs):
     CHECKIMAGE_NAME: The location of the background file.
     '''
     sexargs["CHECKIMAGE_TYPE"] = "BACKGROUND"
-    run_sextractor(image, weights, config, **sexargs)
+    run_sextractor(image, config, **sexargs)
 
-def sextractor_subtracted_background(image, weights, config,
+def sextractor_subtracted_background(image, config,
         output="subtracted.fits", mesh_size=480, filter_size=7):
     '''Creates a background-subtracted image.
 
@@ -55,9 +55,9 @@ def sextractor_subtracted_background(image, weights, config,
     CHECKIMAGE_NAME: The location of the background file.
     '''
     sexargs["CHECKIMAGE_TYPE"] = "-BACKGROUND"
-    run_sextractor(image, weights, config, **sexargs)
+    run_sextractor(image, config, **sexargs)
 
-def sextractor_mask(image, weights, threshold, config, **sexargs):
+def sextractor_mask(image, threshold, config, **sexargs):
     '''
     Creates a mask for an image.
 
@@ -72,7 +72,7 @@ def sextractor_mask(image, weights, threshold, config, **sexargs):
     '''
     sexargs["CHECKIMAGE_TYPE"] = "SEGMENTATION"
     sexargs["DETECT_THRESH"] = threshold
-    run_sextractor(image, weights, config, **sexargs)
+    run_sextractor(image, config, **sexargs)
 
 def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
         lowthresh=50, output="foreground.fits"):
@@ -85,17 +85,28 @@ def mask_algorithm(BASEDIR, WISErow, lowfrac=0.5, r_high=17, highthresh=51,
     # This will be implemented once we decide which algorithm to use.
     pass
 
-def subtractw3fromw1(config, w1image, w1weights, w3image, w3weights,
-        w1output_nobackground, w3output_nobackground, w3output_scaled, 
-        w1output_convolved, subtracted_output, objcenter, central_radius):
+def mask_ellipse(galaxydir, inputimage, threshold,
+        maskfile="foregroundmask.fits", coordfile="ellipse_aperture.W1.tab"):
+    '''Creates a foreground mask for an elliptical galaxy.
+
+    This function uses the ellipse output to find the location of the ellipse
+    and then remove it from the segmentation map, leaving us with a segmentation
+   map of just the foreground objects.
+   '''
+    ellipsepath = os.path.join(galaxydir, coordfile)
+
+
+def subtractw3fromw1(config, w1image, w3image, w1output_nobackground, 
+        w3output_nobackground, w3output_scaled, w1output_convolved, 
+        subtracted_output, objcenter, central_radius):
     '''Subtracts the W3 background from W1 to accentuate point sources.'''
     # Generate W1 background-subtracted image.
     print "Subtracting W1 background."
-    sextractor_subtracted_background(w1image, w1weights, config,
+    sextractor_subtracted_background(w1image, config,
             CHECKIMAGE_NAME=w1output_nobackground)
     # Generate W3 background-subtracted image.
     print "Subtracting W3 background."
-    sextractor_subtracted_background(w3image, w3weights, config,
+    sextractor_subtracted_background(w3image, config,
             CHECKIMAGE_NAME=w3output_nobackground)
     # Convolve the W1 image.
     # Let's see if this causes the problems we expect it to.
@@ -118,7 +129,7 @@ def subtractw3fromw1(config, w1image, w1weights, w3image, w3weights,
     print "Subtracting images."
     run_imarith(w1output_convolved, '-', w3output_scaled, subtracted_output)
 
-def catalog_mask(config, image, weights, threshold, masked_image, fullmask,
+def catalog_mask(config, image, threshold, masked_image, fullmask,
         coords):
     '''Creates a mask from a segmentation image and catalog.
 
@@ -127,7 +138,7 @@ def catalog_mask(config, image, weights, threshold, masked_image, fullmask,
     segmentation number of the galaxy, and then the mask corresponding to the
     galaxy is removed.
     '''
-    sextractor_mask(image, weights, threshold, config, 
+    sextractor_mask(image, threshold, config, 
             CHECKIMAGE_NAME=masked_image)
     remove_galaxy_mask(masked_image, fullmask, coords)
 
@@ -173,11 +184,11 @@ def find_segment(segimage, coord):
 
     THE COORDINATES SHOULD NOT BE SPECIFIED AS NUMPY INDICES!
     '''
-    return segimage[coord[1]-1, coord[0]-1]
+    return segimage[np.round(npcoord[1])-1, np.round(coord[0])-1]
 
-def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh, 
-        w3initthresh, decfactor, diffactor, w1endthresh, w3threshfloor,
-        masked_image, w1mask, w3mask, accummask, iteration="geometric"):
+def w1w3simulmask(config, w1image, w3image, w1initthresh, w3initthresh, 
+        decfactor, diffactor, w1endthresh, w3threshfloor, masked_image, w1mask, 
+        w3mask, accummask, iteration="geometric"):
     '''Masking algorithm which runs SExtractor on the w3 image to mask out the
     galaxy, and then uses the mask generated from the w3 image on the w1 image
     in order to capture Rayleigh-Jeans foreground sources.
@@ -232,12 +243,11 @@ def w1w3simulmask(config, w1image, w1weights, w3image, w3weights, w1initthresh,
             w3thresh = w3threshfloor
         print "W1 threshold: {0}, W3 threshold: {1}".format(w1thresh, w3thresh)
         # Generate the W3 mask.
-        sextractor_mask(w3image, w3weights, w3thresh, config, maskoutput=w3mask)
+        sextractor_mask(w3image, w3thresh, config, maskoutput=w3mask)
         # Create the Masked W1 image.
         apply_mask(w1image, w3mask, masked_image)
         # Get the point sources from the masked W1 image.
-        sextractor_mask(masked_image, w1weights, w1thresh, config, 
-                maskoutput=w1mask)
+        sextractor_mask(masked_image, w1thresh, config, maskoutput=w1mask)
         # Add the current mask to the accumulated mask.
 
         # We'll want to find a way to determine a better location for tempfile.
