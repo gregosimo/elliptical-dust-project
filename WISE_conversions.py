@@ -53,7 +53,7 @@ def DN_to_Jy_conversion(band, colorIndex=-2):
     '''
     DN_to_Jy = {"W1": 1.9350e-6, "W2": 2.7048e-06, "W3": 1.8326e-06, "W4":
             5.2269e-05}
-    return DN_to_Jy[band] / color_correct(band, colorIndex)
+    return DN_to_Jy[band] / color_correction(band, colorIndex)
 
 ###############################################################################
 # Flux-Magnitude Conversions
