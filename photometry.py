@@ -773,7 +773,7 @@ def allSkyValues(BASEDIR, fulltable, runbands=bands):
     runOnImages(BASEDIR, fulltable, genSkyValues, runbands=runbands)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
-        mask="foreground.fits"):
+        mask="foregroundmask.fits"):
     '''Goes through BASEDIR and generates all object tables.
 
     This function also allows for single-object corrections to be made.
