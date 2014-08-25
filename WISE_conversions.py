@@ -162,3 +162,17 @@ def color_correction(band, index):
         "W4": np.array([1.0142, 1.0013, 0.9934, 0.9905, 0.9926, 1.0000, 1.0130,
             1.0319])}
     return fluxcorrection[band][3-index]
+
+def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices):
+    '''Takes a table and converts the flux measurements to magnitude
+    measurements.
+
+    It assumes that flux and flux errors are stored with "W?" and "W?_err"
+    keys.'''
+    Mag_Table = Table(Flux_Table, copy=True)
+    bands = ["W1", "W2", "W3", "W4"]
+    for band in bands:
+        Mag_Table[band] = Jansky2WISEmag(band, Flux_Table[band], color_indices)
+        Mag_Table["{0}_err".format(band)] = Jansky_err_to_WISE_mag_err(band,
+                Flux_Table[band], color_indices)
+    return Mag_Table
