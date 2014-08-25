@@ -3,6 +3,8 @@ import math
 import numpy as np
 from astropy.table import Table
 
+import photometry as phot
+
 
 ###############################################################################
 # Data Number Conversions
@@ -164,14 +166,13 @@ def color_correction(band, index):
             1.0319])}
     return fluxcorrection[band][3-index]
 
-def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices):
+def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=phot.bands):
     '''Takes a table and converts the flux measurements to magnitude
     measurements.
 
     It assumes that flux and flux errors are stored with "W?" and "W?_err"
     keys.'''
     Mag_Table = Table(Flux_Table, copy=True)
-    bands = ["W1", "W2", "W3", "W4"]
     for band in bands:
         Mag_Table[band] = Jansky2WISEmag(band, Flux_Table[band], color_indices)
         Mag_Table["{0}_err".format(band)] = Jansky_err_to_WISE_mag_err(band,
