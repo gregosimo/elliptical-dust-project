@@ -908,7 +908,7 @@ def photometryOnBand(BASEDIR, objectnames, band,
     else:
         photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
             mask, skybase, flux=flux, errors=errors,
-            apertureCorrection=apertureCorrection, colorIndex=None) for galname 
+            apertureCorrection=apertureCorrection, colorIndex=-2) for galname 
             in objectnames]
     if errors:
         magsAndErrs = zip(*photOutput)

@@ -31,7 +31,7 @@ UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cd
 LATEST_WISE_CODE = "ac"
 
 def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
-        uncertainty=True):
+        uncertainty=True, overwrite=True):
     '''Downloads all images for many objects.
 
     The objects, ras, and decs variables should be arrays with the same length.
@@ -42,7 +42,7 @@ def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
     for object, ra, dec in zip(objects, ras, decs):
         coaddID = query_metadata(ra, dec)
         query_image(BASEDIR, object, coaddID, ra, dec, size=size,
-                uncertainty=uncertainty)
+                uncertainty=uncertainty, overwrite=overwrite)
 
 def query_metadata(ra, dec):
     '''Queries the WISE Image Metadata service for image information.
