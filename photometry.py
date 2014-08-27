@@ -516,7 +516,7 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
         except RuntimeError, e:
             print e
 
-def allMasks(BASEDIR, fulltable, threshold=50):
+def allMasks(BASEDIR, fulltable, threshold=100):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold)

@@ -74,7 +74,7 @@ def sextractor_mask(image, threshold, config, **sexargs):
     sexargs["DETECT_THRESH"] = threshold
     run_sextractor(image, config, **sexargs)
 
-def mask_algorithm(BASEDIR, WISErow, threshold=50, output="foreground.fits"):
+def mask_algorithm(BASEDIR, WISErow, threshold=50, output="foregroundmask.fits"):
     '''Creates a mask file for the object in WISErow.
 
     The general algorithm for the mask creation algorithm is to find bright
@@ -83,11 +83,11 @@ def mask_algorithm(BASEDIR, WISErow, threshold=50, output="foreground.fits"):
     '''
     # This will be implemented once we decide which algorithm to use.
     galaxydir = phot.change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    mask_elliptical(galaxydir, threshold, fullsegment=output)
+    mask_elliptical(galaxydir, threshold, maskfile=output)
 
 def mask_elliptical(galaxydir, threshold, maskfile="foregroundmask.fits", 
         ellipsefile="ellipse_aperture.W1.tab", configfile="../default.W1.sex", 
-        fullsegment="segment.fits"):
+        segment="segment.fits", procsegment="foreground_unnormalized.fits"):
     '''Creates a foreground mask for an elliptical galaxy.
 
     This function uses the ellipse output to find the location of the ellipse
@@ -95,14 +95,16 @@ def mask_elliptical(galaxydir, threshold, maskfile="foregroundmask.fits",
    map of just the foreground objects.
    '''
     image = phot.match_filter(galaxydir, "W1")
-    masked_image = os.path.join(galaxydir, fullsegment)
+    masked_image = os.path.join(galaxydir, segment)
     fullmask = os.path.join(galaxydir, maskfile)
     config = os.path.join(galaxydir, configfile)
+    segment_needs_normalization = os.path.join(galaxydir, procsegment)
 
     ellipseparams = phot.STSDAS_to_Astropy_Table(galaxydir, ellipsefile)
     coords = (int(ellipseparams["X0"][0]), int(ellipseparams["Y0"][0]))
-    segmentation_mask(config, image, threshold, masked_image, fullmask, coords)
-    
+    segmentation_mask(config, image, threshold, masked_image,
+            segment_needs_normalization, coords)
+    normalize_segmentation_map(segment_needs_normalization, fullmask)
 
 
 def subtractw3fromw1(config, w1image, w3image, w1output_nobackground, 
@@ -186,6 +188,17 @@ def remove_segment(image, number):
     image_copy = image.copy()
     image_copy[segindices] = 0
     return image_copy
+
+def normalize_segmentation_map(image, output):
+    '''Takes a segmentation map and sets all of the pixels to be either 1 or
+    0.'''
+    command = "if im1 then 1.0 else 0.0"
+    run_imcalc(image, output, command, newformat="real")
+
+def clip_image(image, output, threshold):
+    '''Sets all pixels lower than the given threshold to zero.'''
+    command = "if im1 < {0} then 0.0 else im1".format(threshold)
+    run_imcalc(image, output, command)
 
 def find_segment(segimage, coord):
     '''Finds the SExtractor segment at a pixel value.
@@ -307,7 +320,7 @@ def build_imcalc_circle(xcenter, ycenter, radius):
             xcenter, ycenter, radius)
     return command
 
-def run_imcalc(image, output, command, overwrite=True):
+def run_imcalc(image, output, command, overwrite=True, newformat="old"):
     '''Runs the IRAF imcalc routine.
 
     This function takes either an image or a list of images, and then runs the 
@@ -320,13 +333,15 @@ def run_imcalc(image, output, command, overwrite=True):
     output file does not initially exist, this function will behave as expected
     and simply write the file to the destination.
     '''
-    try:
-        os.remove(output)
-    except OSError:
-        pass
+    if overwrite:
+        try:
+            os.remove(output)
+        except OSError:
+            pass
     iraf.stsdas()
     iraf.toolbox()
     iraf.imgtools()
+    iraf.imcalc.setParam("pixtype", newformat)
     if type(image) is list:
         imagestring = ','.join(image)
     else:
@@ -347,7 +362,7 @@ def run_imarith(arg1, operator, arg2, output):
     except OSError:
         pass
     iraf.images()
-    iraf.imutil()
+    iraf.kmutil()
     iraf.imarith(arg1, operator, arg2, output)
 
 def run_gauss(input, output, sigma):
