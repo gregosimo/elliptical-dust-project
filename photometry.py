@@ -510,7 +510,7 @@ def format_band_dependence(basename, band, extension="tab", pathto=''):
     '''Generates a table file which is dependent on a band name.
 
     The returned filename will have a format of 
-    "{basename}.{band}.{extension}".
+    "/pathto/{basename}.{band}.{extension}".
     '''
     return os.path.join(pathto, "{0}.{1}.{2}".format(basename, band, extension))
     

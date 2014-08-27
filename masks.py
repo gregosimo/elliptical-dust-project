@@ -74,7 +74,8 @@ def sextractor_mask(image, threshold, config, **sexargs):
     sexargs["DETECT_THRESH"] = threshold
     run_sextractor(image, config, **sexargs)
 
-def mask_algorithm(BASEDIR, WISErow, threshold=50, output="foregroundmask.fits"):
+def mask_algorithm(BASEDIR, WISErow, threshold=50, outputbase="foregroundmask",
+        runbands=phot.bands):
     '''Creates a mask file for the object in WISErow.
 
     The general algorithm for the mask creation algorithm is to find bright
@@ -83,7 +84,9 @@ def mask_algorithm(BASEDIR, WISErow, threshold=50, output="foregroundmask.fits")
     '''
     # This will be implemented once we decide which algorithm to use.
     galaxydir = phot.change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    mask_elliptical(galaxydir, threshold, maskfile=output)
+    for band in runbands:
+        mask_elliptical(galaxydir, threshold,
+                maskfile=phot.format_band_dependence(outputbase, band, "fits"))
 
 def mask_elliptical(galaxydir, threshold, maskfile="foregroundmask.fits", 
         ellipsefile="ellipse_aperture.W1.tab", configfile="../default.W1.sex", 
