@@ -1,5 +1,3 @@
-import math
-
 import numpy as np
 from astropy.table import Table
 
@@ -87,7 +85,7 @@ def flux2mag(flux, calibflux, calibmag):
     
     Most of the time, either calibflux will be one or calibmag will be zero since
     that's how most photometric systems are defined.'''
-    return calibmag - 2.5 * math.log10(flux/calibflux)
+    return calibmag - 2.5 * np.log10(flux/calibflux)
 
 def fluxerr2magerr(flux, fluxerr, calibflux, calibfluxerr, calibmag,
         calibmagerr):
@@ -218,5 +216,5 @@ def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=phot.bands):
     for band in bands:
         Mag_Table[band] = Jansky2WISEmag(band, Flux_Table[band], color_indices)
         Mag_Table["{0}_err".format(band)] = Jansky_err_to_WISE_mag_err(band,
-                Flux_Table[band], color_indices)
+                Flux_Table[band], Flux_Table["{0}_err".format(band)])
     return Mag_Table
