@@ -224,7 +224,7 @@ def astropy_table_index(table, column, value):
     list of row indices that match the value in the column.'''
     return np.where(table[column] == value)
 
-def build_pipeline(BASEDIR, WISETable, runbands=bands):
+def build_pipeline(BASEDIR, WISETable, maskthresh=150, runbands=bands):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -234,7 +234,7 @@ def build_pipeline(BASEDIR, WISETable, runbands=bands):
     If you want a table of photometry, you'll have to run
     aperturePhotometryTable yourself.
     ''' 
-    allMasks(BASEDIR, WISETable)
+    allMasks(BASEDIR, WISETable, threshold=maskthresh)
     allApertureTables(BASEDIR, WISETable, runbands=runbands)
     allEllipseTables(BASEDIR, WISETable, runbands=runbands)
     allSkyValues(BASEDIR, WISETable, runbands=runbands)
