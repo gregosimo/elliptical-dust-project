@@ -86,7 +86,7 @@ def mask_algorithm(BASEDIR, WISErow, threshold=50, output="foregroundmask.fits")
     mask_elliptical(galaxydir, threshold, maskfile=output)
 
 def mask_elliptical(galaxydir, threshold, maskfile="foregroundmask.fits", 
-        ellipsefile="ellipse_aperture.W1.tab", configfile="../default.W1.sex", 
+        ellipsefile="ellipsepars.W1.tab", configfile="../default.W1.sex", 
         segment="segment.fits", procsegment="foreground_unnormalized.fits"):
     '''Creates a foreground mask for an elliptical galaxy.
 
