@@ -469,8 +469,8 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, runbands=bands):
     If you want a table of photometry, you'll have to run
     aperturePhotometryTable yourself.
     ''' 
-    allMasks(BASEDIR, WISETable, threshold=maskthresh)
     allApertureTables(BASEDIR, WISETable, runbands=runbands)
+    allMasks(BASEDIR, WISETable, threshold=maskthresh)
     allEllipseTables(BASEDIR, WISETable, runbands=runbands)
     allSkyValues(BASEDIR, WISETable, runbands=runbands)
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands)
