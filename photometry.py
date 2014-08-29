@@ -916,13 +916,14 @@ def photometryOnBand(BASEDIR, objectnames, band,
     else: 
         return np.array(photOutput)
 
-def createDifferencePlot(xval, valtocompare, errors, xlabel, ylabel, title):
+def createDifferencePlot(xval, valtocompare, errors, xlabel, ylabel, title,
+        label=''):
     '''Plots the difference between two values against the value.
 
     This plot is used for illustrating how consistent two datasets are
     from each other.'''
     difference = valtocompare - xval
-    plt.errorbar(xval, difference, errors, fmt="o")
+    plt.errorbar(xval, difference, errors, fmt="o", label=label)
     plt.plot([min(xval)+0.01, max(xval)-0.01], [0, 0], 'k-')
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
