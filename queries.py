@@ -10,6 +10,7 @@ import requests
 import astropy
 from astropy.table import Table
 import numpy as np
+import pyvo as vo
 
 import photometry as phot
 
@@ -30,6 +31,13 @@ UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3
 # it is for ALLWISE.
 LATEST_WISE_CODE = "ac"
 
+# Since we're transitioning to using SIA URLs, we'll only need to search by the
+# RAs and Decs, which is good. Bad news is that we'll have to deal with
+# VOTables.
+SIA_ALLWISE_URL = "http://irsa.ipac.caltech.edu/ibe/sia/wise/allwise/p3am_cdd"
+SIA_ALLSKY_URL = "http://irsa.ipac.caltech.edu/ibe/sia/wise/allsky/4band_p3am_cdd"
+
+
 def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
         uncertainty=True, overwrite=True):
     '''Downloads all images for many objects.
@@ -43,6 +51,12 @@ def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
         coaddID = query_metadata(ra, dec)
         query_image(BASEDIR, object, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
+
+def download_WISE_image(galaxydir, ra, dec, size=0, mcen=False, 
+        baseurl=SIA_ALLSKY_URL):
+    '''Downloads the WISE images for an object into galaxydir.
+
+    Only the RA and Dec are needed.
 
 def query_metadata(ra, dec):
     '''Queries the WISE Image Metadata service for image information.
