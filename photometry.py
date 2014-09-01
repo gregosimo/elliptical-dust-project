@@ -169,14 +169,14 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     # We get the background level from centroiding, which seems like a
     # mean-related measure.
     k = 1   
-    sig_B = skyParams["STDEV"][0]**2
+    sig_B = skyParams["STDEV"][0]
     # We can try to measure this and compare it to other errors later, but right
     # now this is not easily measurable in an automated way. I believe that this
     # should be minimal because of the large size of the aperture.
     sig_conf = 0
 
-    sourceerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B) +
-            sig_conf)**(0.5)
+    sourceerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B**2) +
+            sig_conf**2)**(0.5)
     return sourceerr
 
 
@@ -1187,6 +1187,8 @@ def photometryOnBand(BASEDIR, objectnames, band,
     # photOutput can either be a list, or a list of 2-tuples if error was
     # specified.
     if colorIndices is not None:
+        if len(colorIndices) is not len(objectnames):
+            raise ValueError("Need same number of color indices and objects.")
         photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
             mask, skybase, flux=flux, errors=errors,
             apertureCorrection=apertureCorrection, colorIndex=colorIndex) for 
