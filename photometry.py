@@ -72,7 +72,10 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
         background = estimate_UV_background(galaxydir, band,
                 baseellipsefile=baseobjectfile)
 
-    fapcor = aperture_correction_factor(band)
+    if apertureCorrection:
+        fapcor = aperture_correction_factor(band)
+    else:
+        fapcor = 1
     objectflux = fapcor * (DNflux - background * aperture_area)
     if objectflux < 0:
         raise ValueError("Measured negative flux for object.")
@@ -80,7 +83,7 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
         useskybase="sky_aperture", uncertaintybase="uncertainty", flux=False, 
-        errors=True, apertureCorrection=True, colorIndex=None):
+        errors=True, apertureCorrection=True, colorIndex=2):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -174,6 +177,11 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     # now this is not easily measurable in an automated way. I believe that this
     # should be minimal because of the large size of the aperture.
     sig_conf = 0
+
+    # This is for debugging purposes to see what the dominant errors are:
+    print "The variance in flux is: {0}".format(total_sigi)
+    print "The variance in the background is: {0}".format(k * NA**2 / NB *
+            sig_B**2)
 
     sourceerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B**2) +
             sig_conf**2)**(0.5)
@@ -867,7 +875,7 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         ellipsebase="ellipse_aperture", baseskyfile="sky_level", skyratio=2.0,
-        annulus=0, dannulus=10, runbands=bands):
+        annulus=0, dannulus=20, runbands=bands):
     '''Generates sky values for each galaxy.
     
     The sky values are generated via the IRAF fitsky routine. The output of
