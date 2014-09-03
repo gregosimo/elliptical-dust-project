@@ -567,7 +567,7 @@ def complete_for_bands(BASEDIR, objname, checkbands=bands):
     return True
 
 def run_fitsky(image, annulus, coords, output, dannulus=10,
-        algorithm="centroid"):
+        algorithm="centroid", scale=1, fwhmpsf=1):
     '''Runs the fitsky procedure in IRAF in order to measure the sky background.
 
     This function measures the sky pixels in an annulus with inner edge at
@@ -580,6 +580,9 @@ def run_fitsky(image, annulus, coords, output, dannulus=10,
     iraf.fitskypars.setParam("salgorithm", algorithm)
     iraf.fitskypars.setParam("annulus", annulus)
     iraf.fitskypars.setParam("dannulus", dannulus)
+    # Datapars
+    iraf.datapars.setParam("scale", scale)
+    iraf.datapars.setParam("fwhmpsf", fwhmpsf)
     # Fitsky parameters.
     iraf.fitsky.setParam("coords", coords)
     iraf.fitsky.setParam("output", output)
@@ -1470,6 +1473,27 @@ def plotWithVerticalLines(xvalues, yvalues, specialx, xlabel="", ylabel="",
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
+
+def makeSkyProfile(image, center, startradius, npoints, dannulus, skyname):
+    '''Makes a profile of the sky level.
+
+    The profile begins at startradius pixels, and then continues for npoints
+    taking steps of dannulus. The rings contain no overlap.
+    '''
+    radii = np.linspace(startradius, startradius + npoints * dannulus, dannulus)
+    skyprofile = []
+    skyerrs = []
+    for radius in radii:
+        run_fitsky(image, radius, center, skyname)
+        skyvalues = Table.read(skyname, format="ascii.daophot")
+        skyprofile.append(skyvalues["MSKY"])
+        skyerrs.append(skyvalues["STDEV"])
+
+    plt.errorbar(radii, skyprofile, skyerrs)
+    plt.xlabel("Radius (pixels)")
+    plt.ylabel("Sky Level (DN)")
+    plt.title("Sky Profile")
+    
 
 def classifyAgeColor(color, age, boundaries):
     '''Makes a plot with objects on a W2-W3 vs age plane, and class boundaries.
