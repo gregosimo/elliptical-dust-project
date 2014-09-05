@@ -96,8 +96,8 @@ def fluxerr2magerr(flux, fluxerr, calibflux, calibfluxerr, calibmag,
     Usually, only one of calibflux/calibfluxerr or calibmag/calibmagerr will be
     used.
     '''
-    magerr = np.sqrt(calibmagerr**2 + 1.179 * (fluxerr / flux)**2 +
-            (calibfluxerr / calibflux)**2)
+    magerr = np.sqrt(calibmagerr**2 + 1.179 * ((fluxerr / flux)**2 +
+            (calibfluxerr / calibflux)**2))
     return magerr
 
 def Jansky2WISEmag(band, flux, colorIndex=-2):
