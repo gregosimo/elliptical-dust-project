@@ -108,7 +108,7 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
     try:
         DNflux = calc_DNflux(galaxydir, band, baseobjectfile, useskybase)
-    except Valu:
+    except ValueError:
         print "\nGot negative flux for {0}.\n".format(name)
         DNflux *= -1
     
@@ -873,8 +873,8 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
             galaxydir), mask=os.path.join(galaxydir, mask))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
-        ellipsebase="ellipse_aperture", baseskyfile="sky_level", skyratio=2.0,
-        annulus=0, dannulus=20, runbands=bands):
+        ellipsebase="ellipse_aperture", baseskyfile="sky_level", skyratio=2.5,
+        annulus=0, dannulus=30, runbands=bands):
     '''Generates sky values for each galaxy.
     
     The sky values are generated via the IRAF fitsky routine. The output of
@@ -1144,10 +1144,9 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
 # then constructing Columns while iterating. I'm pretty sure those can be added 
 # to a Table more easily than Rows.
 def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
-        baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_level", uncertaintybase="uncertainty",  
-        ellipsebase="ellipsepars", flux=False, apertureCorrection=True,
-        colorIndices=None):
+        baseobjectfile="ellipse_aperture", skybase="sky_level", 
+        uncertaintybase="uncertainty",  ellipsebase="ellipsepars", flux=False, 
+        apertureCorrection=True, colorIndices=None):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
@@ -1156,7 +1155,7 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     fulltable = Table([objectnames], names=["objstr_01"])
     for band in runbands:
         bandmags, magerrs = photometryOnBand(BASEDIR, objectnames, band, 
-                baseobjectfile, mask, skybase, uncertaintybase, flux=flux, 
+                baseobjectfile, skybase, uncertaintybase, flux=flux, 
                 errors=True, apertureCorrection=apertureCorrection,
                 colorIndices=colorIndices)
 
@@ -1180,9 +1179,9 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     return fulltable
 
 def photometryOnBand(BASEDIR, objectnames, band,
-        baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_aperture", uncertaintybase="uncertainty", flux=False, 
-        errors=False, apertureCorrection=True, colorIndices=None):
+        baseobjectfile="ellipse_aperture", skybase="sky_aperture", 
+        uncertaintybase="uncertainty", flux=False, errors=False, 
+        apertureCorrection=True, colorIndices=None):
     '''Performs photometry on an array of objects in a given band.
     
     If flux is given as true, the flux of the object will be given in Janskys
@@ -1197,12 +1196,12 @@ def photometryOnBand(BASEDIR, objectnames, band,
         if len(colorIndices) is not len(objectnames):
             raise ValueError("Need same number of color indices and objects.")
         photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-            mask, skybase, flux=flux, errors=errors,
+            skybase, flux=flux, errors=errors,
             apertureCorrection=apertureCorrection, colorIndex=colorIndex) for 
             galname, colorIndex in zip(objectnames, colorIndices)]
     else:
         photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-            mask, skybase, flux=flux, errors=errors,
+            skybase, flux=flux, errors=errors,
             apertureCorrection=apertureCorrection, colorIndex=-2) for galname 
             in objectnames]
     if errors:
@@ -1211,15 +1210,32 @@ def photometryOnBand(BASEDIR, objectnames, band,
     else: 
         return np.array(photOutput)
 
-def createDifferencePlot(xval, valtocompare, errors, xlabel, ylabel, title,
-        label=''):
+def createDifferencePlot(xval, valtocompare, xerror, valerror, xlabel, ylabel,
+        title, label=''):
     '''Plots the difference between two values against the value.
 
     This plot is used for illustrating how consistent two datasets are
     from each other.'''
     difference = valtocompare - xval
+    errors = np.sqrt(xerror**2 + valerror**2)
     plt.errorbar(xval, difference, errors, fmt="o", label=label)
     plt.plot([min(xval)+0.01, max(xval)-0.01], [0, 0], 'k-')
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+
+def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror, 
+        xlabel, ylabel, title, label=""):
+    '''Plots the fractional difference between two values against one value.
+
+    The valtocompare is the minuend while the x value is the subtrahend. The
+    errors in the plot are determined using standard propagation of errors.'''
+    fracdiff = (valtocompare - xval) / xval
+    errors = np.sqrt((valerror / xval)**2 + (xerror * valtocompare / 
+        xval**2)**2)
+    plt.errorbar(xval, fracdiff, errors, fmt="o", label=label)
+    plt.plot([min(xval)+0.01, max(xval)-0.01], [0, 0], 'k-')
+    plt.xscale("log")
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
@@ -1497,6 +1513,7 @@ def plotSkyResults(BASEDIR, name, band, basename, limit, colorIndex=2):
     This function will see how the background annulus affects the magnitude
     of an object.
     '''
+    print BASEDIR
     radii = []
     mags = []
     errors = []
