@@ -292,7 +292,7 @@ def match_filter(directory, filter, fullpath=True, uncertainty=False):
 
     For WISE images, this will require searching for "w?" in the
     strings.'''
-    filtermap = {"W1": "w1-int", "W2": "w2-int", "W3": "w3-int", "W4": "w4-int", 
+    filtermap = {"W1": "w1-int", "W2": "w2-int", "W3": "w3-int", "W4": "w4-int",
             "FUV": "fd-int", "NUV": "nd-int"}
     filterstring = filtermap[filter]
     if uncertainty:

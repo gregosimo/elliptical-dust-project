@@ -1,5 +1,8 @@
 import os
 import os.path
+from collections import defaultdict
+import subprocess
+import tarfile
 
 from astropy.table import Table
 
@@ -38,35 +41,79 @@ def select_best_surveys(inputfile, output_dir):
         except OSError:
             pass
 
-    surveytables = dict((survey, Table(inputinfo, 
-        copy=True).remove_rows(slice(-1, 0))) for survey in surveys)
+    surveytables = {}
+    for survey in surveys:
+        surveytables[survey] = Table(inputinfo, copy=True)
+        surveytables[survey].remove_rows(slice(len(inputinfo)))
 
     # These lists will be used to quickly sort the downloaded images into
     # their correct destinations
     objectlist = []
     NUVlist = []
     FUVlist = []
-
+    sortdict = defaultdict(list)
     inputgroup = inputinfo.group_by("uploadID")
     for objectinfo in inputgroup.groups:
         objectinfo.sort('nuv_exptime')
-        topnuv = objectinfo[0]
+        topnuv = objectinfo[-1]
         objectinfo.sort('fuv_exptime')
-        topfuv = objectinfo[0]
+        topfuv = objectinfo[-1]
         # If one frame has both the highest NUV and FUV exposure, then only
         # download it once. If not, then put it on both lists.
         surveytables[topnuv["survey"]].add_row(topnuv)
-        if topnuv is not topfuv:
+        if topnuv["photoextractid"] != topfuv["photoextractid"]:
+            print "Split survey between {0} and {1}!".format(topnuv["tilename"],
+                    topfuv["tilename"])
             surveytables[topfuv["survey"]].add_row(topfuv)
         objectlist.append(topfuv["uploadID"])
         NUVlist.append(topnuv["tilename"])
         FUVlist.append(topfuv["tilename"])
             
-    for tab, path in zip(surveytables, filepaths):
+    for survey in surveys: 
+        tab = surveytables[survey]
+        path = filepaths[survey]
         create_upload_file(tab["uploadID"], tab["uploadRA"], tab["uploadDEC"],
                 path)       
 
     sortTable = Table([objectlist, NUVlist, FUVlist], names=("object",
         "NUV_Tile", "FUV_Tile"))
-    sortTable.write("Sort Table")
+    sortTable.write("Sort Table", format="ascii.csv")
 
+def process_GALEX_tarfile(BASEDIR, workfolder, tarfile, sortTable, 
+        tempfolder="images"):
+    """Processes a tarfile downloaded from GALEX using sortTable."""
+    tempfolder = os.path.join(workfolder, tempfolder)
+    # We first want to go through all of the tar archives and extract them into
+    # tempfolder. This will make a single location that contains all of the
+    # tiles.
+    filelist = glob.glob(os.path.join(workfolder, "Galex*.tar"))
+    for tarball in filelist:
+        untar(tarball, tempfolder)
+    # Next, go through the images and sort them into the correct directories in
+    # BASEDIR.
+    for entry in sortTable:
+        galaxydir = phot.change_to_galaxy_dir(BASEDIR, entry["object"])
+        galexFUVfiles = glob.glob(os.path.join(tempfolder,
+            "{0}/{0}*-fd-*.fits.gz".format(entry["FUV_Tile"])))
+        galexNUVfiles = glob.glob(os.path.join(tempfolder,
+            "{0}/{0}*-nd-*.fits.gz".format(entry["NUV_Tile"])))
+        for imagefile in galexFUVfiles + galexNUVfiles:
+            gunzip(imagefile, galaxydir)
+    
+def untar(inputfile, outputdir):
+    '''Extracts a tar file into a directory.'''
+    tar = tarfile.open(inputfile)
+    tar.extractall(outputdir)
+    tar.close()
+
+def gunzip(inputfile, outputdir):
+    '''Extracts a gzipped file into a directory.'''
+    compressedfile = gzip.open(inputfile)
+    inputfilename = os.path.split(inputfile)[1]
+    # Remove the .gz from the end.
+    outputfilename = inputfilename[:-3]
+    decompressedfile = open(os.path.join(outputdir, outputfilename), 'wb')
+    decompressedfile.write(compressedfile.read())
+    compressedfile.close()
+    decompressedfile.close()
+    os.remove(inputfile)
