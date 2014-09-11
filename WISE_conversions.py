@@ -7,7 +7,7 @@ import photometry as phot
 # Data Number Conversions
 ###############################################################################
 
-
+WISEbands = ["W1", "W2", "W3", "W4"]
 def DN_flux_to_Jy(band, objectflux, colorIndex=-2):
     '''Converts a flux from Data Numbers to Janskys.
     '''
@@ -205,7 +205,7 @@ def color_correction(band, index):
             1.0319])}
     return fluxcorrection[band][3-index]
 
-def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=phot.bands):
+def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=WISEbands):
     '''Takes a table and converts the flux measurements to magnitude
     measurements.
 

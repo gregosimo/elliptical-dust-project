@@ -287,7 +287,8 @@ def format_band_dependence(basename, band, extension="tab", pathto=''):
     '''
     return os.path.join(pathto, "{0}.{1}.{2}".format(basename, band, extension))
     
-def match_filter(directory, filter, fullpath=True, uncertainty=False):
+def match_filter(directory, filter, fullpath=True, uncertainty=False, 
+        sky=False):
     '''Finds the image which corresponds to the filter.
 
     For WISE images, this will require searching for "w?" in the
@@ -297,6 +298,8 @@ def match_filter(directory, filter, fullpath=True, uncertainty=False):
     filterstring = filtermap[filter]
     if uncertainty:
         filterstring = filterstring.replace("int", "unc")
+    elif sky:
+        filerstring = filterstring.replace("int", "skybg")
     filelist = glob.glob(os.path.join(directory, 
             "*{0}*.fits".format(filterstring)))
     if len(filelist) > 1:
@@ -655,22 +658,78 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     # If annulus is 0, that means we want to scale the annulus off of the
     # aperture. If we don't make a separate annulus_override variable, setting
     # annulus for W1 is disable resetting it for W2-4.
-    annulus_override = annulus
     for band in runbands:
-        coordpath = format_band_dependence(coordbase, band, "coo", galaxydir)
-        skypath = format_band_dependence(baseskyfile, band, "txt", galaxydir)
-        image = match_filter(galaxydir, band)
-        ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
-                format_band_dependence(ellipsebase, band, "tab"))
+        if band in IRBANDS:
+            measure_sky_from_annulus(galaxydir, band, coordbase, baseskyfile,
+                    ellipsebase, annulus, skyratio, dannulus)
 
-        if not annulus_override:
-            annulus = skyratio * ellipsepars["SMA"]
-        
-        with open(coordpath, 'w') as f:
-            f.write("{0} {1}".format(ellipsepars["X0"][0], ellipsepars["Y0"][0]))
+def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
+        baseskyfile="sky_level", ellipsebase="ellipsepars", annulus=0, 
+        skyratio=2.0, dannulus=10):
+    '''Uses an annulus to measure the sky level from an image.
 
-        run_fitsky(image, annulus, coordpath, skypath, 
-                dannulus=dannulus)
+    This function uses fitsky to measure the sky level with an annulus. The
+    inner edge of the annulus will be determined either by aperture size, or
+    through the annulus keyword. If the annulus keyword is zero, the inner
+    annulus size will be the aperture semimajoraxis times skyratio. Otherwise,
+    the inner edge of the annulus will be overridden to the value given in
+    annulus. The outer edge of the annulus will simply be given by annulus +
+    dannulus.'''
+    annulus_override = annulus
+    coordpath = format_band_dependence(coordbase, band, "coo", galaxydir)
+    skypath = format_band_dependence(baseskyfile, band, "txt", galaxydir)
+    image = match_filter(galaxydir, band)
+    ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
+            format_band_dependence(ellipsebase, band, "tab"))
+
+    if not annulus_override:
+        annulus = skyratio * ellipsepars["SMA"]
+    
+    with open(coordpath, 'w') as f:
+        f.write("{0} {1}".format(ellipsepars["X0"][0], ellipsepars["Y0"][0]))
+
+    run_fitsky(image, annulus, coordpath, skypath, dannulus=dannulus)
+
+def measure_sky_from_skyfile(galaxydir, band, baseskyfile="sky_level",
+        ellipsebase="ellipsepars", ellipseoutput="sky_ellipse"):
+    '''Measures the sky level from a separate sky file.
+
+    The sky level will be calculated from a separate file with only background
+    counts. A file similar to the output of fitsky will be created.'''
+    image_path = match_filter(galaxydir, band, sky=True)
+    ellipse_param_path = format_band_dependence(ellipsebase, band, "tab",
+            galaxydir)
+    ellipse_output_path = format_band_dependence(ellipseoutput, band, "tab")
+
+    run_ellipse(image_path, ellipse_param_path, os.path.join(galaxydir, 
+        ellipse_output_path))
+
+    skylevel = STSDAS_to_Astropy_Table(galaxydir, ellipse_output_path)
+    
+    imageval = fits.getData(image_path)
+
+def test_if_in_ellipse(x, y, xcenter, ycenter, a, b, pa):
+    '''Tests if the point x,y lies within the described ellipse.
+
+    All of the arguments should make sense except for pa. PA should be given in
+    degees E of N.
+    '''
+    alpha = (pa + 90) * math.pi / 180.0
+    xcen = x - xcenter
+    ycen = y - ycenter
+    return (xcen * math.cos(alpha) + ycen * math.sin(alpha))**2 / b**2 + (xcen *
+            math.sin(alpha) - ycen * math.cos(alpha))**2 / a**2 < 1
+
+def mask_ellipse(image, xcenter, ycenter, a, b, pa):
+    '''Creates a mask on the image which is shaped like an ellipse.
+    
+    Image should be a fits image. And xcenter and ycenter should be in physical
+    pixels, not numpy indices. The conversion will take place in this function.
+    '''
+    image_coords = np.indices(image.shape)
+    
+    
+
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS):
     '''Runs through all objects and creates cutouts in their folder.
