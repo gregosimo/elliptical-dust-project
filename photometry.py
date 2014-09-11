@@ -46,7 +46,7 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
 # build_pipeline().
 
 def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture", 
-        useskybase="sky_aperture", apertureCorrection=True):
+        useskybase="sky_level", apertureCorrection=True):
     '''Calculates the flux of a galaxy in Data Numbers.
 
     This function uses the output from the ellipse package to calculate the
@@ -65,20 +65,24 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     # them.
     # TODO: Make sure UV sky background hasn't been broken.
     if band in IRBANDS:
-        background = estimate_WISE_background(galaxydir, band)
+        background = estimate_WISE_background(galaxydir, band,
+                baseskyfile=useskybase)
     else:
         background = estimate_UV_background(galaxydir, band,
                 baseellipsefile=baseobjectfile)
 
-    fapcor = aperture_correction_factor(band)
+    if apertureCorrection:
+        fapcor = aperture_correction_factor(band)
+    else:
+        fapcor = 1
     objectflux = fapcor * (DNflux - background * aperture_area)
     if objectflux < 0:
         raise ValueError("Measured negative flux for object.")
     return objectflux
     
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
-        useskybase="sky_aperture", uncertaintybase="uncertainty", flux=False, 
-        errors=True, apertureCorrection=True, colorIndex=None):
+        useskybase="sky_level", uncertaintybase="uncertainty", flux=False, 
+        errors=True, apertureCorrection=True, colorIndex=2):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -167,14 +171,14 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     # We get the background level from centroiding, which seems like a
     # mean-related measure.
     k = 1   
-    sig_B = skyParams["STDEV"][0]**2
+    sig_B = skyParams["STDEV"][0]
     # We can try to measure this and compare it to other errors later, but right
     # now this is not easily measurable in an automated way. I believe that this
     # should be minimal because of the large size of the aperture.
     sig_conf = 0
 
-    sourceerr = (fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * sig_B) +
-            sig_conf)**(0.5)
+    sourceerr = np.sqrt(fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * 
+        sig_B**2) + sig_conf**2)
     return sourceerr
 
 
@@ -224,7 +228,7 @@ def astropy_table_index(table, column, value):
     list of row indices that match the value in the column.'''
     return np.where(table[column] == value)
 
-def build_pipeline(BASEDIR, WISETable, runbands=bands):
+def build_pipeline(BASEDIR, WISETable, maskthresh=150, runbands=bands):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -234,8 +238,8 @@ def build_pipeline(BASEDIR, WISETable, runbands=bands):
     If you want a table of photometry, you'll have to run
     aperturePhotometryTable yourself.
     ''' 
-    allMasks(BASEDIR, WISETable)
     allApertureTables(BASEDIR, WISETable, runbands=runbands)
+    allMasks(BASEDIR, WISETable, threshold=maskthresh)
     allEllipseTables(BASEDIR, WISETable, runbands=runbands)
     allSkyValues(BASEDIR, WISETable, runbands=runbands)
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands)
@@ -332,7 +336,7 @@ def complete_for_bands(BASEDIR, objname, checkbands=bands):
     return True
 
 def run_fitsky(image, annulus, coords, output, dannulus=10,
-        algorithm="centroid"):
+        algorithm="centroid", scale=1, fwhmpsf=6):
     '''Runs the fitsky procedure in IRAF in order to measure the sky background.
 
     This function measures the sky pixels in an annulus with inner edge at
@@ -345,6 +349,9 @@ def run_fitsky(image, annulus, coords, output, dannulus=10,
     iraf.fitskypars.setParam("salgorithm", algorithm)
     iraf.fitskypars.setParam("annulus", annulus)
     iraf.fitskypars.setParam("dannulus", dannulus)
+    # Datapars
+    iraf.datapars.setParam("scale", scale)
+    iraf.datapars.setParam("fwhmpsf", fwhmpsf)
     # Fitsky parameters.
     iraf.fitsky.setParam("coords", coords)
     iraf.fitsky.setParam("output", output)
@@ -639,8 +646,8 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
             galaxydir), mask=os.path.join(galaxydir, mask))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
-        ellipsebase="ellipse_aperture", baseskyfile="sky_level", skyratio=2.0,
-        annulus=0, dannulus=10, runbands=bands):
+        ellipsebase="ellipse_aperture", baseskyfile="sky_level", skyratio=2.5,
+        annulus=0, dannulus=30, runbands=bands):
     '''Generates sky values for each galaxy.
     
     The sky values are generated via the IRAF fitsky routine. The output of
@@ -688,7 +695,8 @@ def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
     with open(coordpath, 'w') as f:
         f.write("{0} {1}".format(ellipsepars["X0"][0], ellipsepars["Y0"][0]))
 
-    run_fitsky(image, annulus, coordpath, skypath, dannulus=dannulus)
+    run_fitsky(image, annulus, coordpath, skypath, 
+            dannulus=dannulus, fwhmpsf=getPSFFWHM(band, pixel=True))
 
 def measure_sky_from_skyfile(galaxydir, band, baseskyfile="sky_level",
         ellipsebase="ellipsepars", ellipseoutput="sky_ellipse"):
@@ -730,6 +738,20 @@ def mask_ellipse(image, xcenter, ycenter, a, b, pa):
     
     
 
+def getPSFFWHM(band, pixel=False):
+    '''Returns the effective size of a point source in an Atlas Image.
+
+    Size taken from:
+    http://wise2.ipac.caltech.edu/docs/release/allwise/expsup/sec4_4.html#coadbeam
+
+    The numbers are returned in arcseconds by default. If you would prefer
+    pixels, then set the pixel keyword to True.
+    '''
+    widths = {"W1": 8.3, "W2": 9.1, "W3": 9.5, "W4": 16.8}
+    chosenwidth = widths[band]
+    if pixel:
+        chosenwidth /= getPixelScale(band)
+    return chosenwidth
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS):
     '''Runs through all objects and creates cutouts in their folder.
@@ -910,10 +932,9 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
 # then constructing Columns while iterating. I'm pretty sure those can be added 
 # to a Table more easily than Rows.
 def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
-        baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_level", uncertaintybase="uncertainty",  
-        ellipsebase="ellipsepars", flux=False, apertureCorrection=True,
-        colorIndices=None):
+        baseobjectfile="ellipse_aperture", skybase="sky_level", 
+        uncertaintybase="uncertainty",  ellipsebase="ellipsepars", flux=False, 
+        apertureCorrection=True, colorIndices=None):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
@@ -922,7 +943,7 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     fulltable = Table([objectnames], names=["objstr_01"])
     for band in runbands:
         bandmags, magerrs = photometryOnBand(BASEDIR, objectnames, band, 
-                baseobjectfile, mask, skybase, uncertaintybase, flux=flux, 
+                baseobjectfile, skybase, uncertaintybase, flux=flux, 
                 errors=True, apertureCorrection=apertureCorrection,
                 colorIndices=colorIndices)
 
@@ -946,9 +967,9 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     return fulltable
 
 def photometryOnBand(BASEDIR, objectnames, band,
-        baseobjectfile="ellipse_aperture", mask="foreground.pl",
-        skybase="sky_aperture", uncertaintybase="uncertainty", flux=False, 
-        errors=False, apertureCorrection=True, colorIndices=None):
+        baseobjectfile="ellipse_aperture", skybase="sky_aperture", 
+        uncertaintybase="uncertainty", flux=False, errors=False, 
+        apertureCorrection=True, colorIndices=None):
     '''Performs photometry on an array of objects in a given band.
     
     If flux is given as true, the flux of the object will be given in Janskys
@@ -960,13 +981,15 @@ def photometryOnBand(BASEDIR, objectnames, band,
     # photOutput can either be a list, or a list of 2-tuples if error was
     # specified.
     if colorIndices is not None:
+        if len(colorIndices) is not len(objectnames):
+            raise ValueError("Need same number of color indices and objects.")
         photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-            mask, skybase, flux=flux, errors=errors,
+            skybase, flux=flux, errors=errors,
             apertureCorrection=apertureCorrection, colorIndex=colorIndex) for 
             galname, colorIndex in zip(objectnames, colorIndices)]
     else:
         photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-            mask, skybase, flux=flux, errors=errors,
+            skybase, flux=flux, errors=errors,
             apertureCorrection=apertureCorrection, colorIndex=-2) for galname 
             in objectnames]
     if errors:
@@ -975,14 +998,33 @@ def photometryOnBand(BASEDIR, objectnames, band,
     else: 
         return np.array(photOutput)
 
-def createDifferencePlot(xval, valtocompare, errors, xlabel, ylabel, title):
+def createDifferencePlot(xval, valtocompare, xerror, valerror, xlabel, ylabel,
+        title, label=''):
     '''Plots the difference between two values against the value.
 
     This plot is used for illustrating how consistent two datasets are
     from each other.'''
     difference = valtocompare - xval
-    plt.errorbar(xval, difference, errors, fmt="o")
+    errors = np.sqrt(xerror**2 + valerror**2)
+    plt.errorbar(xval, difference, errors, fmt="o", label=label)
     plt.plot([min(xval)+0.01, max(xval)-0.01], [0, 0], 'k-')
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+
+def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror, 
+        xlabel, ylabel, title, label=""):
+    '''Plots the fractional difference between two values against one value.
+
+    The valtocompare is the minuend while the x value is the subtrahend. The
+    errors in the plot are determined using standard propagation of errors.'''
+    fracdiff = (valtocompare - xval) / xval
+    errors = np.sqrt((valerror / xval)**2 + (xerror * valtocompare / 
+        xval**2)**2)
+    plt.errorbar(xval, fracdiff, errors, fmt="o", label=label)
+    plt.plot([10**np.floor(np.log10(min(xval)) + 0.01),
+        10**np.ceil(np.log10(max(xval))- 0.01)], [0, 0], 'k-')
+    plt.xscale("log")
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
@@ -1232,6 +1274,71 @@ def plotWithVerticalLines(xvalues, yvalues, specialx, xlabel="", ylabel="",
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
+
+def makeSkyProfile(image, center, startradius, npoints, dannulus, skyname):
+    '''Makes a profile of the sky level.
+
+    The profile begins at startradius pixels, and then continues for npoints
+    taking steps of dannulus. The rings contain no overlap.
+    '''
+    radii = np.linspace(startradius, startradius + npoints * dannulus, dannulus)
+    skyprofile = []
+    skyerrs = []
+    for radius in radii:
+        run_fitsky(image, radius, center, skyname)
+        skyvalues = Table.read(skyname, format="ascii.daophot")
+        skyprofile.append(skyvalues["MSKY"])
+        skyerrs.append(skyvalues["STDEV"])
+
+    plt.errorbar(radii, skyprofile, skyerrs)
+    plt.xlabel("Radius (pixels)")
+    plt.ylabel("Sky Level (DN)")
+    plt.title("Sky Profile")
+
+def plotSkyResults(BASEDIR, name, band, basename, limit, colorIndex=2,
+        flux=False):
+    '''Uses sky files generated by generate_sky_profile_files to plot
+    magnitudes.
+
+    This function will see how the background annulus affects the magnitude
+    of an object.
+    '''
+    radii = []
+    mags = []
+    errors = []
+    for i in xrange(limit):
+        skybase = "{0}.{1}".format(basename, i)
+        mag, err = galaxy_photometry(BASEDIR, name, band, useskybase=skybase,
+                flux=flux)
+        print mag, err
+        skyinfo = Table.read(format_band_dependence(skybase, band, "txt",
+                change_to_galaxy_dir(BASEDIR, name)), format="ascii.daophot")
+        radius = (float(skyinfo.meta["keywords"]["ANNULUS"]["value"]) * 
+                float(skyinfo.meta["keywords"]["SCALE"]["value"]))
+        radii.append(radius)
+        mags.append(mag)
+        errors.append(err)
+    plt.errorbar(radii, mags, errors)
+    plt.xlabel("Annulus Radius (pixel)")
+    plt.ylabel("Source {0}".format(band))
+    plt.title("Magnitude dependence on background annulus for {0}".format(name))
+
+    
+def generate_sky_profile_files(galaxydir, band, startradius, npoints, dannulus, 
+        basename, coordbase="fitsky"):
+    '''Creates a series of sky files which sample from a radial profile.
+
+    The profile begins at startradius pixels, and then continues for npoints,
+    taking steps of dannulus. The rings contain no overlap. The output will be
+    ordered sequentially starting with basename and ending with band.txt.'''
+    image = match_filter(galaxydir, band)
+    radii = np.arange(startradius, startradius + npoints * dannulus, dannulus)
+    coordpath = format_band_dependence(coordbase, band, "coo", galaxydir)
+    for i, radius in enumerate(radii):
+        run_fitsky(image, radius, coordpath, 
+                format_band_dependence("{0}.{1}".format(basename, i), band,
+                    "txt", galaxydir), dannulus)
+
 
 def classifyAgeColor(color, age, boundaries):
     '''Makes a plot with objects on a W2-W3 vs age plane, and class boundaries.
