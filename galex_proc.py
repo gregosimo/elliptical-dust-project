@@ -77,7 +77,8 @@ def select_best_surveys(inputfile, output_dir):
 
     sortTable = Table([objectlist, NUVlist, FUVlist], names=("object",
         "NUV_Tile", "FUV_Tile"))
-    sortTable.write("Sort Table", format="ascii.csv")
+    sortTable.write(os.path.join(output_dir, "sorttable.csv"), 
+            format="ascii.csv")
 
 def process_GALEX_tarfile(BASEDIR, workfolder, tarfile, sortTable, 
         tempfolder="images"):
