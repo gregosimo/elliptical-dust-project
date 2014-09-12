@@ -3,8 +3,12 @@ import os.path
 from collections import defaultdict
 import subprocess
 import tarfile
+import glob
+import gzip
 
 from astropy.table import Table
+
+import photometry as phot
 
 def create_upload_file(ids, ras, decs, output):
     '''Creates a file that can be uploaded to MAST.
@@ -80,8 +84,7 @@ def select_best_surveys(inputfile, output_dir):
     sortTable.write(os.path.join(output_dir, "sorttable.csv"), 
             format="ascii.csv")
 
-def process_GALEX_tarfile(BASEDIR, workfolder, tarfile, sortTable, 
-        tempfolder="images"):
+def process_GALEX_tarfile(BASEDIR, workfolder, sortTable, tempfolder="images"):
     """Processes a tarfile downloaded from GALEX using sortTable."""
     tempfolder = os.path.join(workfolder, tempfolder)
     # We first want to go through all of the tar archives and extract them into
@@ -94,10 +97,12 @@ def process_GALEX_tarfile(BASEDIR, workfolder, tarfile, sortTable,
     # BASEDIR.
     for entry in sortTable:
         galaxydir = phot.change_to_galaxy_dir(BASEDIR, entry["object"])
-        galexFUVfiles = glob.glob(os.path.join(tempfolder,
-            "{0}/{0}*-fd-*.fits.gz".format(entry["FUV_Tile"])))
-        galexNUVfiles = glob.glob(os.path.join(tempfolder,
-            "{0}/{0}*-nd-*.fits.gz".format(entry["NUV_Tile"])))
+        matchstring = os.path.join(tempfolder, "{tile}*",
+        "{tile}*-{band}-*.fits.gz")
+        galexFUVfiles = glob.glob(matchstring.format(tile=entry["FUV_Tile"],
+            band="fd")) 
+        galexNUVfiles = glob.glob(matchstring.format(tile=entry["NUV_Tile"],
+            band="nd") )
         for imagefile in galexFUVfiles + galexNUVfiles:
             gunzip(imagefile, galaxydir)
     
@@ -117,4 +122,3 @@ def gunzip(inputfile, outputdir):
     decompressedfile.write(compressedfile.read())
     compressedfile.close()
     decompressedfile.close()
-    os.remove(inputfile)
