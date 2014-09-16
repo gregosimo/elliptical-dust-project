@@ -8,6 +8,7 @@ from pyraf import iraf
 from astropy import wcs
 from astropy.io import fits
 from astropy.table import Table, Column
+from astroquery.ned import Ned
 import numpy as np
 import aplpy
 import matplotlib
@@ -584,7 +585,7 @@ def ellipseOnBands(BASEDIR, WISErow, baseparamname, output, mask=""):
     '''
 
 def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
-        ellipsebase="ellipse_aperture", runbands=bands):
+        ellipsebase="ellipse_aperture", skybase="sky_level", runbands=bands):
     '''Sums the variance of uncertainty pixels over an aperture.
 
     This function requires uncertainty files to be located within the galaxy
@@ -599,24 +600,64 @@ def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
     '''
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     for band in runbands:
-        intfile = match_filter(galaxydir, band)
-        uncfile = rreplace(intfile, "int", "unc", 1)
-        varfile = rreplace(uncfile, "unc", "var", 1)
+        if band in IRBANDS:
+            source_uncertainty_from_uncertainty_file(galaxydir, band,
+                    rreplace(match_filter(galaxydir, band), "int", "unc", 1),
+                    ellipsebase, baseuncertainty)
+        elif band in UVBANDS:
+            source_uncertainty_from_image(galaxydir, band, ellipsebase,
+                    baseuncertainty, skybase)
 
-        # There's a really shitty IRAF "feature" where if imfunc acts on a file
-        # which already exists, it will simply add on another layer, which
-        # confuses the hell out of ellipse. So if a previous file exists, I'll
-        # delete it manually.
-        if os.path.isfile(varfile):
-            os.remove(varfile)
-        run_imfunc(uncfile, varfile, "square")
+def source_uncertainty_from_image(galaxydir, band, image, 
+        ellipsebase="ellipsepars", outputbase="uncertainty", 
+        skybase="sky_level"):
+    '''Calculates the uncertainty of a GALEX image from the image itself.
 
-        ellipse_file = format_band_dependence(ellipsebase, band, "tab",
-                galaxydir)
-        output = format_band_dependence(baseuncertainty,
-            band, "tab", galaxydir)
-        run_ellipse(varfile, ellipse_file, output)
+    This uncertainty estimation uses the form of:
+    sig_i^2 = \frac{S_i - \bar{B}}/t
 
+    where t is the exposure time in seconds, since S_i and \bar{B} are in counts
+    per second. This function will also result in an STSDAS table from ellipse,
+    so it will be functionally the same as the STSDAS table from the WISE
+    calculation.
+    '''
+    # We're going to create an image which is scaled correctly, and then run the
+    # ellipse command on it. That way we end up with a properly-formatted STSDAS
+    # table.
+    calc_template = "(im1 - {sky}) / {exptime}"
+    scaled = rreplace(image, "int", "sca", 1)
+    ellipsepars = format_band_dependence(ellipsebase, band, "tab", galaxydir)
+    output = format_band_dependence(outputbase, band, "tab", galaxydir)
+
+    skyvalues = Table.read(format_band_dependence(skybase, band, "txt"),
+            format="ascii.daophot")
+    skybackground = skyvalues["MSKY"][0]
+
+    header = fits.getheader(image)
+    exposuretime = header["EXPTIME"]
+
+    calc_command = calc_template.format(sky=skybackground, exptime=exposuretime)
+    masks.run_imcalc(image, scaled, calc_command)
+
+    run_ellipse(scaled, ellipsepars, output)
+
+def source_uncertainty_from_uncertainty_file(galaxydir, band, uncfile,
+        ellipsebase="ellipsepars", outputbase="uncertainty"):
+    '''Calculates the source uncertainty from an uncertainty file.
+
+    The uncertainty file itself should be in uncfile. The ellipse parameters
+    should be named as usual with the base of ellipsebase. And the function will
+    output a table file as usual with the complete uncertainty given as the
+    TFLUX_E parameter.
+    '''
+    varfile = rreplace(uncfile, "unc", "var", 1)
+
+
+    ellipse_file = format_band_dependence(ellipsebase, band, "tab",
+            galaxydir)
+    output = format_band_dependence(baseuncertainty,
+        band, "tab", galaxydir)
+    run_ellipse(varfile, ellipse_file, output)
 
 
 
@@ -628,6 +669,14 @@ def run_imfunc(infile, outfile, func):
 
     square - Square the image.
     '''
+    # There's a really shitty IRAF "feature" where if imfunc acts on a file
+    # which already exists, it will simply add on another layer, which
+    # confuses the hell out of ellipse. So if a previous file exists, I'll
+    # delete it manually.
+    if os.path.isfile(varfile):
+        os.remove(varfile)
+    run_imfunc(uncfile, varfile, "square")
+
     iraf.images()
     iraf.imutil()
     iraf.imfunc(infile, outfile, func)
@@ -670,6 +719,8 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         if band in IRBANDS:
             measure_sky_from_annulus(galaxydir, band, coordbase, baseskyfile,
                     ellipsebase, annulus, skyratio, dannulus)
+        elif band in UVBANDS:
+            measure_sky_from_skyfile(galaxyydir, band, baseskyfile, ellipsebase)
 
 def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
         baseskyfile="sky_level", ellipsebase="ellipsepars", annulus=0, 
@@ -1450,6 +1501,20 @@ def elliptical_fit(galaxydir, image, center, ellipticity, position_angle,
 ###############################################################################
 # Miscellaneous Photometry Routines
 ###############################################################################
+
+def Marino_Table_1_to_WISE_table(Marino_Table1):
+    '''Converts Table 1 from Marino et al. into a WISE table.
+
+    The columns will be renamed: the apertures given as nuvrsemi and fuvrsemi
+    will be the re/4 values. Although the D25 values capture the entire galaxy,
+    they're much more difficult to get since they are not in the paper itself,
+    but have to be retrieved from HYPERLEDA. I don't feel like doing that for a
+    test of UV photometry.
+    '''
+    mt1 = Marino_Table1
+    objstr = mt1["Ident."]
+    
+
 def Jarrett_Table_2_to_WISE_table(Jarrett_table2):
     '''Converts Table 2 from Jarrett et al. into a WISE table.
 
