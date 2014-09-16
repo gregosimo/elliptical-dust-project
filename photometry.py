@@ -12,6 +12,7 @@ import numpy as np
 import aplpy
 import matplotlib
 import matplotlib.pyplot as plt
+import scipy.stats.mstats
 
 import queries as query
 import synthetic_photometry as synphot
@@ -940,7 +941,19 @@ def measure_sky_from_skyfile(galaxydir, band, baseskyfile="sky_level",
 
     skylevel = STSDAS_to_Astropy_Table(galaxydir, ellipse_output_path)
     
-    imageval = fits.getData(image_path)
+    imageval = fits.getData(image_path, view=np.ma.MaskedArray)
+    imageval.mask = ~mask_ellipse(imageval, skylevel["X0"], skylevel["Y0"],
+        skylevel["SMA"] * (1 - skylevel["ELLIP"]), skylevel["SMA"])
+
+    skyquants = scipy.stats.mstats.mquantiles(imageval, [0.16, 0.5])
+    skystd = skyquants[1] - skyquants[0]
+    fitskytable = Table([skylevel["X0"], skylevel["Y0"], skylevel["NPIX_E"]],
+            names=('XINIT', 'YINIT', 'NSKY'))
+    fitskytable["STDEV"] = skystd
+    fitskytable["IMAGE"] = os.path.split(image_path)[1]
+    fitskytable["MSKY"] = skylevel["TFLUX_E"] / skylevel["NPIX_E"]
+    fitskytable.write(format_band_dependence(baseskyfile, band, "txt", 
+        galaxydir))
 
 def test_if_in_ellipse(x, y, xcenter, ycenter, a, b, pa):
     '''Tests if the point x,y lies within the described ellipse.
@@ -961,6 +974,9 @@ def mask_ellipse(image, xcenter, ycenter, a, b, pa):
     pixels, not numpy indices. The conversion will take place in this function.
     '''
     image_coords = np.indices(image.shape)
+    mask = test_if_in_ellipse(image_coords[1], image_coords[0], xcenter-1,
+            ycenter-1, a, b, pa)
+    return mask
     
     
 
