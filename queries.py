@@ -8,7 +8,8 @@ import gzip
 
 import requests
 import astropy
-from astropy.table import Table
+from astropy.table import Table, vstack
+from astroquery.ned import Ned
 import numpy as np
 
 import photometry as phot
@@ -186,3 +187,16 @@ def get_url(baseurl, getstring):
     '''
     return "?".join([baseurl, getstring])
 
+def ned_resolve(objects):
+    '''Takes a list of objects and resolves them into RA and Dec.
+
+    The resolution takes place using NED. It will return an astropy table
+    containing the original names of the objects, along with columns for their
+    RAs and Decs.
+    '''
+    resolvedlist = [Ned.query_object(object) for object in objects]
+    resolvedtable = vstack(resolvedlist)
+    relevanttable = Table(resolvedtable[["Object Name", "RA(deg)", "DEC(deg)"]],
+            names=("ID", "RA", "DEC"))
+    relevanttable["ID"] = objects
+    return relevanttable

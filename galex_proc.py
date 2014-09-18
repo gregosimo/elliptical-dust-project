@@ -22,7 +22,7 @@ def create_upload_file(ids, ras, decs, output):
     relevantTable = Table([ids, ras, decs], names=("ID", "RA", "DEC"))
     relevantTable.write(output, format="ascii.csv")
 
-def select_best_surveys(inputfile, output_dir):
+def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv"):
     '''Takes a file from the GALEX catalog and optimizes the exposures to use.
 
     There are numerous surveys which the GALEX mission has collected data from.
@@ -81,10 +81,10 @@ def select_best_surveys(inputfile, output_dir):
 
     sortTable = Table([objectlist, NUVlist, FUVlist], names=("object",
         "NUV_Tile", "FUV_Tile"))
-    sortTable.write(os.path.join(output_dir, "sorttable.csv"), 
-            format="ascii.csv")
+    sortTable.write(os.path.join(output_dir, keytable), format="ascii.csv")
 
-def process_GALEX_tarfile(BASEDIR, workfolder, sortTable, tempfolder="images"):
+def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath, 
+        tempfolder="images"):
     """Processes a tarfile downloaded from GALEX using sortTable."""
     tempfolder = os.path.join(workfolder, tempfolder)
     # We first want to go through all of the tar archives and extract them into
@@ -95,6 +95,9 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTable, tempfolder="images"):
         untar(tarball, tempfolder)
     # Next, go through the images and sort them into the correct directories in
     # BASEDIR.
+    # We can potentially separate the extraction and the sorting into two
+    # different functions. It might actually make more sense.
+    sortTable = Table.read(sortTablepath, format="ascii.csv")
     for entry in sortTable:
         galaxydir = phot.change_to_galaxy_dir(BASEDIR, entry["object"])
         matchstring = os.path.join(tempfolder, "{tile}*",
@@ -104,7 +107,11 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTable, tempfolder="images"):
         galexNUVfiles = glob.glob(matchstring.format(tile=entry["NUV_Tile"],
             band="nd") )
         for imagefile in galexFUVfiles + galexNUVfiles:
-            gunzip(imagefile, galaxydir)
+            try:
+                gunzip(imagefile, galaxydir)
+            except IOError:
+                os.mkdir(galaxydir)
+                gunzip(imagefile, galaxydir)
     
 def untar(inputfile, outputdir):
     '''Extracts a tar file into a directory.'''
