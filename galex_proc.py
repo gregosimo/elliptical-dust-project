@@ -22,6 +22,22 @@ def create_upload_file(ids, ras, decs, output):
     relevantTable = Table([ids, ras, decs], names=("ID", "RA", "DEC"))
     relevantTable.write(output, format="ascii.csv")
 
+def create_HYPERLEDA_upload_file(ids, output):
+    '''Creates a file that can be uploaded to HYPERLEDA.
+
+    The file will only contain object names without any columns in a way that
+    can be immediately parseable by HYPERLEDA.'''
+    # I'm a very naughty boy for doing this.
+    # We don't want a header because that will cause problems with HYPERLEDA.
+    # However, using the ascii.no_header writer will enclose the object names in
+    # quotes, which also causes problems with HYPERLEDA. Therefore, the
+    # workaround I've arrived at is to use a newline as the column name. When
+    # writing the column name, it will instead make it into a blank line, which
+    # is ignored by HYPERLEDA. It would be nice to have it actually be
+    # configurable, though.
+    hypertable = Table([ids], names=("\n",))
+    hypertable.write(output, format="ascii.tab")
+
 def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv"):
     '''Takes a file from the GALEX catalog and optimizes the exposures to use.
 
@@ -70,18 +86,35 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv"):
                     topfuv["tilename"])
             surveytables[topfuv["survey"]].add_row(topfuv)
         objectlist.append(topfuv["uploadID"])
-        NUVlist.append(topnuv["tilename"])
-        FUVlist.append(topfuv["tilename"])
+        NUVlist.append(galex_tilename(topnuv))
+        FUVlist.append(galex_tilename(topfuv))
             
     for survey in surveys: 
         tab = surveytables[survey]
         path = filepaths[survey]
         create_upload_file(tab["uploadID"], tab["uploadRA"], tab["uploadDEC"],
                 path)       
-
+    print NUVlist
+    print FUVlist
     sortTable = Table([objectlist, NUVlist, FUVlist], names=("object",
         "NUV_Tile", "FUV_Tile"))
     sortTable.write(os.path.join(output_dir, keytable), format="ascii.csv")
+
+def galex_tilename(MASTrow):
+    '''Transforms the MAST row into a full tilename.
+
+    Simply using the "tilename" flag ignores the subtiles that are part of AIS
+    images. This function will leave all other tilenames along, but append the
+    subtile number to the tilename to avoid duplicate tiles.
+    '''
+    base_tilename = MASTrow["tilename"]
+    subtile = MASTrow["subvis"]
+    # Only AIS tiles appear to have non-negative subtile numbers.
+    if subtile == -999:
+        tilename = base_tilename
+    else:
+        tilename = "{0}_sg{1:02g}".format(base_tilename, subtile)
+    return tilename
 
 def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath, 
         tempfolder="images"):

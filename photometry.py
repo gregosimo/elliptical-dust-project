@@ -1160,7 +1160,7 @@ def extractEllipseParamsfromWISE(BASEDIR, WISErow, band):
     # We first want the ellipticity:
     # There's a minimum value to the ellipticity, so we can't have it be less
     # than 0.05.
-    ellipticity = max(0.05, 1 - WISErow["{0}ba".format("w1")])
+    ellipticity = max(0.05, 1 - WISErow["{0}ba".format(band.lower())])
     # Now for the semimajor axis
     sma = WISErow["{0}rsemi".format(band.lower())] / pixelscale
     # Now the position angle
@@ -1714,7 +1714,7 @@ def elliptical_fit(galaxydir, image, center, ellipticity, position_angle,
 # Miscellaneous Photometry Routines
 ###############################################################################
 
-def Marino_Table_1_to_WISE_table(Marino_Table1):
+def Marino_Table_1_to_WISE_table(Marino_Table1, hyperledatable):
     '''Converts Table 1 from Marino et al. into a WISE table.
 
     The columns will be renamed: the apertures given as nuvrsemi and fuvrsemi
@@ -1725,7 +1725,26 @@ def Marino_Table_1_to_WISE_table(Marino_Table1):
     '''
     mt1 = Marino_Table1
     objstr = mt1["Ident."]
-    
+
+def Hyperleda_Table_to_WISE_Table(hyperledatable):
+    '''Converts the output of HYPERLEDA to a WISE table.
+
+    This table uses the D25 aperture as the aperture size. For other aperture
+    sizes, make a different function that uses both the table from HYPERLEDA as
+    well as Table 1.
+    '''
+    hlt = hyperledatable
+    objstr = hlt["name"]
+    ra, dec = hlt["al2000"]/24*360, hlt["de2000"]/24*360
+    nuvrsemi = fuvrsemi = 0.1 * 60 * 10**hlt["logd25"]
+    # For objects which are nearly circular, it appears that the pa column is
+    # left out. As a result, we should be able to fill it with whatever value we
+    # want.
+    nuvpa = fuvpa = hlt["pa"].filled(0.05)
+    nuvba = fuvba = 10**(-hlt["logr25"])
+    converted_table = Convert_to_UV_Table(objstr, ra, dec, nuvrsemi, fuvrsemi,
+            nuvpa, fuvpa, nuvba, fuvba)
+    return converted_table
 
 def Jarrett_Table_2_to_WISE_table(Jarrett_table2):
     '''Converts Table 2 from Jarrett et al. into a WISE table.
@@ -1763,6 +1782,15 @@ def Jarrett_Table_2_to_WISE_table(Jarrett_table2):
     converted_table["w3rsemi"][astropy_table_index(converted_table, "objstr_01", 
             "NGC 4486")[0][0]] = 154.7
     return converted_table
+
+def Convert_to_UV_Table(objstr, ra, dec, nuvrsemi, fuvrsemi, nuvpa, fuvpa,
+        nuvba, fuvba):
+    '''Creates a WISE Table of UV parameters from given arrays of objects.'''
+    fulltable = [objstr, ra, dec, nuvrsemi, fuvrsemi, nuvpa, fuvpa, nuvba,
+            fuvba]
+    names = ("objstr_01", "ra", "dec", "nuvrsemi", "fuvrsemi", "nuvpa", "fuvpa",
+            "nuvba", "fuvba")
+    return Table(fulltable, names=names)
 
 def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi, 
         w1pa, w2pa, w3pa, w4pa, w1ba, w2ba, w3ba, w4ba):
