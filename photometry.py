@@ -532,7 +532,7 @@ def match_filter(directory, filter, fullpath=True, uncertainty=False,
     if uncertainty:
         filterstring = filterstring.replace("int", "unc")
     elif sky:
-        filerstring = filterstring.replace("int", "skybg")
+        filterstring = filterstring.replace("int", "skybg")
     filelist = glob.glob(os.path.join(directory, 
             "*{0}*.fits".format(filterstring)))
     if len(filelist) > 1:

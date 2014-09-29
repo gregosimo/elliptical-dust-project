@@ -48,7 +48,11 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv"):
     areas. This function maximizes the exposure time for the images that will be
     downloaded.
     '''
-    inputinfo = Table.read(inputfile, format="ascii.csv")
+    inputinfo = Table.read(inputfile, format="ascii.csv", fill_values=[("---",
+        "0"), ("", "0")])
+    inputinfo["fuv_exptime"].fill_value = 0.0
+    inputinfo["nuv_exptime"].fill_value = 0.0
+    inputinfo_filled = inputinfo.filled()
 
     surveys = ["AIS", "DIS", "GII", "GIS", "MIS", "NGS"]
     # Make a dictionary associated with each filename.
@@ -72,30 +76,31 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv"):
     NUVlist = []
     FUVlist = []
     sortdict = defaultdict(list)
-    inputgroup = inputinfo.group_by("uploadID")
+    inputgroup = inputinfo_filled.group_by("uploadID")
     for objectinfo in inputgroup.groups:
+        # Weird bug where the -1 index cannot be given as an argument to rows.
+        infolen = len(objectinfo)
+        # We need to make copies because assignment only points to the position
+        # in the table, not the row itself.
         objectinfo.sort('nuv_exptime')
-        topnuv = objectinfo[-1]
+        topnuv = Table(rows=objectinfo[infolen-1])[0]
         objectinfo.sort('fuv_exptime')
-        topfuv = objectinfo[-1]
+        topfuv = Table(rows=objectinfo[infolen-1])[0]
         # If one frame has both the highest NUV and FUV exposure, then only
         # download it once. If not, then put it on both lists.
         surveytables[topnuv["survey"]].add_row(topnuv)
         if topnuv["photoextractid"] != topfuv["photoextractid"]:
-            print "Split survey between {0} and {1}!".format(topnuv["tilename"],
-                    topfuv["tilename"])
             surveytables[topfuv["survey"]].add_row(topfuv)
         objectlist.append(topfuv["uploadID"])
         NUVlist.append(galex_tilename(topnuv))
         FUVlist.append(galex_tilename(topfuv))
+        print "{0}: {1}, {2}".format(objectlist[-1], NUVlist[-1], FUVlist[-1])
             
     for survey in surveys: 
         tab = surveytables[survey]
         path = filepaths[survey]
         create_upload_file(tab["uploadID"], tab["uploadRA"], tab["uploadDEC"],
                 path)       
-    print NUVlist
-    print FUVlist
     sortTable = Table([objectlist, NUVlist, FUVlist], names=("object",
         "NUV_Tile", "FUV_Tile"))
     sortTable.write(os.path.join(output_dir, keytable), format="ascii.csv")
@@ -133,18 +138,42 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
     sortTable = Table.read(sortTablepath, format="ascii.csv")
     for entry in sortTable:
         galaxydir = phot.change_to_galaxy_dir(BASEDIR, entry["object"])
-        matchstring = os.path.join(tempfolder, "{tile}*",
-        "{tile}*-{band}-*.fits.gz")
-        galexFUVfiles = glob.glob(matchstring.format(tile=entry["FUV_Tile"],
-            band="fd")) 
-        galexNUVfiles = glob.glob(matchstring.format(tile=entry["NUV_Tile"],
-            band="nd") )
+        FUVstring = os.path.join(tempfolder, 
+                folder_matchstring(entry["FUV_Tile"]), 
+                "{tile}*-fd-*.fits.gz".format(tile=entry["FUV_Tile"]))
+        NUVstring = os.path.join(tempfolder, 
+                folder_matchstring(entry["NUV_Tile"]), 
+                "{tile}*-nd-*.fits.gz".format(tile=entry["NUV_Tile"]))
+        galexFUVfiles = glob.glob(FUVstring) 
+        galexNUVfiles = glob.glob(NUVstring)
+        if not galexFUVfiles:
+            print "Could not match {0}.".format(entry["FUV_Tile"])
         for imagefile in galexFUVfiles + galexNUVfiles:
             try:
                 gunzip(imagefile, galaxydir)
             except IOError:
                 os.mkdir(galaxydir)
                 gunzip(imagefile, galaxydir)
+
+def folder_matchstring(filetile):
+    '''Creates an approprite matchstring for a folder from a file tile.
+
+    The AIS tiles are named hierarchically as:
+    AIS_{tile}_*_sv{subtile}/AIS_{tile}_sg{subtile}*
+
+    This function will take an AIS_{tile}_sg{subtile} string and transform it 
+    so that it works for the folder tile. This involves breaking off the subtile
+    to the right edge.
+
+    For all other suveys, it will simply return the same thing except with an
+    asterisk. e.g. GISAWEAJWA21q2*'''
+    if filetile.startswith("AIS"):
+        subtile = filetile[10:12]
+        tilename = filetile[0:7]
+        folderstring = "{0}_*_sv{1}".format(tilename, subtile)
+    else:
+        folderstring = "{0}*".format(filetile)
+    return folderstring
     
 def untar(inputfile, outputdir):
     '''Extracts a tar file into a directory.'''
