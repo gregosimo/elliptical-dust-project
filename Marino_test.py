@@ -77,3 +77,9 @@ def build_GALEX_atlas(BASEDIR):
     print "Finished Processing!"
 
 
+if __name__ == "__main__":
+    MARINO_DIR = "/home/regulus/simonian/year1/wise/Marino_DB"
+
+    build_galaxy_atlas(MARINO_DIR)
+    phot.build_pipeline(MARINO_DIR)
+
