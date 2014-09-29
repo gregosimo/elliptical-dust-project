@@ -62,17 +62,9 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
             format_band_dependence(baseobjectfile, band, "tab"))
     DNflux = ellipsetable[0]["TFLUX_E"]
     aperture_area = ellipsetable[0]["NPIX_E"]
-    # Right now we will only support sky backgrounds done through the pipeline.
-    # No support for on-the-fly calculations unless there is a use case for
-    # them.
-    # TODO: Make sure UV sky background hasn't been broken.
-    if band in IRBANDS:
-        background = estimate_WISE_background(galaxydir, band,
-                baseskyfile=useskybase)
-    else:
-        background = estimate_UV_background(galaxydir, band,
-                baseellipsefile=baseobjectfile)
-
+    # Right now we will only support sky backgrounds done through the 
+    # pipeline.
+    background = estimate_background(galaxydir, band)
     if apertureCorrection:
         fapcor = aperture_correction_factor(band)
     else:
@@ -130,6 +122,31 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
             photvalue = conv.DNflux2WISEmag(band, DNflux)
         return flux
 
+def estimate_background(galaxydir, band, customskybase=""):
+    '''Background estimator for all bands.
+
+    There are many diferent ways of estimating backgrounds based on different
+    surveys. This function will sort through all the different ways and
+    transparently return the corresponding background value without the user
+    having to iterate through all of the cases.
+
+    The sky base is assumed to be "sky_level" for infrared bands. And
+    "sky_ellipse" for UV bands. If a different sky base is to be used, the
+    customskybase keyword should be specified.
+    '''
+    if not customskybase:
+        skylevel = "sky_level"
+        skyaperture = "sky_ellipse"
+    else:
+        skylevel = skyaperture = customskybase
+    if band in IRBANDS:
+        background = estimate_WISE_background(galaxydir, band,
+                baseskyfile=skylevel)
+    else:
+        background = estimate_UV_background(galaxydir, band,
+                baseellipsefile=skyaperture)
+
+    return background
 
 
 def calculate_correlated_pixel_noise(band):
@@ -160,20 +177,25 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     '''
     ellipseParams = STSDAS_to_Astropy_Table(galaxydir, 
             format_band_dependence(ellipsebase, band, "tab"))[0]
-    skyParams = Table.read(os.path.join(galaxydir,
-        format_band_dependence(skybase, band, "txt")), format="ascii.daophot")
     imageUncertainty = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(uncertainty_base, band, "tab"))[0]
 
     fapcor = aperture_correction_factor(band)
     NA = ellipseParams["NPIX_E"]
-    NB = skyParams["NSKY"][0]
+    if band in UVBANDS:
+        NB = NA
+        sig_B = sky_file_background(galaxydir, band, skybase)
+    else:
+        skyParams = Table.read(os.path.join(galaxydir,
+            format_band_dependence(skybase, band, "txt")), 
+            format="ascii.daophot")
+        NB = skyParams["NSKY"][0]
+        sig_B = skyParams["STDEV"][0]
     total_sigi = imageUncertainty["TFLUX_E"]
     Fcorr = calculate_correlated_pixel_noise(band)
     # We get the background level from centroiding, which seems like a
     # mean-related measure.
     k = 1   
-    sig_B = skyParams["STDEV"][0]
     # We can try to measure this and compare it to other errors later, but right
     # now this is not easily measurable in an automated way. I believe that this
     # should be minimal because of the large size of the aperture.
@@ -182,9 +204,6 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     sourceerr = np.sqrt(fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * 
         sig_B**2) + sig_conf**2)
     return sourceerr
-
-
-
 
 def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
@@ -240,10 +259,19 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, runbands=bands):
     If you want a table of photometry, you'll have to run
     aperturePhotometryTable yourself.
     ''' 
+    maskfile = ""
+    print "Making Aperture Tables..."
     allApertureTables(BASEDIR, WISETable, runbands=runbands)
-    allMasks(BASEDIR, WISETable, threshold=maskthresh)
-    allEllipseTables(BASEDIR, WISETable, runbands=runbands)
+    # Making masking choices.
+    if maskthresh != 0:
+        print "Making Masks..."
+        allMasks(BASEDIR, WISETable, threshold=maskthresh)
+        maskfile = "foreground.fits"
+    print "Making Ellipse Tables..."
+    allEllipseTables(BASEDIR, WISETable, runbands=runbands, mask=maskfile)
+    print "Making Sky Tables..."
     allSkyValues(BASEDIR, WISETable, runbands=runbands)
+    print "Making Uncertainty Tables..."
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands)
 
 def astropy_table_row(table, column, value):
@@ -311,7 +339,8 @@ def match_filter(directory, filter, fullpath=True, uncertainty=False,
     if len(filelist) > 1:
         raise RuntimeError("Image conflict for {0}.".format(directory))
     elif len(filelist) == 0:
-        raise RuntimeError("Could not find file in {0}.".format(directory))
+        raise RuntimeError("Could not find {1} file in {0}.".format(directory,
+            filterstring))
     else:
         imagefile = filelist[0]
         if not fullpath:
@@ -469,13 +498,13 @@ def estimate_WISE_background(galaxydir, band, baseskyfile="sky_level"):
     skylevel = skydata["MSKY"][0]
     return skylevel
 
-def estimate_UV_background(galaxydir, band, baseellipsefile="sky_aperture"):
+def estimate_UV_background(galaxydir, band, baseellipsefile="sky_ellipse"):
     '''Returns the estimated background for a galax in GALEX bands.
 
     The background for UV bands is estimated by looking for files whose
     names contain the string given in skymarker.'''
     ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(baseobjectfile, band, "tab"))
+            format_band_dependence(baseellipsefile, band, "tab"))
     return ellipsetable[0]["TFLUX_E"] / ellipsetable[0]["NPIX_E"]
 
 
@@ -605,7 +634,8 @@ def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
                     rreplace(match_filter(galaxydir, band), "int", "unc", 1),
                     ellipsebase, baseuncertainty)
         elif band in UVBANDS:
-            source_uncertainty_from_image(galaxydir, band, ellipsebase,
+            image = match_filter(galaxydir, band)
+            source_uncertainty_from_image(galaxydir, band, image, ellipsebase,
                     baseuncertainty, skybase)
 
 def source_uncertainty_from_image(galaxydir, band, image, 
@@ -629,9 +659,7 @@ def source_uncertainty_from_image(galaxydir, band, image,
     ellipsepars = format_band_dependence(ellipsebase, band, "tab", galaxydir)
     output = format_band_dependence(outputbase, band, "tab", galaxydir)
 
-    skyvalues = Table.read(format_band_dependence(skybase, band, "txt"),
-            format="ascii.daophot")
-    skybackground = skyvalues["MSKY"][0]
+    skybackground = estimate_background(galaxydir, band)
 
     header = fits.getheader(image)
     exposuretime = header["EXPTIME"]
@@ -720,7 +748,7 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
             measure_sky_from_annulus(galaxydir, band, coordbase, baseskyfile,
                     ellipsebase, annulus, skyratio, dannulus)
         elif band in UVBANDS:
-            measure_sky_from_skyfile(galaxyydir, band, baseskyfile, ellipsebase)
+            measure_sky_from_skyfile(galaxydir, band, baseskyfile, ellipsebase)
 
 def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
         baseskyfile="sky_level", ellipsebase="ellipsepars", annulus=0, 
@@ -759,26 +787,31 @@ def measure_sky_from_skyfile(galaxydir, band, baseskyfile="sky_level",
     image_path = match_filter(galaxydir, band, sky=True)
     ellipse_param_path = format_band_dependence(ellipsebase, band, "tab",
             galaxydir)
-    ellipse_output_path = format_band_dependence(ellipseoutput, band, "tab")
+    ellipse_output_path = format_band_dependence(ellipseoutput, band, "tab",
+            galaxydir)
 
-    run_ellipse(image_path, ellipse_param_path, os.path.join(galaxydir, 
-        ellipse_output_path))
-
-    skylevel = STSDAS_to_Astropy_Table(galaxydir, ellipse_output_path)
+    run_ellipse(image_path, ellipse_param_path, ellipse_output_path)
     
-    imageval = fits.getData(image_path, view=np.ma.MaskedArray)
+
+def sky_file_background(galaxydir, band, ellipse_output_base="sky_ellipse"):
+    '''Returns sky uncertainty from sky file.
+
+    This function calculates the variance of the sky by using quantiles. It is
+    robust against outliers as well as local to the object. The output base
+    should be the output of the ellipse routine to determine the sky level.
+    '''
+    ellipse_output = format_band_depencdence(ellipse_output_base, band, "tab")
+    skylevel = STSDAS_to_Astropy_Table(galaxydir, ellipse_output)
+        
+    image = match_filter(galaxydir, band, sky=True)
+    imageval = fits.getdata(image_path, view=np.ma.MaskedArray)
     imageval.mask = ~mask_ellipse(imageval, skylevel["X0"], skylevel["Y0"],
-        skylevel["SMA"] * (1 - skylevel["ELLIP"]), skylevel["SMA"])
+        skylevel["SMA"] * (1 - skylevel["ELLIP"]), skylevel["SMA"],
+        skylevel["PA"])
 
     skyquants = scipy.stats.mstats.mquantiles(imageval, [0.16, 0.5])
     skystd = skyquants[1] - skyquants[0]
-    fitskytable = Table([skylevel["X0"], skylevel["Y0"], skylevel["NPIX_E"]],
-            names=('XINIT', 'YINIT', 'NSKY'))
-    fitskytable["STDEV"] = skystd
-    fitskytable["IMAGE"] = os.path.split(image_path)[1]
-    fitskytable["MSKY"] = skylevel["TFLUX_E"] / skylevel["NPIX_E"]
-    fitskytable.write(format_band_dependence(baseskyfile, band, "txt", 
-        galaxydir))
+    return skystd
 
 def test_if_in_ellipse(x, y, xcenter, ycenter, a, b, pa):
     '''Tests if the point x,y lies within the described ellipse.
@@ -1034,7 +1067,7 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     return fulltable
 
 def photometryOnBand(BASEDIR, objectnames, band,
-        baseobjectfile="ellipse_aperture", skybase="sky_aperture", 
+        baseobjectfile="ellipse_aperture", skybase="sky_level", 
         uncertaintybase="uncertainty", flux=False, errors=False, 
         apertureCorrection=True, colorIndices=None):
     '''Performs photometry on an array of objects in a given band.
@@ -1523,7 +1556,7 @@ def Hyperleda_Table_to_WISE_Table(hyperledatable):
     '''
     hlt = hyperledatable
     objstr = hlt["name"]
-    ra, dec = hlt["al2000"]/24*360, hlt["de2000"]/24*360
+    ra, dec = hlt["al2000"]/24*360, hlt["de2000"]
     nuvrsemi = fuvrsemi = 0.1 * 60 * 10**hlt["logd25"]
     # For objects which are nearly circular, it appears that the pa column is
     # left out. As a result, we should be able to fill it with whatever value we
