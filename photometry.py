@@ -162,8 +162,9 @@ def calculate_correlated_pixel_noise(band):
     for N_p
     '''
     EFFECTIVE_NOISE_PIXELS = {"W1": 13.772, "W2": 17.636, "W3": 35.476, "W4":
-        24.462}
-    INPUT_TO_OUTPUT_PIXEL_RATIO = {"W1": 2, "W2": 2, "W3": 2, "W4": 4}
+            24.462, "NUV": 1.0, "FUV": 1.0}
+    INPUT_TO_OUTPUT_PIXEL_RATIO = {"W1": 2, "W2": 2, "W3": 2, "W4": 4, "NUV":
+            1.0, "FUV": 1.0}
     return  (EFFECTIVE_NOISE_PIXELS[band] * 
             (INPUT_TO_OUTPUT_PIXEL_RATIO[band])**2)
 
@@ -484,7 +485,11 @@ def astropy_table_index(table, column, value):
     list of row indices that match the value in the column.'''
     return np.where(table[column] == value)
 
-def build_pipeline(BASEDIR, WISETable, maskthresh=150, runbands=bands):
+def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
+        maskoutput="foreground.fits", ellipsepars="ellipsepars",
+        maskconfigbase="default", ellipseoutput="ellipse_aperture",
+        skycoord="fitsky", skybase="sky_level", uncertaintybase="uncertainty", 
+        runbands=bands):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -493,21 +498,32 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, runbands=bands):
 
     If you want a table of photometry, you'll have to run
     aperturePhotometryTable yourself.
+
+    Masking is not trivial. To completely disable masking, set maskthresh to 0.
+    The masking pipeline will be completely bypassed. If you want to use
+    masking, you need to set the mask threshold, as well as the input image to
+    generate the mask and the output filename of mask.
     ''' 
-    maskfile = ""
     print "Making Aperture Tables..."
-    allApertureTables(BASEDIR, WISETable, runbands=runbands)
-    # Making masking choices.
+    allApertureTables(BASEDIR, WISETable, runbands=runbands,
+            outputbase=ellipsepars)
     if maskthresh != 0:
         print "Making Masks..."
-        allMasks(BASEDIR, WISETable, threshold=maskthresh)
-        maskfile = "foreground.fits"
+        allMasks(BASEDIR, WISETable, threshold=maskthresh, maskband=inputband,
+                output=maskoutput, ellipsebase=ellipsepars,
+                maskconfigbase="default")
+    else:
+        maskoutput=""
     print "Making Ellipse Tables..."
-    allEllipseTables(BASEDIR, WISETable, runbands=runbands, mask=maskfile)
+    allEllipseTables(BASEDIR, WISETable, runbands=runbands, mask=maskoutput,
+            baseoutput=ellipseoutput, baseparamname=ellipsepars)
     print "Making Sky Tables..."
-    allSkyValues(BASEDIR, WISETable, runbands=runbands)
+    allSkyValues(BASEDIR, WISETable, runbands=runbands, coordbase=skycoord, 
+            baseskyfile=skybase, ellipsebase=ellipsepars)
     print "Making Uncertainty Tables..."
-    allUncertaintyTables(BASEDIR, WISETable, runbands=runbands)
+    allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
+            ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
+            skybase=skybase)
 
 def astropy_table_row(table, column, value):
     '''Returns the row of the table which has the value in column.
@@ -784,16 +800,22 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
         except RuntimeError, e:
             print e
 
-def allMasks(BASEDIR, fulltable, threshold=100):
+def allMasks(BASEDIR, fulltable, threshold=100, maskband="W1",
+        output="foreground.fits", ellipsebase="ellipsepars", 
+        maskconfigbase="default"):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
-    runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold)
+    runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
+            maskband=maskband, output=output, ellipsebase=ellipsebase,
+            maskconfigbase=maskconfigbase)
 
-def allApertureTables(BASEDIR, fulltable, runbands=bands):
+def allApertureTables(BASEDIR, fulltable, runbands=bands,
+        outputbase="ellipsepars"):
     '''Goes through BASEDIR and generates all the aperture tables.
 
     The full WISE table will be necessary.'''
-    runOnImages(BASEDIR, fulltable, genApertureTable, runbands=runbands)
+    runOnImages(BASEDIR, fulltable, genApertureTable, runbands=runbands,
+            outputbase=outputbase)
 
 def allSkyTables(BASEDIR, fulltable, runbands=bands):
     '''Goes through BASEDIR and generates all sky tables.
@@ -802,25 +824,33 @@ def allSkyTables(BASEDIR, fulltable, runbands=bands):
     '''
     runOnImages(BASEDIR, fulltable, genSkytables, runbands=runbands)
 
-def allUncertaintyTables(BASEDIR, fulltable, runbands=bands):
+def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty", 
+        ellipsebase="ellipsepars", skybase="sky_level", runbands=bands):
     '''Goes through BASEDIR and generates all uncertainty tables.'''
-    runOnImages(BASEDIR, fulltable, genImageUncertainty, runbands=runbands)
+    runOnImages(BASEDIR, fulltable, genImageUncertainty,
+            baseuncertainty=baseuncertainty, ellipsebase=ellipsebase,
+            skybase=skybase, runbands=runbands)
 
-def allSkyValues(BASEDIR, fulltable, runbands=bands):
+def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky", 
+        baseskyfile="sky_level", ellipsebase="ellipsepars"):
     '''Goes through BASEDIR and generates all sky tables.
 
     This function also allows for single-object corrections to be made.
     '''
-    runOnImages(BASEDIR, fulltable, genSkyValues, runbands=runbands)
+    runOnImages(BASEDIR, fulltable, genSkyValues, runbands=runbands,
+            coordbase=coordbase, baseskyfile=baseskyfile, 
+            ellipsebase=ellipsebase)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
-        mask="foregroundmask.fits"):
+        mask="foregroundmask.fits", baseoutput="ellipse_aperture",
+        baseparamname="ellipsepars"):
     '''Goes through BASEDIR and generates all object tables.
 
     This function also allows for single-object corrections to be made.
     '''
-    runOnImages(BASEDIR, fulltable, genEllipsetables, runbands=runbands,
-            mask=mask)
+    runOnImages(BASEDIR, fulltable, genEllipsetables,
+            baseparamname=baseparamname, runbands=runbands,
+            mask=mask, baseoutput=baseoutput)
 
 def allSkyParams(BASEDIR, fulltable, runbands=bands):
     '''Goes through BASEDIR and generates all sky parameter files.'''
@@ -951,7 +981,7 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
             galaxydir), mask=os.path.join(galaxydir, mask))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
-        ellipsebase="ellipse_aperture", baseskyfile="sky_level", skyratio=2.5,
+        ellipsebase="ellipsepars", baseskyfile="sky_level", skyratio=2.5,
         annulus=0, dannulus=30, runbands=bands):
     '''Generates sky values for each galaxy.
     
@@ -1005,7 +1035,7 @@ def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
     run_fitsky(image, annulus, coordpath, skypath, dannulus=dannulus)
 
 def measure_sky_from_skyfile(galaxydir, band, baseskyfile="sky_level",
-        ellipsebase="ellipsepars", ellipseoutput="sky_ellipse"):
+        ellipsebase="ellipsepars"):
     '''Measures the sky level from a separate sky file.
 
     The sky level will be calculated from a separate file with only background
@@ -1013,7 +1043,7 @@ def measure_sky_from_skyfile(galaxydir, band, baseskyfile="sky_level",
     image_path = match_filter(galaxydir, band, sky=True)
     ellipse_param_path = format_band_dependence(ellipsebase, band, "tab",
             galaxydir)
-    ellipse_output_path = format_band_dependence(ellipseoutput, band, "tab",
+    ellipse_output_path = format_band_dependence(baseskyfile, band, "tab",
             galaxydir)
 
     run_ellipse(image_path, ellipse_param_path, ellipse_output_path)
@@ -1026,11 +1056,11 @@ def sky_file_background(galaxydir, band, ellipse_output_base="sky_ellipse"):
     robust against outliers as well as local to the object. The output base
     should be the output of the ellipse routine to determine the sky level.
     '''
-    ellipse_output = format_band_depencdence(ellipse_output_base, band, "tab")
+    ellipse_output = format_band_dependence(ellipse_output_base, band, "tab")
     skylevel = STSDAS_to_Astropy_Table(galaxydir, ellipse_output)
         
     image = match_filter(galaxydir, band, sky=True)
-    imageval = fits.getdata(image_path, view=np.ma.MaskedArray)
+    imageval = fits.getdata(image, view=np.ma.MaskedArray)
     imageval.mask = ~mask_ellipse(imageval, skylevel["X0"], skylevel["Y0"],
         skylevel["SMA"] * (1 - skylevel["ELLIP"]), skylevel["SMA"],
         skylevel["PA"])
@@ -1244,9 +1274,9 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
 # then constructing Columns while iterating. I'm pretty sure those can be added 
 # to a Table more easily than Rows.
 def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
-        baseobjectfile="ellipse_aperture", skybase="sky_level", 
-        uncertaintybase="uncertainty",  ellipsebase="ellipsepars", flux=False, 
-        apertureCorrection=True, colorIndices=None):
+        ellipseoutput="ellipse_aperture", skybase="sky_level", 
+        uncertaintybase="uncertainty", flux=False, apertureCorrection=True, 
+        colorIndices=None):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
@@ -1255,7 +1285,7 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     fulltable = Table([objectnames], names=["objstr_01"])
     for band in runbands:
         bandmags, magerrs = photometryOnBand(BASEDIR, objectnames, band, 
-                baseobjectfile, skybase, uncertaintybase, flux=flux, 
+                ellipseoutput, skybase, uncertaintybase, flux=flux, 
                 errors=True, apertureCorrection=apertureCorrection,
                 colorIndices=colorIndices)
 
@@ -1747,7 +1777,7 @@ def elliptical_fit(galaxydir, image, center, ellipticity, position_angle,
 # Miscellaneous Photometry Routines
 ###############################################################################
 
-def Marino_Table_1_to_WISE_table(Marino_Table1, hyperledatable):
+def Marino_Table_1_to_WISE_table(Marino_Table1, hyperledatable, refrac=8):
     '''Converts Table 1 from Marino et al. into a WISE table.
 
     The columns will be renamed: the apertures given as nuvrsemi and fuvrsemi
@@ -1757,7 +1787,16 @@ def Marino_Table_1_to_WISE_table(Marino_Table1, hyperledatable):
     test of UV photometry.
     '''
     mt1 = Marino_Table1
+    hlt = hyperledatable
     objstr = mt1["Ident."]
+    ra, dec = hlt["al2000"]/24*360, hlt["de2000"]
+    nuvrsemi = fuvrsemi = mt1["re"] / refrac
+
+    nuvpa = fuvpa = hlt["pa"].filled(0.05)
+    nuvba = fuvba = 10**(-hlt["logr25"])
+    converted_table = Convert_to_UV_Table(objstr, ra, dec, nuvrsemi, fuvrsemi,
+            nuvpa, fuvpa, nuvba, fuvba)
+    return converted_table
 
 def Hyperleda_Table_to_WISE_Table(hyperledatable):
     '''Converts the output of HYPERLEDA to a WISE table.

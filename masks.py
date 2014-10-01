@@ -74,29 +74,34 @@ def sextractor_mask(image, threshold, config, **sexargs):
     sexargs["DETECT_THRESH"] = threshold
     run_sextractor(image, config, **sexargs)
 
-def mask_algorithm(BASEDIR, WISErow, image="", threshold=50, 
-        output="foregroundmask.fits"):
+def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50, 
+        output="foregroundmask.fits", ellipsebase="ellipsepars",
+        maskconfigbase="default"):
     '''Creates a mask file for the object in WISErow.
 
     The general algorithm for the mask creation algorithm is to find bright
     stars outside of a radius given by r_high. It then finds stars outside of a
     radius given by the isophotal aperture times lowfrac.
     '''
-    # This will be implemented once we decide which algorithm to use.
     galaxydir = phot.change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    mask_elliptical(galaxydir, threshold, image, maskfile=output)
+    mask_elliptical(galaxydir, threshold, maskband, maskfile=output,
+            ellipsebase=ellipsebase, configbase=maskconfigbase)
 
-def mask_elliptical(galaxydir, threshold, image, maskfile="foregroundmask.fits",
-        ellipsefile="ellipsepars.W1.tab", configfile="../default.W1.sex", 
-        segment="segment.fits", procsegment="foreground_unnormalized.fits"):
+def mask_elliptical(galaxydir, threshold, maskband, 
+        maskfile="foregroundmask.fits", ellipsebase="ellipsepars", 
+        configbase="default", segment="segment.fits", 
+        procsegment="foreground_unnormalized.fits"):
     '''Creates a foreground mask for an elliptical galaxy.
 
     This function uses the ellipse output to find the location of the ellipse
     and then remove it from the segmentation map, leaving us with a segmentation
    map of just the foreground objects.
    '''
-    if not image:
-        image = phot.match_filter(galaxydir, "W1")
+    image = phot.match_filter(galaxydir, maskband)
+    ellipsefile = phot.format_band_dependence(ellipsebase, maskband, "tab",
+            galaxydir)
+    configfile = os.path.join(os.path.split(galaxydir)[0],
+            phot.format_band_dependence(configbase, maskband, "sex"))
     masked_image = os.path.join(galaxydir, segment)
     fullmask = os.path.join(galaxydir, maskfile)
     config = os.path.join(galaxydir, configfile)
