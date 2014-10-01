@@ -80,6 +80,23 @@ def build_GALEX_atlas(BASEDIR):
 if __name__ == "__main__":
     MARINO_DIR = "/home/regulus/simonian/year1/wise/Marino_DB"
 
+    # Set up the database from scratch
     build_galaxy_atlas(MARINO_DIR)
-    phot.build_pipeline(MARINO_DIR)
 
+    hyperleda = Table.read("../wise/Marino_DB/hyperleda_output.txt",
+        format="ascii.basic", delimiter="|", comment="!")
+    marpar = phot.Hyperleda_Table_to_WISE_Table(hyperleda)
+    phot.build_pipeline(MARINO_DIR, marpar, runbands=phot.UVBANDS)
+
+    # Now generate the photometric magnitudes for the objects.
+    marinoapmags = phot.aperturePhotometryTable(MARINO_DIR, marpar["objstr_01"],
+            runbands=phot.UVBANDS)
+
+    marinomags = Table.read(os.path.join(MARINO_DIR, "Marino_Table3.csv"),
+            format="ascii.csv")
+
+    plt.figure()
+    phot.createDifferencePlot(marinomags["NUV D25"], marinoapmags["NUVapmag"],
+            marinomags["NUV D25 err"], marinoapmags["NUVaperr"], "Marino Mag",
+            "Aperture Mag - Marino Mag", 
+            "GALEX Photometry Magnitude Difference")

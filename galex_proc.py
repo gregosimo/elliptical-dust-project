@@ -38,7 +38,8 @@ def create_HYPERLEDA_upload_file(ids, output):
     hypertable = Table([ids], names=("\n",))
     hypertable.write(output, format="ascii.tab")
 
-def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv"):
+def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
+        blocklist="bad_images.csv"):
     '''Takes a file from the GALEX catalog and optimizes the exposures to use.
 
     There are numerous surveys which the GALEX mission has collected data from.

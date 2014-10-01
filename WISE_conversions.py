@@ -4,6 +4,7 @@ from astropy.table import Table
 import photometry as phot
 
 WISE_bands = ["W1", "W2", "W3", "W4"]
+GALEX_bands = ["NUV", "FUV"]
 
 ###############################################################################
 # Data Number Conversions
@@ -144,6 +145,19 @@ def Vega2ABmag(band, vegamag):
     offsets = {"W1": 2.699, "W2": 3.339, "W3": 5.174, "W4": 6.620}
     return vegamag + offsets[band]
 
+def DNflux2ABmag(band, flux):
+    '''Returns a flux in the AB system.
+
+    This returns a flux that is given in the AB magnitude system. The AB
+    magnitude system returns both WISE and GALEX fluxes. This differs from the
+    Vega system, where UV fluxes cannot be converted.'''
+    rawmag = DNflux2WISEmag(band, flux)
+    # WISE mags need to be corrected in order to be in the AB magnitude system.
+    if band in WISE_bands:
+        rawmag = Vega2ABmag(band, rawmag)
+    return rawmag
+
+
 ###############################################################################
 # Zero-point Utilities
 ###############################################################################
@@ -184,7 +198,8 @@ def get_zero_point_magnitude_uncertainty(band):
     The uncertainties in the zero-point magnitudes are taken from:
     http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
     '''
-    MAGZPUNC = {"W1": 0.006, "W2": 0.007, "W3": 0.015, "W4": 0.012}
+    MAGZPUNC = {"W1": 0.006, "W2": 0.007, "W3": 0.015, "W4": 0.012, "FUV": 0.05,
+            "NUV": 0.03}
     return MAGZPUNC[band]
 
 def color_correction(band, index):
@@ -196,6 +211,8 @@ def color_correction(band, index):
 
     Note that now index can be a numpy array!
     '''
+    if band in GALEX_bands:
+        return 1.0
     fluxcorrection = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921, 
         1.0000, 1.0142, 1.0347]),
         "W2": np.array([1.0206, 1.0066, 0.9976, 0.9935, 0.9943, 1.0000, 1.0107,
