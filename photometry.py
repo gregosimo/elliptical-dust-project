@@ -76,7 +76,7 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
         useskybase="sky_level", uncertaintybase="uncertainty", flux=False, 
-        errors=True, apertureCorrection=True, colorIndex=2):
+        errors=True, apertureCorrection=True, colorIndex=-2):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -210,6 +210,16 @@ def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
     return objectname.replace(' ', "")
 
+def fullphotometry(BASEDIR, WISE_Table):
+    '''Performs the pipeline  building and photometry calculation of a table.
+
+    This function is good for when the ultimate goal of an image set is just to
+    get photometry out. The build_pipeline() and aperturePhotometryTable()
+    functions get called as a unit.
+
+    This function can also be used to generate unique prefixes for the objects.
+    '''
+    pass
 
 ###############################################################################
 # Astropy Utilities                                                           #
