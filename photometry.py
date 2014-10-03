@@ -55,8 +55,6 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     background-subtracted flux of the galaxy. The total flux is calculated from
     the ellipse package and is stored in the table named with baseobjectfile.
     The sky values are determined from the file named with useskybase.
-
-    Masking is not implemented yet.
     '''
     ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(baseobjectfile, band, "tab"))
@@ -893,15 +891,16 @@ def getPSFFWHM(band, pixel=False):
         chosenwidth /= getPixelScale(band)
     return chosenwidth
 
-def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS):
+def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, sky=True):
     '''Runs through all objects and creates cutouts in their folder.
     '''
     current_backend = matplotlib.get_backend()
     matplotlib.use("Agg")
-    runOnImages(BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands)
+    runOnImages(BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands,
+            sky=sky)
     matplotlib.use(current_backend)
 
-def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS):
+def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, sky=True):
     '''Creates a set of four cutouts with the aperture and sky ellipses
 
     A cutout for each band will be created that contains the aperture
@@ -915,9 +914,6 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS):
         # and sky.
         aperturepars = STSDAS_to_Astropy_Table(galaxydir, 
                 format_band_dependence("ellipse_aperture", band, "tab"))
-        skypars = Table.read(os.path.join(galaxydir,
-            format_band_dependence("sky_level", band, "txt")),
-            format="ascii.daophot")
         gc = aplpy.FITSFigure(match_filter(galaxydir, band))
         gc.show_grayscale()
 
@@ -930,15 +926,21 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS):
         gc.show_ellipses(Xval, Yval, width, height, angle=angle,
             edgecolor="yellow")
         # Now make the sky annulus:
-        Xval, Yval = gc.pixel2world(skypars["XINIT"][0], skypars["YINIT"][0])
-        radius_in = (float(skypars.meta["keywords"]["ANNULUS"]["value"]) * px /
-            3600.0)
-        radius_out = (radius_in +
-            float(skypars.meta["keywords"]["DANNULUS"]["value"]) * px / 3600.0)
-        gc.show_circles([Xval]*2, [Yval]*2, [radius_in, radius_out],
-                edgecolor="cyan")
+        if sky:
+            skypars = Table.read(os.path.join(galaxydir,
+                format_band_dependence("sky_level", band, "txt")),
+                format="ascii.daophot")
+            Xval, Yval = gc.pixel2world(skypars["XINIT"][0], 
+                    skypars["YINIT"][0])
+            radius_in = (float(skypars.meta["keywords"]["ANNULUS"]["value"]) * 
+                    px / 3600.0)
+            radius_out = (radius_in +
+                float(skypars.meta["keywords"]["DANNULUS"]["value"]) * px / 
+                3600.0)
+            gc.show_circles([Xval]*2, [Yval]*2, [radius_in, radius_out],
+                    edgecolor="cyan")
 
-        gc.save(format_band_dependence(object_name_to_dir(WISErow["objstr_01"]), 
+        gc.save(format_band_dependence(object_name_to_dir(WISErow["objstr_01"]),
             band, "png", galaxydir))
 
 def generatePixelMasks(galaxydir, masterfile="foreground.reg",
