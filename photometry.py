@@ -497,7 +497,7 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
         maskoutput="foreground.fits", ellipsepars="ellipsepars",
         maskconfigbase="default", ellipseoutput="ellipse_aperture",
         skycoord="fitsky", skybase="sky_level", uncertaintybase="uncertainty", 
-        runbands=bands):
+        forceSkyAnnulus=False, runbands=bands):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -527,7 +527,8 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
             baseoutput=ellipseoutput, baseparamname=ellipsepars)
     print "Making Sky Tables..."
     allSkyValues(BASEDIR, WISETable, runbands=runbands, coordbase=skycoord, 
-            baseskyfile=skybase, ellipsebase=ellipsepars)
+            baseskyfile=skybase, ellipsebase=ellipsepars,
+            forceAnnulus=forceSkyAnnulus)
     print "Making Uncertainty Tables..."
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
             ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
@@ -840,14 +841,14 @@ def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty",
             skybase=skybase, runbands=runbands)
 
 def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky", 
-        baseskyfile="sky_level", ellipsebase="ellipsepars"):
+        baseskyfile="sky_level", ellipsebase="ellipsepars", forceAnnulus=False):
     '''Goes through BASEDIR and generates all sky tables.
 
     This function also allows for single-object corrections to be made.
     '''
     runOnImages(BASEDIR, fulltable, genSkyValues, runbands=runbands,
             coordbase=coordbase, baseskyfile=baseskyfile, 
-            ellipsebase=ellipsebase)
+            ellipsebase=ellipsebase, forceAnnulus=forceAnnulus)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
         mask="foregroundmask.fits", baseoutput="ellipse_aperture",
@@ -990,7 +991,7 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         ellipsebase="ellipsepars", baseskyfile="sky_level", skyratio=2.5,
-        annulus=0, dannulus=30, runbands=bands):
+        annulus=0, dannulus=30, runbands=bands, forceAnnulus=False):
     '''Generates sky values for each galaxy.
     
     The sky values are generated via the IRAF fitsky routine. The output of
@@ -1006,14 +1007,15 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
 
     # If annulus is 0, that means we want to scale the annulus off of the
-    # aperture. If we don't make a separate annulus_override variable, setting
-    # annulus for W1 is disable resetting it for W2-4.
+    # aperture. If we don't make a separate annulus_override variable, 
+    # setting annulus for W1 is disable resetting it for W2-4.
     for band in runbands:
-        if band in IRBANDS:
-            measure_sky_from_annulus(galaxydir, band, coordbase, baseskyfile,
-                    ellipsebase, annulus, skyratio, dannulus)
-        elif band in UVBANDS:
-            measure_sky_from_skyfile(galaxydir, band, baseskyfile, ellipsebase)
+        if band in IRBANDS or forceAnnulus:
+            measure_sky_from_annulus(galaxydir, band, coordbase, 
+                    baseskyfile, ellipsebase, annulus, skyratio, dannulus)
+        else:
+            measure_sky_from_skyfile(galaxydir, band, baseskyfile, 
+                    ellipsebase)
 
 def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
         baseskyfile="sky_level", ellipsebase="ellipsepars", annulus=0, 
