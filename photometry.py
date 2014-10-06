@@ -1154,6 +1154,7 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, sky=True):
 
         gc.save(format_band_dependence(object_name_to_dir(WISErow["objstr_01"]),
             band, "png", galaxydir))
+        plt.close("all")
 
 def generatePixelMasks(galaxydir, masterfile="foreground.reg",
         maskbasename="foreground", execbands=bands):
@@ -1358,13 +1359,43 @@ def createDifferencePlot(xval, valtocompare, xerror, valerror, xlabel, ylabel,
 
     This plot is used for illustrating how consistent two datasets are
     from each other.'''
-    difference = valtocompare - xval
-    errors = np.sqrt(xerror**2 + valerror**2)
+    difference, errors = calc_statistical_difference(valtocompare, xval, valerr,
+            xerror)
     plt.errorbar(xval, difference, errors, fmt="o", label=label)
     plt.plot([min(xval)+0.01, max(xval)-0.01], [0, 0], 'k-')
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
+
+def doubleDifferencePlot(xfirst, xsecond, yfirst, ysecond, xfirsterr,
+        xseconderr, yfirsterr, yseconderr, xlabel, ylabel, title, label=""):
+    '''Makes a plot of one difference of quantities vs another difference.
+
+    This plot can be used to add even more information about data consistency
+    than a single difference plot.
+    '''
+    xdiff, xerrs = calc_statistical_difference(xfirst, xsecond, xfirsterr,
+            xseconderr)
+    ydiff, yerrs = calc_statistical_difference(yfirst, ysecond, yfirsterr,
+            yseconderr)
+    maxdiff = max(np.absolute(xdiff).max(), np.absolute(ydiff).max())
+    plt.errorbar(xdiff, ydiff, yerrs, xerrs, fmt=".", label=label)
+    plt.plot([-maxdiff - 0.2, maxdiff + 0.2], [0, 0], 'k-')
+    plt.plot([0, 0], [-maxdiff - 0.2, maxdiff + 0.2], 'k-')
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+
+def calc_statistical_difference(minuend, subtrahend, minuerr, subtraerr):
+    '''Returns statistically subtracted value of two arrays.
+
+    This function takes two arrays involving two measurements with errors. It
+    then returns a 2-tuple. The first is simply the difference of the mean. The
+    second is the errors of the differences.
+    '''
+    means = minuend - subtrahend
+    meanerrs = np.sqrt(minuerr**2 + subtraerr**2)
+    return means, meanerrs
 
 def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror, 
         xlabel, ylabel, title, label=""):
@@ -1820,7 +1851,7 @@ def Hyperleda_Table_to_WISE_Table(hyperledatable):
     hlt = hyperledatable
     objstr = hlt["name"]
     ra, dec = hlt["al2000"]/24*360, hlt["de2000"]
-    nuvrsemi = fuvrsemi = 0.1 * 60 * 10**hlt["logd25"]
+    nuvrsemi = fuvrsemi = 0.1 * 60 * 10**(hlt["logd25"]) / 2
     # For objects which are nearly circular, it appears that the pa column is
     # left out. As a result, we should be able to fill it with whatever value we
     # want.
