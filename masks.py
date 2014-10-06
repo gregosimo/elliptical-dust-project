@@ -2,6 +2,7 @@ import os
 import os.path
 import subprocess
 import shutil
+import math
 
 import numpy as np
 from pyraf import iraf
@@ -320,6 +321,26 @@ def mask_circle(image, center, radius, outputfile):
     xcenter, ycenter = center
     command = build_imcalc_circle(xcenter, ycenter, radius)
     run_imcalc(image, outputfile, command)
+
+def mask_ellipse(image, center, semimajor, semiminor, pa, outputfile):
+    '''Masks an elliptical region of the image.
+
+    This function takes an elliptical region of an image and sets it to zero,
+    effectively masking it. The center and semimajor axis should be in units of
+    pixels. The masked image will then be outputted into outputfile.
+    '''
+    xcenter, ycenter = center
+    command = build_imcalc_ellipse(xcenter, ycenter, semimajor, semiminor, pa)
+    run_imcalc(image, outputfile, command)
+
+def build_imcalc_ellipse(xcenter, ycenter, semimajor, semiminor, pa):
+    '''Builds the command for creating an ellipse in imcalc.'''
+    command = ("if ((x-{xcen})*cos({pa}) + (y-{ycen})*sin({pa}))**2 / {a}**2" +
+    " + ((x-{xcen})*sin({pa}) - (y-{ycen})*cos({pa}))**2 / {b}**2 " + 
+    " < 1 then 1 else im1").format(xcen=xcenter, ycen=ycenter, a=semiminor,
+            b=semimajor, pa=-pa/180.0*math.pi)
+    return command
+
 
 def build_imcalc_circle(xcenter, ycenter, radius):
     '''Builds the command for creating a circle in imcalc.'''
