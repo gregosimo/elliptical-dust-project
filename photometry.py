@@ -484,6 +484,29 @@ def readSkyTable(galaxydir, band, area, baseellipsefile="sky_aperture"):
     else:
         return float(ellipsetable[0]["TFLUX_E"])
 
+def writeregion(BASEDIR, WISErow, parambase="ellipsepars",
+        outputbase="ellipseregion", runbands=bands):
+    '''Writes a shitty DS9 region file.
+
+    This writes a file with only one line, taking the physical coordinates of
+    the object. Making a good region writer probably won't be that hard, but I
+    don't feel like it.'''
+    galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
+    for band in runbands:
+        ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
+                format_band_dependence(parambase, band, "tab"))[0]
+        xcoord, ycoord = ellipsetable["X0"], ellipsetable["Y0"]
+        semimajor = ellipsetable["SMA"]
+        semiminor = semimajor * (1 - ellipsetable["ELLIP"])
+        pa = ellipsetable["PA"]
+        ellipsestring="ellipse({0}, {1}, {2}, {3}, {4})".format(xcoord, ycoord,
+                semiminor, semimajor, pa)
+        f = open(format_band_dependence(outputbase, band, "reg", galaxydir), 
+                "w")
+        f.write("image\n")
+        f.write(ellipsestring)
+        f.close()
+
 def getObjectFlux(galaxydir, band, baseobjectfile="ellipse_aperture"):
     '''Returns the flux of an object in Data Numbers'''
     ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
@@ -890,6 +913,11 @@ def getPSFFWHM(band, pixel=False):
     if pixel:
         chosenwidth /= getPixelScale(band)
     return chosenwidth
+
+def generateRegions(BASEDIR, WISEtable, runbands=bands):
+    '''Runs through all objects and make DS9 regions.
+    '''
+    runOnImages(BASEDIR, WISEtable, writeregion, runbands=runbands)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, sky=True):
     '''Runs through all objects and creates cutouts in their folder.
