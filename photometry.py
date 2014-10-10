@@ -261,7 +261,7 @@ def astropy_table_index(table, column, value):
 def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
         maskoutput="foreground.fits", ellipsepars="ellipsepars",
         maskconfigbase="default", ellipseoutput="ellipse_aperture",
-        skycoord="fitsky", skybase="sky_level", uncertaintybase="uncertainty", 
+        skycoord="fitsky", skybase="", uncertaintybase="uncertainty", 
         runbands=bands):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
@@ -297,6 +297,12 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
             ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
             skybase=skybase)
+    write_pipeline_file("{0}.par".format(ellipsepars), 
+            mask_threshold=maskthresh, mask_band=input_band, 
+            mask_output=maskoutput, ellipse_parameters=ellipsepars, 
+            mask_config_base=maskconfigbase, aperture_file=ellipseoutput, 
+            sky_coordinates=skycoords, sky_base=sky_base, 
+            uncertainty_base=uncertaintybase, bands_written=runbands)
 
 def astropy_table_row(table, column, value):
     '''Returns the row of the table which has the value in column.
@@ -636,7 +642,7 @@ def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty",
             skybase=skybase, runbands=runbands)
 
 def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky", 
-        baseskyfile="sky_level", ellipsebase="ellipsepars"):
+        baseskyfile="", ellipsebase="ellipsepars"):
     '''Goes through BASEDIR and generates all sky tables.
 
     This function also allows for single-object corrections to be made.
@@ -785,7 +791,7 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
             galaxydir), mask=os.path.join(galaxydir, mask))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
-        ellipsebase="ellipsepars", baseskyfile="sky_level", skyratio=2.5,
+        ellipsebase="ellipsepars", baseskyfile="", skyratio=2.5,
         annulus=0, dannulus=30, runbands=bands):
     '''Generates sky values for each galaxy.
     
@@ -801,14 +807,22 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     this approximation.'''
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
 
+
     # If annulus is 0, that means we want to scale the annulus off of the
     # aperture. If we don't make a separate annulus_override variable, setting
     # annulus for W1 is disable resetting it for W2-4.
     for band in runbands:
+        # Yes, I am playing favorites with a naming convention here. At this 
+        # point, I stopped caring so I can move on past this point of fiddling 
+        # with photometry.
         if band in IRBANDS:
+            if not baseskyfile:
+                baseskyfile="sky_level"
             measure_sky_from_annulus(galaxydir, band, coordbase, baseskyfile,
                     ellipsebase, annulus, skyratio, dannulus)
         elif band in UVBANDS:
+            if not baseskyfile:
+                baseskyfile="sky_ellipse"
             measure_sky_from_skyfile(galaxydir, band, baseskyfile, ellipsebase)
 
 def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
@@ -914,10 +928,12 @@ def getPSFFWHM(band, pixel=False):
         chosenwidth /= getPixelScale(band)
     return chosenwidth
 
-def generateRegions(BASEDIR, WISEtable, runbands=bands):
+def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion", 
+        parambase="ellipsepars", runbands=bands):
     '''Runs through all objects and make DS9 regions.
     '''
-    runOnImages(BASEDIR, WISEtable, writeregion, runbands=runbands)
+    runOnImages(BASEDIR, WISEtable, writeregion, outputbase=outputbase, 
+            parambase=parambase, runbands=runbands)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, sky=True):
     '''Runs through all objects and creates cutouts in their folder.
@@ -1736,6 +1752,13 @@ def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi,
             "w4rsemi", "w1pa", "w2pa", "w3pa", "w4pa", "w1ba", "w2ba", "w3ba", 
             "w4ba")
     return Table(fulltable , names=names)
+
+def write_pipeline_file(filename, **kwargs):
+    '''Writes keyword arguments to a file.'''
+    f = open(filename)
+    for k,v in kwargs.iteritems:
+        f.write("{0}: {1}\n".format(k, v))
+    f.close()
 
 def rreplace(s, old, new, occurrence):
     '''Behaves like string.replace(), except replaces from the right rather than
