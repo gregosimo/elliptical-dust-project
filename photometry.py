@@ -533,6 +533,12 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
             ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
             skybase=skybase)
+    write_pipeline_file("{0}.par".format(ellipsepars), 
+            mask_threshold=maskthresh, mask_band=input_band, 
+            mask_output=maskoutput, ellipse_parameters=ellipsepars, 
+            mask_config_base=maskconfigbase, aperture_file=ellipseoutput, 
+            sky_coordinates=skycoords, sky_base=sky_base, 
+            uncertainty_base=uncertaintybase, bands_written=runbands)
 
 def astropy_table_row(table, column, value):
     '''Returns the row of the table which has the value in column.
@@ -1029,6 +1035,7 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     this approximation.'''
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
 
+
     # If annulus is 0, that means we want to scale the annulus off of the
     # aperture. If we don't make a separate annulus_override variable, 
     # setting annulus for W1 is disable resetting it for W2-4.
@@ -1128,10 +1135,12 @@ def mask_ellipse(image, xcenter, ycenter, a, b, pa):
     
 
 
-def generateRegions(BASEDIR, WISEtable, runbands=bands):
+def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion", 
+        parambase="ellipsepars", runbands=bands):
     '''Runs through all objects and make DS9 regions.
     '''
-    runOnImages(BASEDIR, WISEtable, writeregion, runbands=runbands)
+    runOnImages(BASEDIR, WISEtable, writeregion, outputbase=outputbase, 
+            parambase=parambase, runbands=runbands)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, sky=True):
     '''Runs through all objects and creates cutouts in their folder.
@@ -1950,6 +1959,13 @@ def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi,
             "w4rsemi", "w1pa", "w2pa", "w3pa", "w4pa", "w1ba", "w2ba", "w3ba", 
             "w4ba")
     return Table(fulltable , names=names)
+
+def write_pipeline_file(filename, **kwargs):
+    '''Writes keyword arguments to a file.'''
+    f = open(filename)
+    for k,v in kwargs.iteritems:
+        f.write("{0}: {1}\n".format(k, v))
+    f.close()
 
 def rreplace(s, old, new, occurrence):
     '''Behaves like string.replace(), except replaces from the right rather than

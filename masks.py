@@ -344,7 +344,7 @@ def build_imcalc_ellipse(xcenter, ycenter, semimajor, semiminor, pa):
 
 def build_imcalc_circle(xcenter, ycenter, radius):
     '''Builds the command for creating a circle in imcalc.'''
-    command = "if (x-{0})**2 + (y-{1})**2 < {2}**2 then 0 else im1".format(
+    command = "if (x-{0})**2 + (y-{1})**2 < {2}**2 then 1 else im1".format(
             xcenter, ycenter, radius)
     return command
 
@@ -363,13 +363,17 @@ def run_imcalc(image, output, command, overwrite=True, newformat="old"):
     '''
     if overwrite:
         try:
-            os.remove(output)
+            backup_file(output)
         except OSError:
             pass
     iraf.stsdas()
     iraf.toolbox()
     iraf.imgtools()
-    iraf.imcalc.setParam("pixtype", newformat)
+    try:
+        iraf.imcalc.setParam("pixtype", newformat)
+    except IrafError as e:
+        restore_file(output)
+        raise e
     if type(image) is list:
         imagestring = ','.join(image)
     else:
@@ -415,3 +419,13 @@ def run_immean(input):
     iraf.immean(input)
     meanvalue = iraf.immean.getParam("mean")
     return meanvalue
+
+def backup_file(filepath):
+    '''Performs a backup of a file by appending .backup to it.'''
+    dest = filepath + ".backup"
+    os.rename(filepath, dest)
+
+def restore_file(filepath):
+    '''Restores a file backed up by backup_file().'''
+    source = filepath + ".backup"
+    os.rename(source, filepath)
