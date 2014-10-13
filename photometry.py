@@ -50,13 +50,15 @@ LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4":
 # build_pipeline().
 
 def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture", 
-        useskybase="sky_level", apertureCorrection=True):
+        useskybase="sky_level", skymethod="adaptive", apertureCorrection=True):
     '''Calculates the flux of a galaxy in Data Numbers.
 
     This function uses the output from the ellipse package to calculate the
     background-subtracted flux of the galaxy. The total flux is calculated from
     the ellipse package and is stored in the table named with baseobjectfile.
-    The sky values are determined from the file named with useskybase.
+    The sky values are determined from the file named with useskybase. The
+    method for determining sky values should be specified in skymethod; it can
+    be "adaptive", "annulus", or "skyfile".
     '''
     ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(baseobjectfile, band, "tab"))
@@ -64,7 +66,7 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     aperture_area = ellipsetable[0]["NPIX_E"]
     # Right now we will only support sky backgrounds done through the 
     # pipeline.
-    background = estimate_background(galaxydir, band)
+    background = estimate_background(galaxydir, band, useskybase, skymethod)
     if apertureCorrection:
         fapcor = aperture_correction_factor(band)
     else:
@@ -75,8 +77,9 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     return objectflux
     
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
-        useskybase="sky_level", uncertaintybase="uncertainty", flux=False, 
-        errors=True, apertureCorrection=True, colorIndex=-2):
+        useskybase="sky_level", skymethod="adaptive", 
+        uncertaintybase="uncertainty", flux=False, errors=True, 
+        apertureCorrection=True, colorIndex=-2):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -84,22 +87,20 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     labeled as the object name without spaces. For example, "NGC 1111" would be
     under the folder "NGC1111".
 
-    Under each folder, there should be two sets of files outputted by the
-    ellipse package. One should be called ellipse_aperture.{band}.tab, which
-    contains the calculated total flux of the object, and the other should be
-    named sky_level.{band}.tab. These should have information about the sky
-    background; This should either be the output of the fitsky routine for
-    WISE bands, or the output of the ellipse routine for UV bands (still under
-    construction).
-
-    Features which are under construction are on-the-fly aperture photometry and
-    sky calculation without needing the sky_aperture and ellipse_aperture files,
-    along with masking. If you lave the useskybase parameter alone, it will
-    perform regular sky estimation.
+    Under each folder, there should be three sets of files. The file containing
+    the total flux outputted by the ellipse package should be labeled as 
+    "baseobjectfile.{band}.tab". The file with the information about the sky 
+    should be labeled with the base of "useskybase.{band}.{suf}" where suf
+    depends on the value passed to skymethod. If skymethod is "annulus", the
+    suffix should be "txt" since the file should be the output of fitsky. If
+    skymethod is "skyfile", the suffix should be "tab" since the file should be
+    the output of ellipse. "Adaptive" should adapt to the necessary sky
+    measurement methods.
     '''
     galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
     try:
-        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, useskybase)
+        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, useskybase,
+                skymethod)
     except ValueError:
         print "\nGot negative flux for {0}.\n".format(name)
         DNflux *= -1
@@ -122,7 +123,8 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
             photvalue = conv.DNflux2WISEmag(band, DNflux)
         return flux
 
-def estimate_background(galaxydir, band, customskybase=""):
+def estimate_background(galaxydir, band, skybase="sky_level",
+        skymethod="adaptive"):
     '''Background estimator for all bands.
 
     There are many diferent ways of estimating backgrounds based on different
@@ -130,22 +132,24 @@ def estimate_background(galaxydir, band, customskybase=""):
     transparently return the corresponding background value without the user
     having to iterate through all of the cases.
 
-    The sky base is assumed to be "sky_level" for infrared bands. And
-    "sky_ellipse" for UV bands. If a different sky base is to be used, the
-    customskybase keyword should be specified.
+    The sky base is the base file for sky files. The skymethod keyword
+    determines which sky method will be used to estimate the background. The
+    three currently valid values are "annulus", "skyfile", and "adaptive".
+    Annulus and skyfile both force that respective method to be used to estimate
+    the sky while adaptive uses an annulus for WISE images and a skyfile for
+    GALEX images. The type of estimation will also determine which suffixed will
+    be affixed to the skybase, so that sky file will need to be built in the
+    pipeline.
     '''
-    if not customskybase:
-        skylevel = "sky_level"
-        skyaperture = "sky_ellipse"
-    else:
-        skylevel = skyaperture = customskybase
-    if band in IRBANDS:
-        background = estimate_WISE_background(galaxydir, band,
+    if skymethod.lower() is "annulus" or band in IRBANDS:
+        background = annulus_sky_estimation(galaxydir, band,
                 baseskyfile=skylevel)
     else:
-        background = estimate_UV_background(galaxydir, band,
+        # This should occur when skymethod is overridden to "skyfile" or if the
+        # band is a UV band. If other possibilities can occur, they should be
+        # explicitly stated outside of this blanket else statement.
+        background = sky_file_estimation(galaxydir, band,
                 baseellipsefile=skyaperture)
-
     return background
 
 
@@ -747,23 +751,7 @@ def getObjectFlux(galaxydir, band, baseobjectfile="ellipse_aperture"):
             format_band_dependence(baseobjectfile, band, "tab"))
     return ellipsetable[0]["TFLUX_E"]
 
-def estimate_WISE_background_old(galaxydir, band, area, 
-        baseellipsefile="sky_aperture"):
-    '''Returns the estimated background for a particular galaxy.
-
-    This function gets the intensity from a predefined sky_aperture
-    STSDAS table which should be the output of the ellipse task. This
-    is a surface brightness. Getting the total sky flux requires
-    providing the area of the object.
-    '''
-    # To be parallel with estimate_UV_background, this function should
-    # provide an independent way of measuring a background. I don't
-    # have a decent way of doing that yet.
-    ellipsetable = STSDAS_to_Astropy_Table(galaxydir, 
-            format_band_dependence(baseellipsefile, band, "tab"))
-    return ellipsetable[0]["INTENS"] * area
-
-def estimate_WISE_background(galaxydir, band, baseskyfile="sky_level"):
+def annulus_sky_estimation(galaxydir, band, baseskyfile="sky_level"):
     '''Returns the estimated background for a particular galaxy. 
 
     This function utilizes the fitsky routine from IRAF.apphot to determine the
@@ -779,7 +767,7 @@ def estimate_WISE_background(galaxydir, band, baseskyfile="sky_level"):
     skylevel = skydata["MSKY"][0]
     return skylevel
 
-def estimate_UV_background(galaxydir, band, baseellipsefile="sky_ellipse"):
+def sky_file_estimation(galaxydir, band, baseellipsefile="sky_ellipse"):
     '''Returns the estimated background for a galax in GALEX bands.
 
     The background for UV bands is estimated by looking for files whose
@@ -1326,9 +1314,9 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
 # then constructing Columns while iterating. I'm pretty sure those can be added 
 # to a Table more easily than Rows.
 def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
-        ellipseoutput="ellipse_aperture", skybase="sky_level", 
-        uncertaintybase="uncertainty", flux=False, apertureCorrection=True, 
-        colorIndices=None):
+        ellipseoutput="ellipse_aperture", skybase="sky_level",
+        skymethod="adaptive", uncertaintybase="uncertainty", flux=False, 
+        apertureCorrection=True, colorIndices=None):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
@@ -1337,7 +1325,7 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     fulltable = Table([objectnames], names=["objstr_01"])
     for band in runbands:
         bandmags, magerrs = photometryOnBand(BASEDIR, objectnames, band, 
-                ellipseoutput, skybase, uncertaintybase, flux=flux, 
+                ellipseoutput, skybase, skymethod, uncertaintybase, flux=flux, 
                 errors=True, apertureCorrection=apertureCorrection,
                 colorIndices=colorIndices)
 
@@ -1361,9 +1349,9 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     return fulltable
 
 def photometryOnBand(BASEDIR, objectnames, band,
-        baseobjectfile="ellipse_aperture", skybase="sky_level", 
-        uncertaintybase="uncertainty", flux=False, errors=False, 
-        apertureCorrection=True, colorIndices=None):
+        baseobjectfile="ellipse_aperture", skybase="sky_level",
+        skymethod="adaptive", uncertaintybase="uncertainty", flux=False, 
+        errors=False, apertureCorrection=True, colorIndices=None):
     '''Performs photometry on an array of objects in a given band.
     
     If flux is given as true, the flux of the object will be given in Janskys
@@ -1378,12 +1366,12 @@ def photometryOnBand(BASEDIR, objectnames, band,
         if len(colorIndices) is not len(objectnames):
             raise ValueError("Need same number of color indices and objects.")
         photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-            skybase, flux=flux, errors=errors,
+            skybase, skymethod, flux=flux, errors=errors,
             apertureCorrection=apertureCorrection, colorIndex=colorIndex) for 
             galname, colorIndex in zip(objectnames, colorIndices)]
     else:
         photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-            skybase, flux=flux, errors=errors,
+            skybase, skymethod, flux=flux, errors=errors,
             apertureCorrection=apertureCorrection, colorIndex=-2) for galname 
             in objectnames]
     if errors:
