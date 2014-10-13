@@ -1187,11 +1187,11 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
 
         if skyimage:
             filename = format_band_dependence(
-                    object_name_to_dir(WISErow["objstr_01"]),
+                    object_name_to_dir(WISErow["objstr_01"]) + "_sky",
                     band, "png", galaxydir)
         else:
             filename = format_band_dependence(
-                    object_name_to_dir(WISErow["objstr_01"])+"_sky",
+                    object_name_to_dir(WISErow["objstr_01"]),
                     band, "png", galaxydir)
         gc.save(filename)
         plt.close("all")
