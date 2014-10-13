@@ -538,7 +538,7 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
             ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
             skybase=skybase)
     write_pipeline_file("{0}.par".format(ellipsepars), 
-            mask_threshold=maskthresh, mask_band=input_band, 
+            mask_threshold=maskthresh, mask_band=inputband, 
             mask_output=maskoutput, ellipse_parameters=ellipsepars, 
             mask_config_base=maskconfigbase, aperture_file=ellipseoutput, 
             sky_coordinates=skycoords, sky_base=sky_base, 
@@ -1134,7 +1134,8 @@ def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion",
     runOnImages(BASEDIR, WISEtable, writeregion, outputbase=outputbase, 
             parambase=parambase, runbands=runbands)
 
-def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, sky=True):
+def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
+        skyAperture=True):
     '''Runs through all objects and creates cutouts in their folder.
     '''
     current_backend = matplotlib.get_backend()
@@ -1143,7 +1144,8 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, sky=True):
             sky=sky)
     matplotlib.use(current_backend)
 
-def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, sky=True):
+def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
+        skyimage=False):
     '''Creates a set of four cutouts with the aperture and sky ellipses
 
     A cutout for each band will be created that contains the aperture
@@ -1157,7 +1159,7 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, sky=True):
         # and sky.
         aperturepars = STSDAS_to_Astropy_Table(galaxydir, 
                 format_band_dependence("ellipse_aperture", band, "tab"))
-        gc = aplpy.FITSFigure(match_filter(galaxydir, band))
+        gc = aplpy.FITSFigure(match_filter(galaxydir, band, sky=skyimage))
         gc.show_grayscale()
 
         px = getPixelScale(band)
@@ -1169,7 +1171,7 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, sky=True):
         gc.show_ellipses(Xval, Yval, width, height, angle=angle,
             edgecolor="yellow")
         # Now make the sky annulus:
-        if sky:
+        if skyAperture:
             skypars = Table.read(os.path.join(galaxydir,
                 format_band_dependence("sky_level", band, "txt")),
                 format="ascii.daophot")
@@ -1183,8 +1185,15 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, sky=True):
             gc.show_circles([Xval]*2, [Yval]*2, [radius_in, radius_out],
                     edgecolor="cyan")
 
-        gc.save(format_band_dependence(object_name_to_dir(WISErow["objstr_01"]),
-            band, "png", galaxydir))
+        if skyimage:
+            filename = format_band_dependence(
+                    object_name_to_dir(WISErow["objstr_01"]),
+                    band, "png", galaxydir)
+        else:
+            filename = format_band_dependence(
+                    object_name_to_dir(WISErow["objstr_01"])+"_sky",
+                    band, "png", galaxydir)
+        gc.save(filename)
         plt.close("all")
 
 def generatePixelMasks(galaxydir, masterfile="foreground.reg",
