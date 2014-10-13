@@ -265,8 +265,8 @@ def astropy_table_index(table, column, value):
 def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
         maskoutput="foreground.fits", ellipsepars="ellipsepars",
         maskconfigbase="default", ellipseoutput="ellipse_aperture",
-        skycoord="fitsky", skybase="", uncertaintybase="uncertainty", 
-        runbands=bands):
+        skycoord="fitsky", skybase="sky_level", skygens="adaptive", 
+        uncertaintybase="uncertainty", runbands=bands):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -296,7 +296,7 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
             baseoutput=ellipseoutput, baseparamname=ellipsepars)
     print "Making Sky Tables..."
     allSkyValues(BASEDIR, WISETable, runbands=runbands, coordbase=skycoord, 
-            baseskyfile=skybase, ellipsebase=ellipsepars)
+            baseskyfile=skybase, skygens=skygens, ellipsebase=ellipsepars)
     print "Making Uncertainty Tables..."
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
             ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
@@ -630,13 +630,13 @@ def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty",
             skybase=skybase, runbands=runbands)
 
 def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky", 
-        baseskyfile="", ellipsebase="ellipsepars"):
+        baseskyfile="sky_level", skygens="adaptive", ellipsebase="ellipsepars"):
     '''Goes through BASEDIR and generates all sky tables.
 
     This function also allows for single-object corrections to be made.
     '''
     runOnImages(BASEDIR, fulltable, genSkyValues, runbands=runbands,
-            coordbase=coordbase, baseskyfile=baseskyfile, 
+            coordbase=coordbase, baseskyfile=baseskyfile, skygens=skygens,
             ellipsebase=ellipsebase)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
@@ -779,13 +779,17 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
             galaxydir), mask=os.path.join(galaxydir, mask))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
-        ellipsebase="ellipsepars", baseskyfile="", skyratio=2.5,
-        annulus=0, dannulus=30, runbands=bands):
+        ellipsebase="ellipsepars", baseskyfile="sky_level", skygens="adaptive", 
+        skyratio=2.5, annulus=0, dannulus=30, runbands=bands):
     '''Generates sky values for each galaxy.
     
-    The sky values are generated via the IRAF fitsky routine. The output of
-    fitsky will be located at baseskyfile.{band}.txt files within the galaxy
-    folder. 
+    The sky values can be generated in two ways: through an annulus or through a
+    given sky file. Which method is used depends on the value of skygens. Usable
+    values are "all", "annulus", "skyfile", and "adaptive". "Annulus" and
+    "skyfile" force all bands able to carry out that method to do so. "Adaptive"
+    will only generate those files which are meant to be used for sky values.
+    "All" generates all sky values which can be generated so that they will all
+    be options for aperturePhotometryTable.
     
     The inner edge of the annulus to be used in fitsky is determined from the
     aperture size. The routine will multiply the aperture by skyratio in order
@@ -803,14 +807,10 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         # Yes, I am playing favorites with a naming convention here. At this 
         # point, I stopped caring so I can move on past this point of fiddling 
         # with photometry.
-        if band in IRBANDS:
-            if not baseskyfile:
-                baseskyfile="sky_level"
+        if band in IRBANDS or skygens.lower() in ["all", "annulus"]:
             measure_sky_from_annulus(galaxydir, band, coordbase, baseskyfile,
                     ellipsebase, annulus, skyratio, dannulus)
-        elif band in UVBANDS:
-            if not baseskyfile:
-                baseskyfile="sky_ellipse"
+        if band in UVBANDS and skygens is not "annulus":
             measure_sky_from_skyfile(galaxydir, band, baseskyfile, ellipsebase)
 
 def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
