@@ -1135,13 +1135,13 @@ def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion",
             parambase=parambase, runbands=runbands)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
-        skyAperture=True):
+        skyAperture=True, skyimage=False):
     '''Runs through all objects and creates cutouts in their folder.
     '''
     current_backend = matplotlib.get_backend()
     matplotlib.use("Agg")
     runOnImages(BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands,
-            sky=sky)
+            skyAperture=skyAperture, skyimage=skyimage)
     matplotlib.use(current_backend)
 
 def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
