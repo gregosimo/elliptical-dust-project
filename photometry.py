@@ -143,13 +143,13 @@ def estimate_background(galaxydir, band, skybase="sky_level",
     '''
     if skymethod.lower() is "annulus" or band in IRBANDS:
         background = annulus_sky_estimation(galaxydir, band,
-                baseskyfile=skylevel)
+                baseskyfile=skybase)
     else:
         # This should occur when skymethod is overridden to "skyfile" or if the
         # band is a UV band. If other possibilities can occur, they should be
         # explicitly stated outside of this blanket else statement.
         background = sky_file_estimation(galaxydir, band,
-                baseellipsefile=skyaperture)
+                baseellipsefile=skybase)
     return background
 
 
