@@ -142,12 +142,14 @@ def estimate_background(galaxydir, band, skybase="sky_level",
     pipeline.
     '''
     if skymethod.lower() is "annulus" or band in IRBANDS:
+        print skymethod
         background = annulus_sky_estimation(galaxydir, band,
                 baseskyfile=skybase)
     else:
         # This should occur when skymethod is overridden to "skyfile" or if the
         # band is a UV band. If other possibilities can occur, they should be
         # explicitly stated outside of this blanket else statement.
+        print skymethod
         background = sky_file_estimation(galaxydir, band,
                 baseellipsefile=skybase)
     return background
@@ -541,7 +543,7 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
             mask_threshold=maskthresh, mask_band=inputband, 
             mask_output=maskoutput, ellipse_parameters=ellipsepars, 
             mask_config_base=maskconfigbase, aperture_file=ellipseoutput, 
-            sky_coordinates=skycoords, sky_base=sky_base, 
+            sky_coordinates=skycoord, sky_base=skybase, 
             uncertainty_base=uncertaintybase, bands_written=runbands)
 
 def astropy_table_row(table, column, value):
@@ -767,7 +769,7 @@ def annulus_sky_estimation(galaxydir, band, baseskyfile="sky_level"):
     skylevel = skydata["MSKY"][0]
     return skylevel
 
-def sky_file_estimation(galaxydir, band, baseellipsefile="sky_ellipse"):
+def sky_file_estimation(galaxydir, band, baseellipsefile="sky_level"):
     '''Returns the estimated background for a galax in GALEX bands.
 
     The background for UV bands is estimated by looking for files whose
