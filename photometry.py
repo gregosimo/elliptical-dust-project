@@ -1109,7 +1109,7 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
 def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
         ellipseoutput="ellipse_aperture", skybase="sky_level",
         skymethod="adaptive", uncertaintybase="uncertainty", ZPuncertainty=True,
-        flux=False, apertureCorrection=True, colorIndices=None):
+        Vegamag=False, flux=False, apertureCorrection=True, colorIndices=None):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
