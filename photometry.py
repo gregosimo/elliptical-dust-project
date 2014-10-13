@@ -78,8 +78,8 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
         useskybase="sky_level", skymethod="adaptive", 
-        uncertaintybase="uncertainty", flux=False, errors=True, 
-        apertureCorrection=True, colorIndex=-2):
+        uncertaintybase="uncertainty", ZPuncertainty=True, flux=False, 
+        errors=True, apertureCorrection=True, colorIndex=-2):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -110,11 +110,11 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
         if flux:
             photvalue = conv.DN_flux_to_Jy(band, DNflux, colorIndex)
             err = conv.DN_err_to_Jansky_err(galaxydir, band, objectError,
-                    DNflux=DNflux, colorIndex=colorIndex)
+                    DNflux=DNflux, ZPunc=ZPuncertainty, colorIndex=colorIndex)
         else:
             photvalue = conv.DNflux2WISEmag(band, DNflux)
             err = conv.DN_err_to_mag_err(galaxydir, band, objectError,
-                    DNflux=DNflux)
+                    DNflux=DNflux, ZPunc=ZPuncertainty)
         return (photvalue, err)
     else:
         if flux:
@@ -1330,8 +1330,8 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
 # to a Table more easily than Rows.
 def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
         ellipseoutput="ellipse_aperture", skybase="sky_level",
-        skymethod="adaptive", uncertaintybase="uncertainty", flux=False, 
-        apertureCorrection=True, colorIndices=None):
+        skymethod="adaptive", uncertaintybase="uncertainty", ZPuncertainty=True,
+        flux=False, apertureCorrection=True, colorIndices=None):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
@@ -1340,8 +1340,9 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     fulltable = Table([objectnames], names=["objstr_01"])
     for band in runbands:
         bandmags, magerrs = photometryOnBand(BASEDIR, objectnames, band, 
-                ellipseoutput, skybase, skymethod, uncertaintybase, flux=flux, 
-                errors=True, apertureCorrection=apertureCorrection,
+                ellipseoutput, skybase, skymethod, uncertaintybase,
+                ZPuncertainty=ZPuncertainty, flux=flux, errors=True, 
+                apertureCorrection=apertureCorrection,
                 colorIndices=colorIndices)
 
         # How to keep the column name within our standard. Though I suppose we
@@ -1365,8 +1366,8 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
 
 def photometryOnBand(BASEDIR, objectnames, band,
         baseobjectfile="ellipse_aperture", skybase="sky_level",
-        skymethod="adaptive", uncertaintybase="uncertainty", flux=False, 
-        errors=False, apertureCorrection=True, colorIndices=None):
+        skymethod="adaptive", uncertaintybase="uncertainty", ZPuncertainty=True,
+        flux=False, errors=False, apertureCorrection=True, colorIndices=None):
     '''Performs photometry on an array of objects in a given band.
     
     If flux is given as true, the flux of the object will be given in Janskys
@@ -1381,12 +1382,14 @@ def photometryOnBand(BASEDIR, objectnames, band,
         if len(colorIndices) is not len(objectnames):
             raise ValueError("Need same number of color indices and objects.")
         photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-            skybase, skymethod, flux=flux, errors=errors,
+            skybase, skymethod, uncertaintybase=uncertaintybase,
+            ZPuncertainty=ZPuncertainty, flux=flux, errors=errors,
             apertureCorrection=apertureCorrection, colorIndex=colorIndex) for 
             galname, colorIndex in zip(objectnames, colorIndices)]
     else:
         photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-            skybase, skymethod, flux=flux, errors=errors,
+            skybase, skymethod, uncertaintybase=uncertaintybase,
+            ZPuncertainty=ZPuncertainty, flux=flux, errors=errors,
             apertureCorrection=apertureCorrection, colorIndex=-2) for galname 
             in objectnames]
     if errors:

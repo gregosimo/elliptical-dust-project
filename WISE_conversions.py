@@ -26,10 +26,14 @@ def DN_err_to_Jansky_err(galaxydir, band, DNerr,
     if not DNflux:
         DNflux = phot.calc_DNflux(galaxydir, band, baseobjectfile, mask, 
                 useskybase)
+    zpfluxlevel = get_zero_point_flux_level(band, colorIndex)
+    if ZPunc:
+        zpfluxunc =  get_zero_point_flux_uncertainty(band)
+        zpmagunc = get_zero_point_magnitude_uncertainty(band)
+    else:
+        zpfluxunc = zpmagunc = 0.0
     sigma_Jy = DN_to_Jy_conversion_factor(band, colorIndex) * (DNflux**2 *
-            (get_zero_point_flux_uncertainty(band)**2 / 
-            get_zero_point_flux_level(band, colorIndex)**2 + 
-            0.8483 * get_zero_point_magnitude_uncertainty(band)**2) +
+            (zpfluxunc**2 / zpfluxlevel**2 + 0.8483 * zpmagunc**2) + 
             DNerr**2)**(0.5)
     return sigma_Jy
 
@@ -45,7 +49,7 @@ def DNflux2WISEmag(band, flux):
     return flux2mag(flux, 1, get_zero_point_magnitude_level(band))
 
 def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
-        mask="", useskybase="sky_level", DNflux=0):
+        mask="", useskybase="sky_level", DNflux=0, ZPunc=True):
     '''Converts an error in Data Number to an error in magnitudes.
 
     If DNflux is given, this function will use it as the value for the object's
@@ -55,9 +59,13 @@ def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
     if not DNflux:
         DNflux = phot.calc_DNflux(galaxydir, band, baseobjectfile, mask, 
                 useskybase)
-    sigma_mag = fluxerr2magerr(DNflux, DNerr, 1, 0,
-            get_zero_point_magnitude_level(band),
-            get_zero_point_magnitude_uncertainty(band))
+
+    zplevel = get_zero_point_magnitude_level(band)
+    if ZPunc:
+        zpunc = get_zero_point_magnitude_uncertainty(band)
+    else:
+        zpunc = 0.0
+    sigma_mag = fluxerr2magerr(DNflux, DNerr, 1, 0, zplevel, zpunc)
     return sigma_mag
 
 def DN_to_Jy_conversion_factor(band, colorIndex=-2):
