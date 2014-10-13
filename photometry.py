@@ -1011,9 +1011,13 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         annulus=0, dannulus=30, runbands=bands, forceAnnulus=False):
     '''Generates sky values for each galaxy.
     
-    The sky values are generated via the IRAF fitsky routine. The output of
-    fitsky will be located at baseskyfile.{band}.txt files within the galaxy
-    folder. 
+    The sky values can be generated in two ways: through an annulus or through a
+    given sky file. Which method is used depends on the value of skygens. Usable
+    values are "all", "annulus", "skyfile", and "adaptive". "Annulus" and
+    "skyfile" force all bands able to carry out that method to do so. "Adaptive"
+    will only generate those files which are meant to be used for sky values.
+    "All" generates all sky values which can be generated so that they will all
+    be options for aperturePhotometryTable.
     
     The inner edge of the annulus to be used in fitsky is determined from the
     aperture size. The routine will multiply the aperture by skyratio in order
