@@ -141,15 +141,15 @@ def estimate_background(galaxydir, band, skybase="sky_level",
     be affixed to the skybase, so that sky file will need to be built in the
     pipeline.
     '''
-    if skymethod.lower() is "annulus" or band in IRBANDS:
-        print skymethod
+    if (skymethod.lower() == "annulus") or (band in IRBANDS):
+        print "annulus"
         background = annulus_sky_estimation(galaxydir, band,
                 baseskyfile=skybase)
     else:
         # This should occur when skymethod is overridden to "skyfile" or if the
         # band is a UV band. If other possibilities can occur, they should be
         # explicitly stated outside of this blanket else statement.
-        print skymethod
+        print "aperture"
         background = sky_file_estimation(galaxydir, band,
                 baseellipsefile=skybase)
     return background
@@ -631,7 +631,8 @@ def complete_for_bands(BASEDIR, objname, checkbands=bands):
     return True
 
 def run_fitsky(image, annulus, coords, output, dannulus=10,
-        algorithm="centroid", scale=1, fwhmpsf=6):
+        algorithm="centroid", scale=1, fwhmpsf=6, sighighclip=3.0,
+        siglowclip=3.0, maxiter=10):
     '''Runs the fitsky procedure in IRAF in order to measure the sky background.
 
     This function measures the sky pixels in an annulus with inner edge at
@@ -644,6 +645,9 @@ def run_fitsky(image, annulus, coords, output, dannulus=10,
     iraf.fitskypars.setParam("salgorithm", algorithm)
     iraf.fitskypars.setParam("annulus", annulus)
     iraf.fitskypars.setParam("dannulus", dannulus)
+    iraf.fitskypars.setParam("shireject", sighighclip)
+    iraf.fitskypars.setParam("sloreject", siglowclip)
+    iraf.fitskypars.setParam("smaxiter", maxiter)
     # Datapars
     iraf.datapars.setParam("scale", scale)
     iraf.datapars.setParam("fwhmpsf", fwhmpsf)
@@ -844,13 +848,6 @@ def allApertureTables(BASEDIR, fulltable, runbands=bands,
     The full WISE table will be necessary.'''
     runOnImages(BASEDIR, fulltable, genApertureTable, runbands=runbands,
             outputbase=outputbase)
-
-def allSkyTables(BASEDIR, fulltable, runbands=bands):
-    '''Goes through BASEDIR and generates all sky tables.
-
-    This function also allows for single-object corrections to be made.
-    '''
-    runOnImages(BASEDIR, fulltable, genSkytables, runbands=runbands)
 
 def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty", 
         ellipsebase="ellipsepars", skybase="sky_level", runbands=bands):
@@ -1059,6 +1056,15 @@ def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
     image = match_filter(galaxydir, band)
     ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(ellipsebase, band, "tab"))
+
+    # The centroid algorithm doesn't converge for GALEX images because there are
+    # too few counts.
+    if band in UVBANDS:
+        algorithm="mean"
+        sighiclip=1.0
+    else:
+        algorithm="centroid"
+        sighiclip=0.0
 
     if not annulus_override:
         annulus = skyratio * ellipsepars["SMA"]
@@ -1968,8 +1974,8 @@ def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi,
 
 def write_pipeline_file(filename, **kwargs):
     '''Writes keyword arguments to a file.'''
-    f = open(filename)
-    for k,v in kwargs.iteritems:
+    f = open(filename, 'w')
+    for k,v in kwargs.iteritems():
         f.write("{0}: {1}\n".format(k, v))
     f.close()
 
