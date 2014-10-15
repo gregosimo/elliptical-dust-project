@@ -96,12 +96,8 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     measurement methods.
     '''
     galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
-    try:
-        DNflux = calc_DNflux(galaxydir, band, baseobjectfile, useskybase,
-                skymethod)
-    except ValueError:
-        print "\nGot negative flux for {0}.\n".format(name)
-        DNflux *= -1
+    DNflux = calc_DNflux(galaxydir, band, baseobjectfile, useskybase,
+            skymethod)
     
     if errors:
         objectError = calc_DNerr(galaxydir, band)
@@ -404,7 +400,7 @@ def complete_for_bands(BASEDIR, objname, checkbands=bands):
 
 def run_fitsky(image, annulus, coords, output, dannulus=10,
         algorithm="centroid", scale=1, fwhmpsf=6, sighighclip=3.0,
-        siglowclip=3.0, maxiter=10):
+        siglowclip=3.0, rejectiter=10):
     '''Runs the fitsky procedure in IRAF in order to measure the sky background.
 
     This function measures the sky pixels in an annulus with inner edge at
@@ -419,7 +415,7 @@ def run_fitsky(image, annulus, coords, output, dannulus=10,
     iraf.fitskypars.setParam("dannulus", dannulus)
     iraf.fitskypars.setParam("shireject", sighighclip)
     iraf.fitskypars.setParam("sloreject", siglowclip)
-    iraf.fitskypars.setParam("smaxiter", maxiter)
+    iraf.fitskypars.setParam("snreject", rejectiter)
     # Datapars
     iraf.datapars.setParam("scale", scale)
     iraf.datapars.setParam("fwhmpsf", fwhmpsf)
@@ -862,7 +858,7 @@ def measure_sky_from_skyfile(galaxydir, band, baseskyfile="sky_level",
     run_ellipse(image_path, ellipse_param_path, ellipse_output_path)
     
 
-def sky_file_background(galaxydir, band, ellipse_output_base="sky_ellipse"):
+def sky_file_background(galaxydir, band, ellipse_output_base="sky_level"):
     '''Returns sky uncertainty from sky file.
 
     This function calculates the variance of the sky by using quantiles. It is
@@ -882,6 +878,28 @@ def sky_file_background(galaxydir, band, ellipse_output_base="sky_ellipse"):
     skystd = skyquants[1] - skyquants[0]
     return skystd
 
+def sky_annulus_histogram(galaxydir, band, fitsky_output_base="sky_level",
+        bins=20, range=None):
+    '''Plots a histogram of pixel values within a sky annulus.'''
+    fitsky_output = format_band_dependence(fitsky_output_base, band, "txt",
+            galaxydir)
+    skypars = Table.read(fitsky_output, format="ascii.daophot")
+    Xval, Yval = skypars["XINIT"][0], skypars["YINIT"][0]
+    rin = float(skypars.meta["keywords"]["ANNULUS"]["value"])
+    rout = rin + float(skypars.meta["keywords"]["DANNULUS"]["value"])
+
+    image = match_filter(galaxydir, band)
+    imageval = fits.getdata(image, view=np.ma.MaskedArray)
+    imageval.mask = ~mask_annulus(imageval, Xval, Yval, rin, rout)
+    annuluspixels = imageval.compressed()
+
+    plt.hist(annuluspixels, bins=bins, range=range)
+    plt.xlabel("Pixel value (count/s)")
+    plt.ylabel("N")
+    plt.title("{2} pixels centered at ({0:.0f}, {1:.0f}) ".format(Xval, Yval, 
+        band) + "between {0:.0f} and {1:.0f} pixels".format(rin, rout))
+    return imageval
+
 def test_if_in_ellipse(x, y, xcenter, ycenter, a, b, pa):
     '''Tests if the point x,y lies within the described ellipse.
 
@@ -894,6 +912,16 @@ def test_if_in_ellipse(x, y, xcenter, ycenter, a, b, pa):
     return (xcen * math.cos(alpha) + ycen * math.sin(alpha))**2 / b**2 + (xcen *
             math.sin(alpha) - ycen * math.cos(alpha))**2 / a**2 < 1
 
+def test_if_in_annulus(x, y, xcenter, ycenter, rin, rout):
+    '''Tests if the point x,y lies within the described annulus.
+
+    Tests whether the object is within an annulus between rin and rout.
+    '''
+    xcen = x - xcenter
+    ycen = y - ycenter
+    return np.logical_and((xcen**2 + ycen**2 <= rout**2), (xcen**2 + ycen**2 >=
+        rin**2))
+
 def mask_ellipse(image, xcenter, ycenter, a, b, pa):
     '''Creates a mask on the image which is shaped like an ellipse.
     
@@ -905,7 +933,16 @@ def mask_ellipse(image, xcenter, ycenter, a, b, pa):
             ycenter-1, a, b, pa)
     return mask
     
-    
+def mask_annulus(image, xcenter, ycenter, rin, rout): 
+    '''Masks out a circular annulus on an image.
+
+    Image should be a fits image. And xcenter and ycenter should be in physical
+    pixels, not numpy indices. The conversion will take place in this
+    function.'''
+    image_coords = np.indices(image.shape)
+    mask = test_if_in_annulus(image_coords[1], image_coords[0], xcenter-1,
+        ycenter-1, rin, rout)
+    return mask
 
 def getPSFFWHM(band, pixel=False):
     '''Returns the effective size of a point source in an Atlas Image.
@@ -1658,6 +1695,25 @@ def elliptical_fit(galaxydir, image, center, ellipticity, position_angle,
 ###############################################################################
 # Miscellaneous Photometry Routines
 ###############################################################################
+
+def Jeong_Table_1_to_WISE_table(Jeong_Table1, hyperledatable):
+    '''Converts Table 1 from Jeong into a WISE table.
+
+    The original paper allows the position angle to be freely fit by the ellipse
+    profile in I-band. However, they don't include what those values are. They
+    don't include the axis ratio either. As a result, I'll just use those from
+    HYPERLEDA since it should be close enough to V-band observations.
+    '''
+    jt1 = Jeong_Table1
+    hlt = hyperledatable
+    objstr = jt1["Galaxy"]
+    ra, dec = hlt["al2000"]/24*360, hlt["de2000"]
+    nuvrsemi, fuvrsemi = jt1["RNUV"], jt2["RFUV"]
+    nuvpa = fuvpa = hlt["pa"].filled(0.05)
+    nuvba = fuvba = 10**(-hlt["logr25"])
+    converted_table = Convert_to_UV_Table(objstr, ra, dec, nuvrsemi, fuvrsemi,
+            nuvpa, fuvpa, nuvba, fuvba)
+    return converted_table
 
 def Marino_Table_1_to_WISE_table(Marino_Table1, hyperledatable, refrac=8):
     '''Converts Table 1 from Marino et al. into a WISE table.
