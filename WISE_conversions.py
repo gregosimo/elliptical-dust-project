@@ -40,13 +40,15 @@ def DN_err_to_Jansky_err(galaxydir, band, DNerr,
 
 
 
-def DNflux2WISEmag(band, flux):
-    '''Converts the flux from a WISE Atlas image to a WISE magnitude.
+def DNflux2Vegamag(band, flux):
+    '''Converts the flux from a raw image to a Vega magnitude.
 
     The flux needs to be given in units of data numbers. The infrared
     fluxes will be returned in the Vega system while the UV fluxes will
     be returned in the AB system.
     '''
+    if band in UVBANDS:
+        raise ValueError("GALEX magnitudes cannot be converted to Vega.")
     return flux2mag(flux, 1, get_zero_point_magnitude_level(band))
 
 def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
