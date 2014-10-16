@@ -171,9 +171,9 @@ def folder_matchstring(filetile):
     For all other suveys, it will simply return the same thing except with an
     asterisk. e.g. GISAWEAJWA21q2*'''
     if filetile.startswith("AIS"):
-        medianmarker = filetile
-        subtile = filetile[10:12]
-        tilename = filetile[0:7]
+        secondmarker = filetile.rindex("_")
+        subtile = filetile[secondmarker+3:]
+        tilename = filetile[:secondmarker]
         folderstring = "{0}_*_sv{1}".format(tilename, subtile)
     else:
         folderstring = "{0}*".format(filetile)
