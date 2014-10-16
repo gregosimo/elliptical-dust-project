@@ -21,7 +21,7 @@ def prompt_with_default_value(default_value):
         value = default_value 
     return value
 
-def build_GALEX_atlas(BASEDIR):
+def build_GALEX_atlas(BASEDIR, objectnames):
     '''Guides the user through building the pipeline for Galex images.
 
     This function will handle getting the images and setting up the directory
@@ -29,10 +29,8 @@ def build_GALEX_atlas(BASEDIR):
     HYPERLEDA_LIST = os.path.join(BASEDIR, "hyperleda.txt")
     MAST_LIST = os.path.join(BASEDIR, "MAST_LIST.csv")
 
-    marino_objects = Table.read(os.path.join(BASEDIR, "..",
-        "Marino_objects.txt"), format="ascii.csv")
-    marino_objects.write(HYPERLEDA_LIST, format="ascii.tab",
-        include_names=("Ident.",))
+    Temptable = Table([objectnames], names=["Ident."])
+    Temptable.write(HYPERLEDA_LIST, format="ascii.tab")
 
     terminal_string = '''Now creating a file to be submitted to HYPERLEDA in
     order to retrieve the D25 and axis ratio. The file is located at {0}. Please
@@ -73,6 +71,7 @@ def build_GALEX_atlas(BASEDIR):
             lookup_table_path)
     print terminal_string
     raw_input()
+    print "Processing..."
     galex.process_GALEX_tarfile(BASEDIR, BASEDIR, lookup_table_path)
     print "Finished Processing!"
 
