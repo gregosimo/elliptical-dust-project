@@ -89,13 +89,15 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
         topfuv = Table(rows=objectinfo[infolen-1])[0]
         # If one frame has both the highest NUV and FUV exposure, then only
         # download it once. If not, then put it on both lists.
-        surveytables[topnuv["survey"]].add_row(topnuv)
-        if topnuv["photoextractid"] != topfuv["photoextractid"]:
-            surveytables[topfuv["survey"]].add_row(topfuv)
-        objectlist.append(topfuv["uploadID"])
-        NUVlist.append(galex_tilename(topnuv))
-        FUVlist.append(galex_tilename(topfuv))
-        print "{0}: {1}, {2}".format(objectlist[-1], NUVlist[-1], FUVlist[-1])
+        if topnuv["nuv_exptime"] > 0 and topfuv["fuv_exptime"] > 0:
+            surveytables[topnuv["survey"]].add_row(topnuv)
+            if topnuv["photoextractid"] != topfuv["photoextractid"]:
+                surveytables[topfuv["survey"]].add_row(topfuv)
+            objectlist.append(topfuv["uploadID"])
+            NUVlist.append(galex_tilename(topnuv))
+            FUVlist.append(galex_tilename(topfuv))
+            print "{0}: {1}, {2}".format(objectlist[-1], NUVlist[-1], 
+                    FUVlist[-1])
             
     for survey in surveys: 
         tab = surveytables[survey]
@@ -169,6 +171,7 @@ def folder_matchstring(filetile):
     For all other suveys, it will simply return the same thing except with an
     asterisk. e.g. GISAWEAJWA21q2*'''
     if filetile.startswith("AIS"):
+        medianmarker = filetile
         subtile = filetile[10:12]
         tilename = filetile[0:7]
         folderstring = "{0}_*_sv{1}".format(tilename, subtile)
