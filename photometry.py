@@ -265,7 +265,8 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
         maskoutput="foreground.fits", ellipsepars="ellipsepars",
         maskconfigbase="default", ellipseoutput="ellipse_aperture",
         skycoord="fitsky", skybase="sky_level", skygens="adaptive", 
-        uncertaintybase="uncertainty", skipmask=False, runbands=bands):
+        uncertaintybase="uncertainty", skipmask=False,
+        alt_mask="foreground_alt.fits", runbands=bands):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -295,7 +296,8 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
                 maskconfigbase="default")
     print "Making Ellipse Tables..."
     allEllipseTables(BASEDIR, WISETable, runbands=runbands, mask=maskoutput,
-            baseoutput=ellipseoutput, baseparamname=ellipsepars)
+            baseoutput=ellipseoutput, baseparamname=ellipsepars,
+            alt_mask=alt_mask)
     print "Making Sky Tables..."
     allSkyValues(BASEDIR, WISETable, runbands=runbands, coordbase=skycoord, 
             baseskyfile=skybase, skygens=skygens, ellipsebase=ellipsepars)
@@ -642,14 +644,14 @@ def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky",
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
         mask="foreground.fits", baseoutput="ellipse_aperture",
-        baseparamname="ellipsepars"):
+        baseparamname="ellipsepars", alt_mask="foreground_alt.fits"):
     '''Goes through BASEDIR and generates all object tables.
 
     This function also allows for single-object corrections to be made.
     '''
     runOnImages(BASEDIR, fulltable, genEllipsetables,
             baseparamname=baseparamname, runbands=runbands,
-            mask=mask, baseoutput=baseoutput)
+            mask=mask, alt_mask=alt_mask, baseoutput=baseoutput)
 
 def allSkyParams(BASEDIR, fulltable, runbands=bands):
     '''Goes through BASEDIR and generates all sky parameter files.'''
@@ -770,11 +772,23 @@ def run_imfunc(infile, outfile, func):
 
 
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
-        baseoutput="ellipse_aperture", mask="foreground.fits", runbands=bands):
-    '''Generates a table on the object for each band.'''
+        baseoutput="ellipse_aperture", mask="foreground.fits",
+        alt_mask="foreground_alt.fits", runbands=bands):
+    '''Generates a table on the object for each band.
+    
+    It uses parameters provided in ellipsepars, and outputs the table into
+    baseoutput.
+    
+    Masks may be provided in two ways. First priority is given to a custom mask
+    provided in alt_mask. If alt_mask doesn't exist, then the regular mask
+    passed to the mask keyword will work. This sounds like a ridiculous system,
+    but it's the easiest thing to do with the code structured the way it
+    currently is.'''
     # There should be a better way of joining this and genSkyTables, but that's
     # taking too much effort, and I want to just have this part done.
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
+    if os.path.exists(os.path.join(galaxydir, alt_mask)):
+        mask=alt_mask
     for band in runbands:
         objimage = match_filter(galaxydir, band)
         run_ellipse(objimage, format_band_dependence(baseparamname, band, 'tab',
