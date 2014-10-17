@@ -46,12 +46,11 @@ def DNflux2Vegamag(band, flux):
     fluxes will be returned in the Vega system while the UV fluxes will
     be returned in the AB system.
     '''
-    if band in UVBANDS:
-        raise ValueError("GALEX magnitudes cannot be converted to Vega.")
     return flux2mag(flux, 1, get_zero_point_magnitude_level(band))
 
 def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
-        mask="", useskybase="sky_level", DNflux=0, ZPunc=True):
+        mask="", useskybase="sky_level", skymethod="adaptive",
+        apertureCorrection=False, DNflux=0, ZPunc=True):
     '''Converts an error in Data Number to an error in magnitudes.
 
     If DNflux is given, this function will use it as the value for the object's
@@ -59,8 +58,8 @@ def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
     '''
 
     if not DNflux:
-        DNflux = phot.calc_DNflux(galaxydir, band, baseobjectfile, mask, 
-                useskybase)
+        DNflux = phot.calc_DNflux(galaxydir, band, baseobjectfile, useskybase,
+                skymethod=skymethod, apertureCorrection=apertureCorrection)
 
     zplevel = get_zero_point_magnitude_level(band)
     if ZPunc:
@@ -160,7 +159,8 @@ def DNflux2ABmag(band, flux):
     This returns a flux that is given in the AB magnitude system. The AB
     magnitude system returns both WISE and GALEX fluxes. This differs from the
     Vega system, where UV fluxes cannot be converted.'''
-    rawmag = DNflux2WISEmag(band, flux)
+    # This is really poorly named. There should be a better way of doing things.
+    rawmag = DNflux2Vegamag(band, flux)
     # WISE mags need to be corrected in order to be in the AB magnitude system.
     if band in WISE_bands:
         rawmag = Vega2ABmag(band, rawmag)
