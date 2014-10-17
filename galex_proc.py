@@ -91,13 +91,20 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
         # download it once. If not, then put it on both lists.
         if topnuv["nuv_exptime"] > 0 and topfuv["fuv_exptime"] > 0:
             surveytables[topnuv["survey"]].add_row(topnuv)
-            if topnuv["photoextractid"] != topfuv["photoextractid"]:
+            # If the two photos are in different surveys
+            if topnuv["survey"] != topfuv["survey"]:
                 surveytables[topfuv["survey"]].add_row(topfuv)
             objectlist.append(topfuv["uploadID"])
             NUVlist.append(galex_tilename(topnuv))
             FUVlist.append(galex_tilename(topfuv))
             print "{0}: {1}, {2}".format(objectlist[-1], NUVlist[-1], 
                     FUVlist[-1])
+        else:
+            print "Excluding {0} from the list".format(topfuv["uploadID"])
+            if topnuv["nuv_exptime"] <= 0:
+                print "Did not have NUV exposure."
+            if topfuv["fuv_exptime"] <= 0:
+                print "Did not have FUV exposure."
             
     for survey in surveys: 
         tab = surveytables[survey]
@@ -138,15 +145,19 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
     # BASEDIR.
     # We can potentially separate the extraction and the sorting into two
     # different functions. It might actually make more sense.
-    sortTable = Table.read(sortTablepath, format="ascii.csv")
+    sortTable = Table.read(sortTablepath, format="ascii.csv", guess=False)
     for entry in sortTable:
         galaxydir = phot.change_to_galaxy_dir(BASEDIR, entry["object"])
+        # Added this because Gil de Paz tables have the underscore replaced by a
+        # hypen for reasons I have no idea about.
+        fuvtile = entry["FUV_Tile"].replace("-", "_")
         FUVstring = os.path.join(tempfolder, 
-                folder_matchstring(entry["FUV_Tile"]), 
-                "{tile}*-fd-*.fits.gz".format(tile=entry["FUV_Tile"]))
+                folder_matchstring(fuvtile), 
+                "{tile}*-fd-*.fits.gz".format(tile=fuvtile))
+        nuvtile = entry["NUV_Tile"].replace("-", "_")
         NUVstring = os.path.join(tempfolder, 
-                folder_matchstring(entry["NUV_Tile"]), 
-                "{tile}*-nd-*.fits.gz".format(tile=entry["NUV_Tile"]))
+                folder_matchstring(nuvtile), 
+                "{tile}*-nd-*.fits.gz".format(tile=nuvtile))
         galexFUVfiles = glob.glob(FUVstring) 
         galexNUVfiles = glob.glob(NUVstring)
         if not galexFUVfiles:

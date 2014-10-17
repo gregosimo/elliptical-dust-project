@@ -100,7 +100,9 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
             skymethod)
     
     if errors:
-        objectError = calc_DNerr(galaxydir, band)
+        objectError = calc_DNerr(galaxydir, band, ellipsebase=baseobjectfile,
+                skybase=useskybase, skymethod=skymethod, 
+                uncertainty_base=uncertaintybase)
         if brightness is "flux":
             photvalue = conv.DN_flux_to_Jy(band, DNflux, colorIndex)
             err = conv.DN_err_to_Jansky_err(galaxydir, band, objectError,
@@ -141,17 +143,12 @@ def estimate_background(galaxydir, band, skybase="sky_level",
     be affixed to the skybase, so that sky file will need to be built in the
     pipeline.
     '''
-    if (skymethod.lower() == "annulus") or (band in IRBANDS):
-        print "annulus"
-        background = annulus_sky_estimation(galaxydir, band,
-                baseskyfile=skybase)
-    else:
-        # This should occur when skymethod is overridden to "skyfile" or if the
-        # band is a UV band. If other possibilities can occur, they should be
-        # explicitly stated outside of this blanket else statement.
-        print "aperture"
+    if skymethod.lower() == "aperture":
         background = sky_file_estimation(galaxydir, band,
                 baseellipsefile=skybase)
+    else:
+        background = annulus_sky_estimation(galaxydir, band,
+                baseskyfile=skybase)
     return background
 
 
@@ -173,7 +170,8 @@ def calculate_correlated_pixel_noise(band):
             (INPUT_TO_OUTPUT_PIXEL_RATIO[band])**2)
 
 def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
-        skybase="sky_level", uncertainty_base="uncertainty"):
+        skybase="sky_level", skymethod="adaptive", 
+        uncertainty_base="uncertainty"):
     '''Calculates the uncertainty of a Data Number flux.
 
     This function requires bases for the ellipse routine, sky routine, and
@@ -189,15 +187,12 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
 
     fapcor = aperture_correction_factor(band)
     NA = ellipseParams["NPIX_E"]
-    if band in UVBANDS:
-        NB = NA
-        sig_B = sky_file_background(galaxydir, band, skybase)
-    else:
-        skyParams = Table.read(os.path.join(galaxydir,
-            format_band_dependence(skybase, band, "txt")), 
-            format="ascii.daophot")
-        NB = skyParams["NSKY"][0]
-        sig_B = skyParams["STDEV"][0]
+    # TODO if time remains, make this robust to the sky method.
+    skyParams = Table.read(os.path.join(galaxydir,
+        format_band_dependence(skybase, band, "txt")), 
+        format="ascii.daophot")
+    NB = skyParams["NSKY"][0]
+    sig_B = skyParams["STDEV"][0]
     total_sigi = imageUncertainty["TFLUX_E"]
     Fcorr = calculate_correlated_pixel_noise(band)
     # We get the background level from centroiding, which seems like a
@@ -270,7 +265,7 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
         maskoutput="foreground.fits", ellipsepars="ellipsepars",
         maskconfigbase="default", ellipseoutput="ellipse_aperture",
         skycoord="fitsky", skybase="sky_level", skygens="adaptive", 
-        uncertaintybase="uncertainty", runbands=bands):
+        uncertaintybase="uncertainty", skipmask=False, runbands=bands):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -283,18 +278,21 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
     Masking is not trivial. To completely disable masking, set maskthresh to 0.
     The masking pipeline will be completely bypassed. If you want to use
     masking, you need to set the mask threshold, as well as the input image to
-    generate the mask and the output filename of mask.
+    generate the mask and the output filename of mask. If masks have aleady been
+    generated and you'd simply like to skip the creation, enable the skipmasks
+    keyword.
     ''' 
     print "Making Aperture Tables..."
     allApertureTables(BASEDIR, WISETable, runbands=runbands,
             outputbase=ellipsepars)
-    if maskthresh != 0:
+    if maskthresh == 0:
+        maskoutput = ""
+        skipmask = True
+    if not skipmask:
         print "Making Masks..."
         allMasks(BASEDIR, WISETable, threshold=maskthresh, maskband=inputband,
                 output=maskoutput, ellipsebase=ellipsepars,
                 maskconfigbase="default")
-    else:
-        maskoutput=""
     print "Making Ellipse Tables..."
     allEllipseTables(BASEDIR, WISETable, runbands=runbands, mask=maskoutput,
             baseoutput=ellipseoutput, baseparamname=ellipsepars)
@@ -304,7 +302,7 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
     print "Making Uncertainty Tables..."
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
             ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
-            skybase=skybase)
+            skybase=skybase, skymethod=skygens)
     write_pipeline_file("{0}.par".format(ellipsepars), 
             mask_threshold=maskthresh, mask_band=inputband, 
             mask_output=maskoutput, ellipse_parameters=ellipsepars, 
@@ -461,6 +459,7 @@ def run_ellipse(image, ellipsepars, output, mask=""):
     #iraf.unlearn("ellipse")
     iraf.ellipse.setParam("inellip", ellipsepars)
     iraf.ellipse.setParam("dqf", mask)
+    iraf.ellipse.setParam("interactive", False)
     iraf.ellipse(image, output)
 
 def generate_elliptical_aperture(inputfile, outputfile):
@@ -624,11 +623,12 @@ def allApertureTables(BASEDIR, fulltable, runbands=bands,
             outputbase=outputbase)
 
 def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty", 
-        ellipsebase="ellipsepars", skybase="sky_level", runbands=bands):
+        ellipsebase="ellipsepars", skybase="sky_level", skymethod="adaptive",
+        runbands=bands):
     '''Goes through BASEDIR and generates all uncertainty tables.'''
     runOnImages(BASEDIR, fulltable, genImageUncertainty,
             baseuncertainty=baseuncertainty, ellipsebase=ellipsebase,
-            skybase=skybase, runbands=runbands)
+            skybase=skybase, skymethod=skymethod, runbands=runbands)
 
 def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky", 
         baseskyfile="sky_level", skygens="adaptive", ellipsebase="ellipsepars"):
@@ -641,7 +641,7 @@ def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky",
             ellipsebase=ellipsebase)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
-        mask="foregroundmask.fits", baseoutput="ellipse_aperture",
+        mask="foreground.fits", baseoutput="ellipse_aperture",
         baseparamname="ellipsepars"):
     '''Goes through BASEDIR and generates all object tables.
 
@@ -670,7 +670,8 @@ def ellipseOnBands(BASEDIR, WISErow, baseparamname, output, mask=""):
     '''
 
 def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
-        ellipsebase="ellipse_aperture", skybase="sky_level", runbands=bands):
+        ellipsebase="ellipse_aperture", skybase="sky_level",
+        skymethod="adaptive", runbands=bands):
     '''Sums the variance of uncertainty pixels over an aperture.
 
     This function requires uncertainty files to be located within the galaxy
@@ -692,11 +693,11 @@ def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
         elif band in UVBANDS:
             image = match_filter(galaxydir, band)
             source_uncertainty_from_image(galaxydir, band, image, ellipsebase,
-                    baseuncertainty, skybase)
+                    baseuncertainty, skybase, skymethod)
 
 def source_uncertainty_from_image(galaxydir, band, image, 
         ellipsebase="ellipsepars", outputbase="uncertainty", 
-        skybase="sky_level"):
+        skybase="sky_level", skymethod="adaptive"):
     '''Calculates the uncertainty of a GALEX image from the image itself.
 
     This uncertainty estimation uses the form of:
@@ -715,7 +716,8 @@ def source_uncertainty_from_image(galaxydir, band, image,
     ellipsepars = format_band_dependence(ellipsebase, band, "tab", galaxydir)
     output = format_band_dependence(outputbase, band, "tab", galaxydir)
 
-    skybackground = estimate_background(galaxydir, band)
+    skybackground = estimate_background(galaxydir, band, skybase=skybase,
+            skymethod=skymethod)
 
     header = fits.getheader(image)
     exposuretime = header["EXPTIME"]
@@ -805,11 +807,11 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     # aperture. If we don't make a separate annulus_override variable, 
     # setting annulus for W1 is disable resetting it for W2-4.
     for band in runbands:
-        if band in IRBANDS or skygens.lower() in ["all", "annulus"]:
+        if skygens is "aperture":
+            measure_sky_from_skyfile(galaxydir, band, baseskyfile, ellipsebase)
+        else:
             measure_sky_from_annulus(galaxydir, band, coordbase, baseskyfile,
                     ellipsebase, annulus, skyratio, dannulus)
-        if band in UVBANDS and skygens is not "annulus":
-            measure_sky_from_skyfile(galaxydir, band, baseskyfile, ellipsebase)
 
 def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
         baseskyfile="sky_level", ellipsebase="ellipsepars", annulus=0, 
@@ -1703,6 +1705,23 @@ def elliptical_fit(galaxydir, image, center, ellipticity, position_angle,
 # Miscellaneous Photometry Routines
 ###############################################################################
 
+def Gil_de_Paz_Table_1_to_WISE_table(GdP_Table1):
+    gdp1 = GdP_Table1
+    objstr = gdp1["Name"]
+    ra, dec = ((gdp1["RAh"].astype(float) + gdp1["RAm"].astype(float)/60.0 +
+            gdp1["RAs"].astype(float)/60/60)*360/24,
+            (gdp1["DEd"].astype(float) + np.sign(gdp1["DEd"]) * 
+                gdp1["DEm"].astype(float)/60.0 + np.sign(gdp1["DEd"]) * 
+                gdp1["DEs"].astype(float)/60/60))
+    nuvrsemi = fuvrsemi = gdp1["MajAxis"] / 2 * 60
+    # There's gonna be some aliasing going along here. Be wary.
+    gdp1["PA"].fill_value = 0.05
+    nuvpa = fuvpa = gdp1["PA"].filled()
+    nuvba = fuvba = gdp1["MinAxis"] / gdp1["MajAxis"]
+    converted_table = Convert_to_UV_Table(objstr, ra, dec, nuvrsemi, fuvrsemi,
+            nuvpa, fuvpa, nuvba, fuvba)
+    return converted_table
+
 def Jeong_Table_1_to_WISE_table(Jeong_Table1, hyperledatable):
     '''Converts Table 1 from Jeong into a WISE table.
 
@@ -1715,7 +1734,8 @@ def Jeong_Table_1_to_WISE_table(Jeong_Table1, hyperledatable):
     hlt = hyperledatable
     objstr = jt1["Galaxy"]
     ra, dec = hlt["al2000"]/24*360, hlt["de2000"]
-    nuvrsemi, fuvrsemi = jt1["RNUV"], jt2["RFUV"]
+    #nuvrsemi, fuvrsemi = jt1["RNUV"]*5, jt1["RFUV"]*5
+    nuvrsemi = fuvrsemi = 0.1 * 60 * 10**(hlt["logd25"]) / 2
     nuvpa = fuvpa = hlt["pa"].filled(0.05)
     nuvba = fuvba = 10**(-hlt["logr25"])
     converted_table = Convert_to_UV_Table(objstr, ra, dec, nuvrsemi, fuvrsemi,

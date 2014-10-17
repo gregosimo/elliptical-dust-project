@@ -45,8 +45,8 @@ def build_GALEX_atlas(BASEDIR, objectnames):
     hyperledapars = Table.read(os.path.join(BASEDIR, galexellipse),
         format="ascii.basic", delimiter="|", comment="!")
     
-    galex.create_upload_file(hyperledapars["name"], hyperledapars["al2000"], 
-            hyperledapars["de2000"], MAST_LIST)
+    galex.create_upload_file(hyperledapars["name"],
+            hyperledapars["al2000"]*360/24, hyperledapars["de2000"], MAST_LIST)
     terminal_string = '''
     The list of objects has now been written to {0}. The next step is go
     navigate to the MAST interface at http://galex.stsci.edu/GalexView/. Upload
