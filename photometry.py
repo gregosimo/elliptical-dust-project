@@ -32,6 +32,7 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
 
 
+
 ###############################################################################
 # Aperture Photometry Routines                                                #
 ###############################################################################
