@@ -33,8 +33,6 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
 LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4": 
         -0.029}
 
-
-
 ###############################################################################
 # Aperture Photometry Routines                                                #
 ###############################################################################
@@ -128,6 +126,99 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
             
         return flux
 
+def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
+        maskoutput="foreground.fits", ellipsepars="ellipsepars",
+        maskconfigbase="default", ellipseoutput="ellipse_aperture",
+        skycoord="fitsky", skybase="sky_level", skygens="adaptive", 
+        uncertaintybase="uncertainty", skipmask=False,
+        alt_mask="foreground_alt.fits", runbands=bands):
+    '''Basically runs all the commands necessary to build the ellipse aperture
+    and sky measurement pipeline. It consists of running:
+    allApertureTables
+    allEllipseTables
+    allSkyValues
+
+    If you want a table of photometry, you'll have to run
+    aperturePhotometryTable yourself.
+
+    Masking is not trivial. To completely disable masking, set maskthresh to 0.
+    The masking pipeline will be completely bypassed. If you want to use
+    masking, you need to set the mask threshold, as well as the input image to
+    generate the mask and the output filename of mask. If masks have aleady been
+    generated and you'd simply like to skip the creation, enable the skipmasks
+    keyword.
+    ''' 
+    print "Making Aperture Tables..."
+    allApertureTables(BASEDIR, WISETable, runbands=runbands,
+            outputbase=ellipsepars)
+    if maskthresh == 0:
+        maskoutput = ""
+        skipmask = True
+    if not skipmask:
+        print "Making Masks..."
+        allMasks(BASEDIR, WISETable, threshold=maskthresh, maskband=inputband,
+                output=maskoutput, ellipsebase=ellipsepars,
+                maskconfigbase="default")
+    print "Making Ellipse Tables..."
+    allEllipseTables(BASEDIR, WISETable, runbands=runbands, mask=maskoutput,
+            baseoutput=ellipseoutput, baseparamname=ellipsepars,
+            alt_mask=alt_mask)
+    print "Making Sky Tables..."
+    allSkyValues(BASEDIR, WISETable, runbands=runbands, coordbase=skycoord, 
+            baseskyfile=skybase, skygens=skygens, ellipsebase=ellipsepars)
+    print "Making Uncertainty Tables..."
+    allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
+            ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
+            skybase=skybase, skymethod=skygens)
+    write_pipeline_file("{0}.par".format(ellipsepars), 
+            mask_threshold=maskthresh, mask_band=inputband, 
+            mask_output=maskoutput, ellipse_parameters=ellipsepars, 
+            mask_config_base=maskconfigbase, aperture_file=ellipseoutput, 
+            sky_coordinates=skycoord, sky_base=skybase, 
+            uncertainty_base=uncertaintybase, bands_written=runbands)
+
+
+def fullphotometry(BASEDIR, WISE_Table):
+    '''Performs the pipeline  building and photometry calculation of a table.
+
+    This function is good for when the ultimate goal of an image set is just to
+    get photometry out. The build_pipeline() and aperturePhotometryTable()
+    functions get called as a unit.
+
+    This function can also be used to generate unique prefixes for the objects.
+    '''
+    pass
+
+def aperture_correction_factor(band):
+    '''Returns the aperture correction factor for a given band.
+
+    This factor multiplies the background-subtracted flux of an object in order
+    to correct for the light lost from the creation of the ATLAS images.
+    '''
+    LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4": 
+            -0.029, "NUV": 0.0, "FUV": 0.0}
+    return 10**(LARGE_APERTURE_CORRECTION[band]/2.5)
+
+##############################################################################
+# Background Routines #
+##############################################################################
+
+def annulus_sky_estimation(galaxydir, band, baseskyfile="sky_level"):
+    '''Returns the estimated background for a particular galaxy. 
+
+    This function utilizes the fitsky routine from IRAF.apphot to determine the
+    total background flux in the galaxy. The fitsky routine returns a flux per
+    pixel, so in order to determine the total background flux in the aperture,
+    it needs the area of the aperture. It will then multiply the two and return
+    them.
+    
+    The output of fitsky should be in the object's folder with base name given
+    in baseskyfile, and a '.txt' extension.'''
+    skypath = format_band_dependence(baseskyfile, band, "txt", pathto=galaxydir)
+    skydata = Table.read(skypath, format="ascii.daophot")
+    skylevel = skydata["MSKY"][0]
+    return skylevel
+
 def estimate_background(galaxydir, band, skybase="sky_level",
         skymethod="adaptive"):
     '''Background estimator for all bands.
@@ -139,21 +230,54 @@ def estimate_background(galaxydir, band, skybase="sky_level",
 
     The sky base is the base file for sky files. The skymethod keyword
     determines which sky method will be used to estimate the background. The
-    three currently valid values are "annulus", "skyfile", and "adaptive".
+    currently valid values are "annulus", "skyfile", "patch" and "adaptive".
     Annulus and skyfile both force that respective method to be used to estimate
     the sky while adaptive uses an annulus for WISE images and a skyfile for
     GALEX images. The type of estimation will also determine which suffixed will
     be affixed to the skybase, so that sky file will need to be built in the
     pipeline.
     '''
+    if skymethod.lower() is "adaptive":
+        skymethod = adaptive_background[band]
+
     if skymethod.lower() == "aperture":
         background = sky_file_estimation(galaxydir, band,
                 baseellipsefile=skybase)
-    else:
+    elif skymethod.lower() == "annulus":
         background = annulus_sky_estimation(galaxydir, band,
                 baseskyfile=skybase)
+    elif skymethod.lower() == "patch":
+        background = patch_sky_estimation(galaxydir, band, baseskyfile=skybase)
     return background
 
+def readSkyTable(galaxydir, band, area, baseellipsefile="sky_aperture"):
+    '''Generates a background flux from an existing table.
+
+    Since much of the calculations being done for objects is through a
+    standard aperture size, it is easier to simply read the values from
+    a pre-generated STSDAS table. This function is just for reading.
+    '''
+    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
+            format_band_dependence(baseellipsefile, band, "tab"))
+    if band in IRBANDS:
+        return float(ellipsetable[0]["INTENS"]) * area
+    else:
+        return float(ellipsetable[0]["TFLUX_E"])
+
+
+def sky_file_estimation(galaxydir, band, baseellipsefile="sky_level"):
+    '''Returns the estimated background for a galax in GALEX bands.
+
+    The background for UV bands is estimated by looking for files whose
+    names contain the string given in skymarker.'''
+    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
+            format_band_dependence(baseellipsefile, band, "tab"))
+    return ellipsetable[0]["TFLUX_E"] / ellipsetable[0]["NPIX_E"]
+
+
+##############################################################################
+# Noise Routines #
+##############################################################################
 
 def calculate_correlated_pixel_noise(band):
     '''Calculated Fcorr for a particular band.
@@ -209,6 +333,10 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     sourceerr = np.sqrt(fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * 
         sig_B**2) + sig_conf**2)
     return sourceerr
+
+##############################################################################
+# Path Routines #
+##############################################################################
 
 def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
@@ -587,6 +715,18 @@ def format_band_dependence(basename, band, extension="tab", pathto=''):
     '''
     return os.path.join(pathto, "{0}.{1}.{2}".format(basename, band, extension))
     
+def objectHasImage(BASEDIR, objname):
+    '''Checks if an object has a folder containing its images.'''
+    return os.path.exists(change_to_galaxy_dir(BASEDIR, objname))
+
+def filterTableforExistingObjects(BASEDIR, fulltable):
+    '''Creates another table that only has the objects with images.'''
+    return filterTable(BASEDIR, fulltable, objectHasImage)
+
+def filterTableforCompleteBands(BASEDIR, fulltable):
+    '''Returns a table that only has objects with complete observations'''
+    return filterTable(BASEDIR, fulltable, complete_for_bands)
+
 def match_filter(directory, filter, fullpath=True, uncertainty=False, 
         sky=False):
     '''Finds the image which corresponds to the filter.
@@ -632,6 +772,97 @@ def complete_for_bands(BASEDIR, objname, checkbands=bands):
             return False
     return True
 
+###############################################################################
+# Astropy Utilities                                                           #
+###############################################################################
+
+def astropy_table_index(table, column, value):
+    '''Returns the row index of the table which has the value in column.
+
+    There are often times when you want to know the index of the row
+    where a certain column has a value. This function will return a 
+    list of row indices that match the value in the column.'''
+    return np.where(table[column] == value)
+
+def astropy_table_row(table, column, value):
+    '''Returns the row of the table which has the value in column.
+
+    If you want to know the row in an astropy table where a value in a
+    column corresponds to a given value, this function will return that
+    row. If there are multiple rows which match the value in the 
+    column, you will get all of them. If no rows match the value, this
+    function will throw a ValueError.'''
+    return table[astropy_table_index(table, column, value)]
+
+def extract_subtable_from_column(table, column, selections):
+    '''Returns a table which only contains values in selections.
+
+    This function will create a Table whose values in column are only
+    those found in selections.
+    '''
+    indices = []
+    for object in selections:
+        indices.append(astropy_table_index(table, column, object)[0][0])
+    return table[indices]
+
+def filterTable(BASEDIR, fulltable, isTrue):
+    '''Filters a table based on a boolean method isTrue.'''
+    filteredTable = Table(fulltable, copy=True, masked=False)
+    for i, object in enumerate(fulltable["objstr_01"]):
+        if not isTrue(BASEDIR, object):
+            filteredTable.remove_row(np.argwhere(filteredTable["objstr_01"] ==
+                    object)[0][0])
+    return filteredTable
+
+def runOnImages(BASEDIR, fulltable, func, **kwargs):
+    '''Goes through a table of objects and runs a function on them.
+
+    The function must be able to accept the BASEDIR as well as an
+    Astropy row. The function can also accept keyword arguments via
+    kwargs.'''
+    for row in fulltable:
+        galaxydir = change_to_galaxy_dir(BASEDIR, row["objstr_01"])
+        try:
+            func(BASEDIR, row, **kwargs)
+        except RuntimeError, e:
+            print e
+
+
+##############################################################################
+# Deprecated functions? #
+##############################################################################
+
+def combine_WISE_aperture_tables(apertureTable, wisetable, MIR_column):
+    '''Combines the Aperture Photometry table with a WISE photometry table.
+    '''
+    return make_relevant_table(apertureTable["objstr_01"],
+            apertureTable["w1apmag"], wisetable["w1gmag"],
+            apertureTable["w2apmag"], wisetable["w2gmag"],
+            apertureTable["w3apmag"], wisetable["w3gmag"],
+            apertureTable["NUVapmags"], apertureTable["FUVapmags"], MIR_column)
+
+def make_relevant_table(objstr, w1ap, w1wise, w2ap, w2wise, w3ap, w3wise, NUVap,
+        FUVap, MIR):
+    '''Extracts relevant columns from the raw WISE and GALEX tables.
+
+    Relevant information includes elliptical aperture parameters,
+    measured magnitudes, and exposure times.'''
+    w1w2ap = w1ap - w2ap
+    w2w3ap = w2ap - w3ap
+
+    w1w2wise = w1wise - w2wise
+    w2w3wise = w2wise - w3wise
+
+    return Table((objstr, w1ap, w2ap, w3ap, w1wise, w2wise, w3wise, w1w2ap,
+        w2w3ap, w1w2wise, w2w3wise, NUVap, FUVap, MIR), names=("objstr_01", 
+        "w1apmag", "w2apmag", "w3apmag", "w1gmag", "w2gmag", "w3gmag", 
+        "w1w2apcol", "w2w3apcol", "w1w2gcol", "w2w3gcol", "NUVapmag", 
+        "FUVapmag", "MIR"))
+
+##############################################################################
+# IRAF Wrappers #
+##############################################################################
+
 def run_fitsky(image, annulus, coords, output, dannulus=10,
         algorithm="centroid", scale=1, fwhmpsf=6, sighighclip=3.0,
         siglowclip=3.0, rejectiter=10):
@@ -663,7 +894,6 @@ def run_fitsky(image, annulus, coords, output, dannulus=10,
 
     iraf.fitsky(image)
 
-
 def run_ellipse(image, ellipsepars, output, mask=""):
     '''Generates an ellipse table on the image from given parameters.
 
@@ -692,44 +922,9 @@ def run_ellipse(image, ellipsepars, output, mask=""):
     iraf.ellipse.setParam("interactive", False)
     iraf.ellipse(image, output)
 
-def generate_elliptical_aperture(inputfile, outputfile):
-    '''Generates a polygonal aperture from ellipse table.
-
-    The ellipse table should be given in inputfile, and the file to be
-    output should be outputfile. Both inputfile and outputfile should
-    have the path of the file specified. The elapert task also allows 
-    you to specify a "coords" argument which contains the polygon 
-    centers. I don't think this is needed for our purposes.
-    '''
-    iraf.stsdas()
-    iraf.stsdas.analysis()
-    iraf.stsdas.analysis.isophote()
-    iraf.ellipse(inputfile, outputfile)
-
-def elliptical_aperture(galaxydir, image, band,
-                        outputname="ellipse.tbl"):
-    '''Reads out the ellipse flux from the ellipse routine.
-
-    This function takes an object which already has output from the 
-    ellipse routine. '''
-    outputtbl = os.path.join(galaxydir, outputname)
-    output = STSDAS_to_Astropy_Table(galaxydir, outputtbl)
-    DNflux = output[0]["TFLUX_E"]
-    return DNflux 
-
-def readSkyTable(galaxydir, band, area, baseellipsefile="sky_aperture"):
-    '''Generates a background flux from an existing table.
-
-    Since much of the calculations being done for objects is through a
-    standard aperture size, it is easier to simply read the values from
-    a pre-generated STSDAS table. This function is just for reading.
-    '''
-    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(baseellipsefile, band, "tab"))
-    if band in IRBANDS:
-        return float(ellipsetable[0]["INTENS"]) * area
-    else:
-        return float(ellipsetable[0]["TFLUX_E"])
+##############################################################################
+# Region routines #
+#############################################################################
 
 def writeregion(BASEDIR, WISErow, parambase="ellipsepars",
         outputbase="ellipseregion", runbands=bands):
@@ -754,63 +949,15 @@ def writeregion(BASEDIR, WISErow, parambase="ellipsepars",
         f.write(ellipsestring)
         f.close()
 
-def getObjectFlux(galaxydir, band, baseobjectfile="ellipse_aperture"):
-    '''Returns the flux of an object in Data Numbers'''
-    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(baseobjectfile, band, "tab"))
-    return ellipsetable[0]["TFLUX_E"]
 
-def annulus_sky_estimation(galaxydir, band, baseskyfile="sky_level"):
-    '''Returns the estimated background for a particular galaxy. 
-
-    This function utilizes the fitsky routine from IRAF.apphot to determine the
-    total background flux in the galaxy. The fitsky routine returns a flux per
-    pixel, so in order to determine the total background flux in the aperture,
-    it needs the area of the aperture. It will then multiply the two and return
-    them.
-    
-    The output of fitsky should be in the object's folder with base name given
-    in baseskyfile, and a '.txt' extension.'''
-    skypath = format_band_dependence(baseskyfile, band, "txt", pathto=galaxydir)
-    skydata = Table.read(skypath, format="ascii.daophot")
-    skylevel = skydata["MSKY"][0]
-    return skylevel
-
-def sky_file_estimation(galaxydir, band, baseellipsefile="sky_level"):
-    '''Returns the estimated background for a galax in GALEX bands.
-
-    The background for UV bands is estimated by looking for files whose
-    names contain the string given in skymarker.'''
-    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(baseellipsefile, band, "tab"))
-    return ellipsetable[0]["TFLUX_E"] / ellipsetable[0]["NPIX_E"]
-
-
-def objectHasImage(BASEDIR, objname):
-    '''Checks if an object has a folder containing its images.'''
-    return os.path.exists(change_to_galaxy_dir(BASEDIR, objname))
-
-def filterTableforExistingObjects(BASEDIR, fulltable):
-    '''Creates another table that only has the objects with images.'''
-    return filterTable(BASEDIR, fulltable, objectHasImage)
-
-def filterTableforCompleteBands(BASEDIR, fulltable):
-    '''Returns a table that only has objects with complete observations'''
-    return filterTable(BASEDIR, fulltable, complete_for_bands)
+##############################################################################
+# Contamination Routines #
+##############################################################################
 
 def filterContaminatedObjects(BASEDIR, fulltable):
     '''Returns a table which doesn't have contaminated objects'''
     return filterTable(BASEDIR, fulltable, (lambda BASEDIR, objname: not
         isObjectContaminated(BASEDIR, objname)))
-
-def filterTable(BASEDIR, fulltable, isTrue):
-    '''Filters a table based on a boolean method isTrue.'''
-    filteredTable = Table(fulltable, copy=True, masked=False)
-    for i, object in enumerate(fulltable["objstr_01"]):
-        if not isTrue(BASEDIR, object):
-            filteredTable.remove_row(np.argwhere(filteredTable["objstr_01"] ==
-                    object)[0][0])
-    return filteredTable
 
 def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
     '''Determines if an object is on a list containing contaminated
@@ -822,18 +969,9 @@ def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
     contobjects = contfileobj.readlines()
     return (objname+"\n") in contobjects
 
-def runOnImages(BASEDIR, fulltable, func, **kwargs):
-    '''Goes through a table of objects and runs a function on them.
-
-    The function must be able to accept the BASEDIR as well as an
-    Astropy row. The function can also accept keyword arguments via
-    kwargs.'''
-    for row in fulltable:
-        galaxydir = change_to_galaxy_dir(BASEDIR, row["objstr_01"])
-        try:
-            func(BASEDIR, row, **kwargs)
-        except RuntimeError, e:
-            print e
+##############################################################################
+# Pipeline Functions #
+##############################################################################
 
 def allMasks(BASEDIR, fulltable, threshold=100, maskband="W1",
         output="foreground.fits", ellipsebase="ellipsepars", 
@@ -885,19 +1023,26 @@ def allSkyParams(BASEDIR, fulltable, runbands=bands):
     '''Goes through BASEDIR and generates all sky parameter files.'''
     runOnImages(BASEDIR, fulltable, genSkyParam, runbands=runbands)
 
-def getPixelScale(band):
-    '''Returns the pixel scale for an image in a given band. Scale is
-    given as arcsec/pixel.'''
-    bands = {"W1": 1.37, "W2": 1.37, "W3": 1.37, "W4": 1.37, "NUV": 1.5, 
-             "FUV": 1.5}
-    return bands[band]
+def run_imfunc(infile, outfile, func):
+    '''Runs imfunc on the given image.
 
-def ellipseOnBands(BASEDIR, WISErow, baseparamname, output, mask=""):
-    '''Runs ellipse on all bands for a given galaxy.
+    All possible functions can be viewed in the imfunc documentation. The
+    currently relevant ones are:
 
-    This function will take a WISE row corresponding to a particular galaxy and
-    then run the ellipse package for all bands in that galaxy folder. 
+    square - Square the image.
     '''
+    # There's a really shitty IRAF "feature" where if imfunc acts on a file
+    # which already exists, it will simply add on another layer, which
+    # confuses the hell out of ellipse. So if a previous file exists, I'll
+    # delete it manually.
+    if os.path.isfile(varfile):
+        os.remove(varfile)
+    run_imfunc(uncfile, varfile, "square")
+
+    iraf.images()
+    iraf.imutil()
+    iraf.imfunc(infile, outfile, func)
+
 
 def genImageUncertainty(BASEDIR, WISErow, baseuncertainty="uncertainty",
         ellipsebase="ellipse_aperture", skybase="sky_level",
@@ -974,30 +1119,6 @@ def source_uncertainty_from_uncertainty_file(galaxydir, band, uncfile,
     output = format_band_dependence(baseuncertainty,
         band, "tab", galaxydir)
     run_ellipse(varfile, ellipse_file, output)
-
-
-
-def run_imfunc(infile, outfile, func):
-    '''Runs imfunc on the given image.
-
-    All possible functions can be viewed in the imfunc documentation. The
-    currently relevant ones are:
-
-    square - Square the image.
-    '''
-    # There's a really shitty IRAF "feature" where if imfunc acts on a file
-    # which already exists, it will simply add on another layer, which
-    # confuses the hell out of ellipse. So if a previous file exists, I'll
-    # delete it manually.
-    if os.path.isfile(varfile):
-        os.remove(varfile)
-    run_imfunc(uncfile, varfile, "square")
-
-    iraf.images()
-    iraf.imutil()
-    iraf.imfunc(infile, outfile, func)
-
-
 
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
         baseoutput="ellipse_aperture", mask="foreground.fits",
@@ -1148,6 +1269,90 @@ def sky_annulus_histogram(galaxydir, band, fitsky_output_base="sky_level",
     plt.title("{2} pixels centered at ({0:.0f}, {1:.0f}) ".format(Xval, Yval, 
         band) + "between {0:.0f} and {1:.0f} pixels".format(rin, rout))
     return imageval
+
+def test_if_in_elliptical_shell_portion(x, y, xcenter, ycenter, ain, bin, scale,
+        pa, angle1, angle2):
+    '''Tests if the point x,y lies within the portion of the elliptical shell.
+
+    All of these arguments should be in terms of pixels, except for the angles
+    and scale.  The angles should be given in units of degrees. Angle1 and 
+    Angle2 should also be in the range of -180 to 180. A scale of 1 would make
+    the outer ellipse identical to the inner ellipse.
+    
+    The angles are measured from the centers of the ellipses, not the foci.'''
+    xcen = x - xcenter
+    ycen = y - ycenter
+    withininner = test_if_in_ellipse(x, y, xcenter, ycenter, ain, bin, pa)
+    withinouter = test_if_in_ellipse(x, y, xcenter, ycenter, ain*scale,
+            bin*scale, pa)
+    inportion = angle2 >= np.arctan2(ycen, xcen) - pa > angle1
+    return withinouter and not withininner and inportion
+
+def mask_elliptical_shell_portion(x, y, xcenter, ycenter, ain, bin, scale, pa, 
+    angle1, angle2)
+
+def background_from_patches(image, xcenter, ycenter, ainit, binit, pa, area,
+        minpatches, mask=""):
+    '''Calculates background from a series of elliptical patches.
+
+    There needs to be an initial specification of an ellipse, which is given by
+    xcenter, ycenter, ainit, binit, and pa. From that initial ellipse, patches
+    will be calculated to be between that ellipse and a larger ellipse chosen to
+    make the patch areas close to area. Once all patches from the initial
+    elliptical annulus are used, another annulus is made using the same
+    algorithm with the previously larger annulus used as the smaller one. This
+    process continues until the total number of patches is greater than
+    minpatch.
+    '''
+    bgsample = []
+    while len(bgsample) < minpatches:
+        # We note that dr is independent of what the actual ellipse parameters
+        # are.
+        dr = calc_background_ellipse_difference(area)
+        # We're going to use the semiminor axis to determine the scale factor
+        # between the two ellipses. This is to ensure that EVERY patch has at 
+        # least area pixels in it. Other patches may have more.
+        bout = binit + dr
+        scale = bout / bin
+        aout = ainit * scale
+        angle1 = angle2 = -180
+        while angle2 < 180:
+            rin1 = ellipsepolarfunc(ainit, aout, angle1)
+            angle2 = angle1 + calculate_background_ellipse_difference_angle( dr,
+                    rin)
+            bgsample += patch_background(image, xcenter, ycenter, ainit, 
+                    ainit * scale, pa, angle1, angle2)
+
+
+def ellipsepolarfunc(a, b, theta):
+    '''Returns the radius form of an ellipse given an angle.
+
+    This function is in a polar coordinate system centered at the center of the
+    ellipse, not at a focus.
+    '''
+    return a * b / np.sqrt((b * np.cos(theta))**2 + (a * np.sin(theta))**2)
+
+def calc_ellipse_bounds(rin, angle1, area):
+    '''Calculates bounds for an ellipse portion.
+
+    The result will be a 4-tuple containing rin, rout, angle1, and angle2. The
+    outer radius and outer angle will be determined by the constraint to be as
+    close to the area as possible, as well as being most "square".
+    '''
+    dr = calc_background_ellipse_size(rin, area)
+    rout = rin + dr
+    angle2 = angle1 + calc_background_ellipse_angle_difference(rin, dr)
+    return (rin, rout, angle1, angle2)
+
+def calc_background_ellipse_difference(area):
+    '''Calculates the ellipse size which will lead to squarish patches.'''
+    dr = np.sqrt(area)
+    return dr
+
+def calc_background_ellipse_angle_difference(r, dr):
+    '''Calculates the angle cut which will lead to squarish patches.'''
+    dtheta = dr / r
+    return dtheta
 
 def test_if_in_ellipse(x, y, xcenter, ycenter, a, b, pa):
     '''Tests if the point x,y lies within the described ellipse.
@@ -1931,6 +2136,15 @@ def elliptical_fit(galaxydir, image, center, ellipticity, position_angle,
 # Miscellaneous Photometry Routines
 ###############################################################################
 
+# This is probably not miscellaneous enough for this section, but I'm not
+# exactly sure where it should go.
+def getPixelScale(band):
+    '''Returns the pixel scale for an image in a given band. Scale is
+    given as arcsec/pixel.'''
+    bands = {"W1": 1.37, "W2": 1.37, "W3": 1.37, "W4": 1.37, "NUV": 1.5, 
+             "FUV": 1.5}
+    return bands[band]
+
 def Gil_de_Paz_Table_1_to_WISE_table(GdP_Table1):
     gdp1 = GdP_Table1
     objstr = gdp1["Name"]
@@ -2084,3 +2298,13 @@ def rreplace(s, old, new, occurrence):
     '''
     li = s.rsplit(old, occurrence)
     return new.join(li)
+
+def band_dictionary(lookups, keys):
+    '''Creates a dictionary where the keys are a list of band names, and the 
+    values are in lookups.'''
+    thedic = {}
+    for i, band in enumerate(bands):
+        thedic[band] = lookups[i]
+    return thedic
+
+adaptive_background = band_dictionary(["annulus"]*6, bands)
