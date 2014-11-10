@@ -31,6 +31,8 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
 
+STSDAS_COLUMN = "/home/regulus/simonian/year1/wise/ellipse_columns.txt"
+
 ###############################################################################
 # Aperture Photometry Routines                                                #
 ###############################################################################
@@ -163,7 +165,8 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
             alt_mask=alt_mask)
     print "Making Sky Tables..."
     allSkyValues(BASEDIR, WISETable, runbands=runbands, coordbase=skycoord, 
-            baseskyfile=skybase, skygens=skygens, ellipsebase=ellipsepars)
+            baseskyfile=skybase, skygens=skygens, ellipsebase=ellipsepars,
+            mask=maskoutput, alt_mask=alt_mask)
     print "Making Uncertainty Tables..."
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
             ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
@@ -217,6 +220,17 @@ def annulus_sky_estimation(galaxydir, band, baseskyfile="sky_level"):
     skylevel = skydata["MSKY"][0]
     return skylevel
 
+def patch_sky_estimation(galaxydir, band, baseskyfile="sky_level"):
+    '''Returns the estimated background for a particular galaxy.
+
+    This function uses the routine calculated from patches on elliptical annuli
+    in order to get an estimate of the background level.
+    '''
+    skypath = format_band_dependence(baseskyfile, band, "txt", pathto=galaxydir)
+    skydata = Table.read(skypath, format="ascii.basic")
+    skylevel = skydata["background"][0]
+    return skylevel
+
 def estimate_background(galaxydir, band, skybase="sky_level",
         skymethod="adaptive"):
     '''Background estimator for all bands.
@@ -247,6 +261,7 @@ def estimate_background(galaxydir, band, skybase="sky_level",
     elif skymethod.lower() == "patch":
         background = patch_sky_estimation(galaxydir, band, baseskyfile=skybase)
     return background
+
 
 def readSkyTable(galaxydir, band, area, baseellipsefile="sky_aperture"):
     '''Generates a background flux from an existing table.
@@ -316,8 +331,8 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     skyParams = Table.read(os.path.join(galaxydir,
         format_band_dependence(skybase, band, "txt")), 
         format="ascii.daophot")
-    NB = skyParams["NSKY"][0]
-    sig_B = skyParams["STDEV"][0]
+    NB = get_sky_pixels(galaxydir, skybase, skymethod)
+    sig_B = get_sky_error(galaxydir, skybase, skymethod)
     total_sigi = imageUncertainty["TFLUX_E"]
     Fcorr = calculate_correlated_pixel_noise(band)
     # We get the background level from centroiding, which seems like a
@@ -331,6 +346,39 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     sourceerr = np.sqrt(fapcor**2 * Fcorr * (total_sigi + k * NA**2 / NB * 
         sig_B**2) + sig_conf**2)
     return sourceerr
+
+def get_sky_error(galaxydir, skybase, method="adaptive"):
+    '''Extracts the error in the sky measurement from a method.
+
+    This function is meant to retrieve sky errors based on which method was used
+    to pick them out.
+    '''
+    if method.lower() == "patch":
+        skyParams=Table.read(os.path.join(galaxydir,
+            format_band_dependence(skybase, band, "txt")), format="ascii.basic")
+        error = skyParams["error"][0]
+    elif method.lower() == "annulus":
+        skyParams=Table.read(os.path.join(galaxydir,
+            format_band_dependence(skybase, band, "txt")), 
+            format="ascii.daophot")
+        error = skyParams["STDEV"][0]
+    return error
+    
+def get_sky_pixels(galaxydir, skybase, method="adaptive"):
+    '''Extracts the number of pixels used to determine the sky value.
+
+    This function is meant to retrieve the sky pixels based on the method used
+    to determine the background.
+    '''
+    if method.lower() == "patch":
+        skyParams=Table.read(os.path.join(galaxydir,
+            format_band_dependence(skybase, band, "txt")), format="ascii.basic")
+        pixels = skyParams["patches"][0]
+    elif method.lower() == "annulus":
+        skyParams = Table.read(os.path.join(galaxydir,
+            format_band_dependence(skybase, band, "txt")),
+            format="ascii.daophot")
+        pixels = skyParams["NSKY"][0]
 
 ##############################################################################
 # Path Routines #
@@ -640,7 +688,8 @@ def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty",
             skybase=skybase, skymethod=skymethod, runbands=runbands)
 
 def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky", 
-        baseskyfile="sky_level", skygens="adaptive", ellipsebase="ellipsepars"):
+        baseskyfile="sky_level", skygens="adaptive", ellipsebase="ellipsepars",
+        mask="foreground.fits", alt_mask="foreground_alt.fits"):
     '''Goes through BASEDIR and generates all sky tables.
 
     This function also allows for single-object corrections to be made.
@@ -787,7 +836,8 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         ellipsebase="ellipsepars", baseskyfile="sky_level", skygens="adaptive", 
-        skyratio=2.5, annulus=0, dannulus=30, runbands=bands):
+        skyratio=2.5, annulus=0, dannulus=30, runbands=bands, patch_area=4000,
+        num_patches=90, mask="foreground.fits", alt_mask="foreground_alt.fits"):
     '''Generates sky values for each galaxy.
     
     The sky values can be generated in two ways: through an annulus or through a
@@ -805,21 +855,51 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     rule like this, but I think we'll have enough leeway with our object to make
     this approximation.'''
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-
+    if os.path.exists(os.path.join(galaxydir, alt_mask)):
+        mask=alt_mask
 
     # If annulus is 0, that means we want to scale the annulus off of the
     # aperture. If we don't make a separate annulus_override variable, 
     # setting annulus for W1 is disable resetting it for W2-4.
     for band in runbands:
-        if skygens.lower() is "adaptive":
+        if skygens.lower() == "adaptive":
             skygens = adaptive_background[band]
-        if skygens is "aperture":
+        if skygens.lower() == "aperture":
             measure_sky_from_skyfile(galaxydir, band, baseskyfile, ellipsebase)
-        elif skygens.lower() is "annulus":
+        elif skygens.lower() == "annulus":
             measure_sky_from_annulus(galaxydir, band, coordbase, baseskyfile,
                     ellipsebase, annulus, skyratio, dannulus)
-        elif skygens.lower() is "patch":
-            measure_sky_from_patches
+        elif skygens.lower() == "patch":
+            measure_sky_from_patches(galaxydir, band, patch_area, num_patches, 
+                    baseskyfile, ellipsebase, skyratio, mask=mask)
+
+def measure_sky_from_patches(galaxydir, band, area=1000, minpatches=1000,
+        baseskyfile="sky_level", ellipsebase="ellipsepars", scale=1.5, mask=""):
+    '''Uses elliptical patches to measure the sky level from an image.
+
+    This function takes squar-ish patches with an area approximately equal to
+    the area given to estimate the background. The minimum number of patches
+    to be used is given as minpatches. 
+    '''
+    ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
+            format_band_dependence(ellipsebase, band, "tab"))
+    imagepath = match_filter(galaxydir, band)
+    maskpath = os.path.join(galaxydir, mask)
+    xcenter, ycenter = ellipsepars["X0"][0], ellipsepars["Y0"][0]
+    semimajor = scale * ellipsepars["SMA"][0]
+    semiminor = semimajor * (1 - ellipsepars["ELLIP"][0])
+    pa = ellipsepars["PA"][0]
+    patchbackgrounds = background_from_patches(imagepath, xcenter, ycenter,
+            semimajor, semiminor, pa, area, minpatches, maskpath)
+    print patchbackgrounds
+    tableoutline = {"name": [os.path.split(imagepath)[1]], "X0": [xcenter], 
+            "Y0": [ycenter], "A0": [semimajor], "B0": [semiminor], 
+            "background": [patchbackgrounds.mean()], "error": 
+            [patchbackgrounds.std()], "patches": [len(patchbackgrounds)]} 
+    backgroundtable = Table(tableoutline)
+    backgroundtable.write(format_band_dependence(baseskyfile, band, "txt",
+        galaxydir), format="ascii.basic")
+
 
 def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
         baseskyfile="sky_level", ellipsebase="ellipsepars", annulus=0, 
@@ -931,14 +1011,35 @@ def test_if_in_elliptical_shell_portion(x, y, xcenter, ycenter, ain, bin, scale,
     withininner = test_if_in_ellipse(x, y, xcenter, ycenter, ain, bin, pa)
     withinouter = test_if_in_ellipse(x, y, xcenter, ycenter, ain*scale,
             bin*scale, pa)
-    inportion = angle2 >= np.arctan2(ycen, xcen) - pa > angle1
-    return withinouter and not withininner and inportion
+    angles = np.arctan2(ycen, xcen)
+    inportion = np.logical_and(angle2 >= angles, angles > angle1)
+    return np.logical_and(np.logical_and(withinouter,
+        np.logical_not(withininner)), inportion)
 
-def mask_elliptical_shell_portion(x, y, xcenter, ycenter, ain, bin, scale, pa, 
-    angle1, angle2)
+def mask_elliptical_shell_portion(image, xcenter, ycenter, ain, bin, scale, pa, 
+        angle1, angle2):
+    image_coords = np.indices(image.shape)
+    mask = np.logical_not(test_if_in_elliptical_shell_portion(image_coords[1], 
+            image_coords[0], xcenter-1, ycenter-1, ain, bin, scale, pa, angle1, 
+            angle2))
+    return mask
 
-def background_from_patches(image, xcenter, ycenter, ainit, binit, pa, area,
-        minpatches, mask=""):
+def patch_background(image, xcenter, ycenter, ain, bin, scale, pa, angle1, 
+        angle2):
+    '''Calculates the background in an elliptical segment on an image
+    
+    Takes an image as a numpy array, and then finds the background at the
+    elliptical segment by taking the mean value.
+    '''
+    ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter, ain,
+            bin, scale, pa, angle1, angle2)
+    segmentimage = np.ma.array(image, mask=ellipsewindow)
+    background = segmentimage.mean()
+    print background
+    return background
+
+def background_from_patches(imagepath, xcenter, ycenter, ainit, binit, pa, area,
+        numpatches, maskpath=""):
     '''Calculates background from a series of elliptical patches.
 
     There needs to be an initial specification of an ellipse, which is given by
@@ -951,6 +1052,36 @@ def background_from_patches(image, xcenter, ycenter, ainit, binit, pa, area,
     minpatch.
     '''
     bgsample = []
+    imagedata = fits.getdata(imagepath)
+    imagemask = fits.getdata(maskpath)
+    image = np.ma.array(imagedata, mask=imagemask)
+
+
+    initarea = math.pi * ainit * binit
+    annulusarea = area * numpatches / 2
+
+    amid = ainit * np.sqrt(annulusarea / initarea + 1)
+    midscale = amid / ainit
+    bmid = binit * midscale
+    midarea = math.pi * amid * bmid
+
+    aout = amid * np.sqrt(annulusarea / midarea + 1)
+    outscale = aout / amid
+    bout = bmid * outscale
+
+    numsections = numpatches / 2
+
+    angles = np.linspace(-math.pi, math.pi, numsections)
+    for angle1, angle2 in zip(angles[:-1], angles[1:]):
+        bgsample.append(patch_background(image, xcenter, ycenter, ainit, binit,
+                midscale, pa, angle1, angle2))
+    for angle1, angle2 in zip(angles[:-1], angles[1:]):
+        bgsample.append(patch_background(image, xcenter, ycenter, amid, bmid,
+                outscale, pa, angle1, angle2))
+    return np.array(bgsample)
+
+def background_from_patches_old(imagepath, xcenter, ycenter, ainit, binit, pa,
+        area, numpatches, mask=""):
     while len(bgsample) < minpatches:
         # We note that dr is independent of what the actual ellipse parameters
         # are.
@@ -961,13 +1092,13 @@ def background_from_patches(image, xcenter, ycenter, ainit, binit, pa, area,
         bout = binit + dr
         scale = bout / bin
         aout = ainit * scale
-        angle1 = angle2 = -180
-        while angle2 < 180:
-            rin1 = ellipsepolarfunc(ainit, aout, angle1)
-            angle2 = angle1 + calculate_background_ellipse_difference_angle( dr,
-                    rin)
-            bgsample += patch_background(image, xcenter, ycenter, ainit, 
-                    ainit * scale, pa, angle1, angle2)
+        dtheta = dr / ain 
+        angles = np.arange(-math.pi, math.pi, dtheta)
+        for angle1, angle2 in zip(angles[:-1], angles[1:]):
+            print (patch_background(image, xcenter, ycenter, ainit, 
+                    binit, scale, pa, angle1, angle2))
+        ainit, binit = aout, bout
+    return np.array(bgsample)
 
 
 def ellipsepolarfunc(a, b, theta):
@@ -1165,17 +1296,14 @@ def genApertureTable(BASEDIR, WISErow, outputbase="ellipsepars", runbands=bands)
     band names. Otherwise, don't fiddle with it.'''
 
     objectdir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    columnfile = os.path.join(BASEDIR, "../ellipse_columns.txt")
     for band in runbands:
         output = format_band_dependence(outputbase, band)
         tableForEllipseRoutine = extractEllipseParamsfromWISE(BASEDIR, WISErow,
                 band)
-        createEllipseParamTable(objectdir, tableForEllipseRoutine, output, 
-                columnfile)
+        createEllipseParamTable(objectdir, tableForEllipseRoutine, output)
 
 
-def createEllipseParamTable(galaxydir, params, outputfile,
-            colfile="../../ellipse_columns.txt"):
+def createEllipseParamTable(galaxydir, params, outputfile):
     '''Creates a parameter table for the ellipse routine.
 
     The table will essentially have the X0, Y0, SMA, PA, and ELLIP
@@ -1191,10 +1319,9 @@ def createEllipseParamTable(galaxydir, params, outputfile,
     # I call os.path.normpath here because I expect the column to be in
     # a parent directory. I guess to be absolutely safe, I should call
     # it on all input to IRAF tasks.
-    iraf.tcreate(os.path.join(galaxydir, outputfile),
-            os.path.normpath(os.path.join(galaxydir, colfile)), tempfile)
+    iraf.tcreate(os.path.join(galaxydir, outputfile), STSDAS_COLUMN, tempfile)
 
-def extractEllipseParamsfromWISE(BASEDIR, WISErow, band):
+def extractEllipseParamsfromWISE(objectdir, WISErow, band):
     '''Converts WISE constraints to ellipse task constraintsu
 
     The directory information is needed to correct WCS
@@ -1204,7 +1331,6 @@ def extractEllipseParamsfromWISE(BASEDIR, WISErow, band):
     
     This can be used in conjunction with the createEllipseParamTable
     function to create inellip apertures for the ellipse task.'''
-    objectdir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     pixelscale = getPixelScale(band)
     # We first want the ellipticity:
     # There's a minimum value to the ellipticity, so we can't have it be less
@@ -1968,4 +2094,4 @@ def band_dictionary(lookups, keys):
         thedic[band] = lookups[i]
     return thedic
 
-adaptive_background = band_dictionary(["annulus"]*6, bands)
+adaptive_background = band_dictionary(["annulus"]*4 + ["patch"]*2, bands)
