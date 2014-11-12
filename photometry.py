@@ -67,7 +67,7 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     aperture_area = ellipsetable[0]["NPIX_E"]
     # Right now we will only support sky backgrounds done through the 
     # pipeline.
-    background = estimate_background(galaxydir, band, useskybase, skymethod)
+    background = read_background(galaxydir, band, useskybase, skymethod)
     if apertureCorrection:
         fapcor = aperture_correction_factor(band)
     else:
@@ -131,8 +131,8 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
 def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
         maskoutput="foreground.fits", ellipsepars="ellipsepars",
         maskconfigbase="default", ellipseoutput="ellipse_aperture",
-        skycoord="fitsky", skybase="sky_level", skygens="adaptive", 
-        uncertaintybase="uncertainty", skipmask=False,
+        skycoord="fitsky", skybase="sky_level", skygens="adaptive",
+        skyratio=1.5, uncertaintybase="uncertainty", skipmask=False,
         alt_mask="foreground_alt.fits", runbands=bands):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
@@ -168,7 +168,7 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
     print "Making Sky Tables..."
     allSkyValues(BASEDIR, WISETable, runbands=runbands, coordbase=skycoord, 
             baseskyfile=skybase, skygens=skygens, ellipsebase=ellipsepars,
-            mask=maskoutput, alt_mask=alt_mask)
+            mask=maskoutput, alt_mask=alt_mask, skyratio=skyratio)
     print "Making Uncertainty Tables..."
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
             ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
@@ -233,7 +233,7 @@ def patch_sky_estimation(galaxydir, band, baseskyfile="sky_level"):
     skylevel = skydata["background"][0]
     return skylevel
 
-def estimate_background(galaxydir, band, skybase="sky_level",
+def read_background(galaxydir, band, skybase="sky_level",
         skymethod="adaptive"):
     '''Background estimator for all bands.
 
@@ -251,7 +251,7 @@ def estimate_background(galaxydir, band, skybase="sky_level",
     be affixed to the skybase, so that sky file will need to be built in the
     pipeline.
     '''
-    if skymethod.lower() is "adaptive":
+    if skymethod.lower() == "adaptive":
         skymethod = adaptive_background[band]
 
     if skymethod.lower() == "aperture":
@@ -349,12 +349,14 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
         sig_B**2) + sig_conf**2)
     return sourceerr
 
-def get_sky_error(galaxydir, skybase, method="adaptive"):
+def get_sky_error(galaxydir, band, skybase, method="adaptive"):
     '''Extracts the error in the sky measurement from a method.
 
     This function is meant to retrieve sky errors based on which method was used
     to pick them out.
     '''
+    if method.lower() == "adaptive":
+        method = adaptive_background[band]
     if method.lower() == "patch":
         skyParams=Table.read(os.path.join(galaxydir,
             format_band_dependence(skybase, band, "txt")), format="ascii.basic")
@@ -779,8 +781,17 @@ def match_filter(directory, filter, fullpath=True, uncertainty=False,
         sky=False):
     '''Finds the image which corresponds to the filter.
 
-    For WISE images, this will require searching for "w?" in the
-    strings.'''
+    This is a great way of determining what the filename is for an image for a
+    given galaxy for a given band. The only two type currently installed are
+    WISE images as well as GALEX images. These images need to be present in the
+    directory in order for this function to work. They also need to have
+    retained their original names. When the fullpath option is disabled, only
+    the image name will be returned, not the full path of the image.
+    
+    There are a number of options to match_filter to change what type of image
+    you would like. The uncertainty option returns the path to the uncertainty
+    image (whether or not one exists). The sky option returns the path to the
+    sky background image (whether or not that exists).'''
     filtermap = {"W1": "w1-int", "W2": "w2-int", "W3": "w3-int", "W4": "w4-int",
             "FUV": "fd-int", "NUV": "nd-int"}
     filterstring = filtermap[filter]
@@ -800,6 +811,16 @@ def match_filter(directory, filter, fullpath=True, uncertainty=False,
         if not fullpath:
             imagefile = os.path.basename(imagefile)
         return imagefile
+
+def load_image(galaxydir, band, uncertainty=False, sky=False):
+    '''Loads a FITS image of a galaxy.
+
+    This is an extension of match_filter which not just gets the image filename,
+    but rather loads the entire FITS image.
+    '''
+    imagepath = match_filter(galaxydir, band, uncertainty=uncertainty, sky=sky)
+    image = fits.getdata(imagepath)
+    return image
 
 def complete_for_bands(BASEDIR, objname, checkbands=bands):
     '''Determines if an object has full WISE and UV observations.
@@ -1139,7 +1160,7 @@ def source_uncertainty_from_image(galaxydir, band, image,
     ellipsepars = format_band_dependence(ellipsebase, band, "tab", galaxydir)
     output = format_band_dependence(outputbase, band, "tab", galaxydir)
 
-    skybackground = estimate_background(galaxydir, band, skybase=skybase,
+    skybackground = read_background(galaxydir, band, skybase=skybase,
             skymethod=skymethod)
 
     header = fits.getheader(image)
@@ -1325,7 +1346,7 @@ def test_if_in_elliptical_shell_portion(x, y, xcenter, ycenter, ain, bin, scale,
 
     All of these arguments should be in terms of pixels, except for the angles
     and scale.  The angles should be given in units of degrees. Angle1 and 
-    Angle2 should also be in the range of -180 to 180. A scale of 1 would make
+    Angle2 should also be in the range of -pi to pi. A scale of 1 would make
     the outer ellipse identical to the inner ellipse.
     
     The angles are measured from the centers of the ellipses, not the foci.'''
@@ -1334,7 +1355,10 @@ def test_if_in_elliptical_shell_portion(x, y, xcenter, ycenter, ain, bin, scale,
     withininner = test_if_in_ellipse(x, y, xcenter, ycenter, ain, bin, pa)
     withinouter = test_if_in_ellipse(x, y, xcenter, ycenter, ain*scale,
             bin*scale, pa)
-    angles = np.arctan2(ycen, xcen)
+    # This moves the angle from being 0 at (1, 0) to being 0 at the P.A.
+    # i.e. this angle is zero on the major axis.
+    angles = np.arctan2(ycen, xcen) - pa * math.pi / 180 - math.pi / 2
+    angles[np.where(angles < -math.pi)] += 2*math.pi
     inportion = np.logical_and(angle2 >= angles, angles > angle1)
     return np.logical_and(np.logical_and(withinouter,
         np.logical_not(withininner)), inportion)
@@ -1345,21 +1369,27 @@ def mask_elliptical_shell_portion(image, xcenter, ycenter, ain, bin, scale, pa,
     mask = np.logical_not(test_if_in_elliptical_shell_portion(image_coords[1], 
             image_coords[0], xcenter-1, ycenter-1, ain, bin, scale, pa, angle1, 
             angle2))
+    #plt.imshow(mask)
+    plt.show()
     return mask
 
 def patch_background(image, xcenter, ycenter, ain, bin, scale, pa, angle1, 
         angle2):
-    '''Calculates the background in an elliptical segment on an image
+    '''Calculates the background and error in an elliptical segment
     
     Takes an image as a numpy array, and then finds the background at the
-    elliptical segment by taking the mean value.
+    elliptical segment by taking the mean value. It also returns the standard
+    deviation within that patch.
     '''
+    print "Calculating mask"
     ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter, ain,
             bin, scale, pa, angle1, angle2)
+    print "Applying mask"
     segmentimage = np.ma.array(image, mask=ellipsewindow)
-    background = segmentimage.mean()
-    print background
-    return background
+    print "Done applying mask"
+    background = np.ma.extras.median(segmentimage)
+    std = segmentimage.std()
+    return (background, std)
 
 def background_from_patches(imagepath, xcenter, ycenter, ainit, binit, pa, area,
         numpatches, maskpath=""):
@@ -1375,13 +1405,15 @@ def background_from_patches(imagepath, xcenter, ycenter, ainit, binit, pa, area,
     minpatch.
     '''
     bgsample = []
+    stdsample = []
     imagedata = fits.getdata(imagepath)
     imagemask = fits.getdata(maskpath)
-    image = np.ma.array(imagedata, mask=imagemask)
+    fullimage = np.ma.array(imagedata, mask=imagemask)
+
 
 
     initarea = math.pi * ainit * binit
-    annulusarea = area * numpatches / 2
+    annulusarea = area * numpatches / 2.0
 
     amid = ainit * np.sqrt(annulusarea / initarea + 1)
     midscale = amid / ainit
@@ -1391,17 +1423,28 @@ def background_from_patches(imagepath, xcenter, ycenter, ainit, binit, pa, area,
     aout = amid * np.sqrt(annulusarea / midarea + 1)
     outscale = aout / amid
     bout = bmid * outscale
+    image = fullimage[ycenter-(aout+5):ycenter+(aout+5),
+            xcenter-(aout+5):xcenter+(aout+5)]
+    newxcenter = newycenter = aout+2.5
 
     numsections = numpatches / 2
 
-    angles = np.linspace(-math.pi, math.pi, numsections)
+    angles = np.linspace(-math.pi, math.pi, numsections+1)
     for angle1, angle2 in zip(angles[:-1], angles[1:]):
-        bgsample.append(patch_background(image, xcenter, ycenter, ainit, binit,
-                midscale, pa, angle1, angle2))
+        # Because we're using a view centered on the actual image, we'll set the
+        # center bits to 0.
+        print "Patch #{0}".format(len(bgsample))
+        bg, std = patch_background(image, newxcenter, newycenter, ainit, binit,
+                midscale, pa, angle1, angle2)
+        bgsample.append(bg)
+        stdsample.append(std)
     for angle1, angle2 in zip(angles[:-1], angles[1:]):
-        bgsample.append(patch_background(image, xcenter, ycenter, amid, bmid,
-                outscale, pa, angle1, angle2))
-    return np.array(bgsample)
+        print "Patch #{0}".format(len(bgsample))
+        bg, std = patch_background(image, newxcenter, newycenter, amid, bmid,
+                outscale, pa, angle1, angle2)
+        bgsample.append(bg)
+        stdsample.append(std)
+    return (np.array(bgsample), np.array(stdsample))
 
 def background_from_patches_old(imagepath, xcenter, ycenter, ainit, binit, pa,
         area, numpatches, mask=""):
@@ -1460,11 +1503,11 @@ def test_if_in_ellipse(x, y, xcenter, ycenter, a, b, pa):
     All of the arguments should make sense except for pa. PA should be given in
     degees E of N.
     '''
-    alpha = (pa + 90) * math.pi / 180.0
+    alpha = (pa+90) * math.pi / 180.0
     xcen = x - xcenter
     ycen = y - ycenter
-    return (xcen * math.cos(alpha) + ycen * math.sin(alpha))**2 / b**2 + (xcen *
-            math.sin(alpha) - ycen * math.cos(alpha))**2 / a**2 < 1
+    return (xcen * math.cos(alpha) + ycen * math.sin(alpha))**2 / a**2 + (xcen *
+            math.sin(alpha) - ycen * math.cos(alpha))**2 / b**2 < 1
 
 def test_if_in_annulus(x, y, xcenter, ycenter, rin, rout):
     '''Tests if the point x,y lies within the described annulus.
