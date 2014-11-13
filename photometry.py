@@ -453,14 +453,20 @@ def match_filter(directory, filter, fullpath=True, uncertainty=False,
             imagefile = os.path.basename(imagefile)
         return imagefile
 
-def load_image(galaxydir, band, uncertainty=False, sky=False):
+def load_image(galaxydir, band, mask="", uncertainty=False, sky=False):
     '''Loads a FITS image of a galaxy.
 
     This is an extension of match_filter which not just gets the image filename,
     but rather loads the entire FITS image.
     '''
     imagepath = match_filter(galaxydir, band, uncertainty=uncertainty, sky=sky)
-    image = np.ma.array(fits.getdata(imagepath))
+    maskpath = os.path.join(galaxydir, mask)
+
+    try:
+        mask = fits.getdata(maskpath)
+    except IOError:
+        mask = np.ma.nomask
+    image = np.ma.array(fits.getdata(imagepath), mask=mask)
     mask_invalid_areas(image, band)
     return image
 
@@ -473,7 +479,9 @@ def mask_invalid_areas(image, band):
     parts will just be masked out.
     '''
     if band in UVBANDS:
-
+        xcenter, ycenter = (1915, 1946)
+        radius = 1459
+        mask_circle(image, xcenter, ycenter, radius)
 
 def complete_for_bands(BASEDIR, objname, checkbands=bands):
     '''Determines if an object has full WISE and UV observations.
@@ -916,13 +924,13 @@ def measure_sky_from_patches(galaxydir, band, area=1000, minpatches=1000,
     '''
     ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(ellipsebase, band, "tab"))
-    imagepath = match_filter(galaxydir, band)
+    image = load_image(galaxydir, band)
     maskpath = os.path.join(galaxydir, mask)
     xcenter, ycenter = ellipsepars["X0"][0], ellipsepars["Y0"][0]
     semimajor = scale * ellipsepars["SMA"][0]
     semiminor = semimajor * (1 - ellipsepars["ELLIP"][0])
     pa = ellipsepars["PA"][0]
-    patchbackgrounds, patchstandards = background_from_patches(imagepath, 
+    patchbackgrounds, patchstandards = background_from_patches(image, 
             xcenter, ycenter, semimajor, semiminor, pa, area, minpatches, 
             maskpath)
     tableoutline = {"name": [os.path.split(imagepath)[1]], "X0": [xcenter], 
@@ -1079,8 +1087,8 @@ def patch_background(image, xcenter, ycenter, ain, bin, scale, pa, angle1,
     std = segmentimage.std()
     return (background, std)
 
-def background_from_patches(imagepath, xcenter, ycenter, ainit, binit, pa, area,
-        numpatches, maskpath=""):
+def background_from_patches(image, xcenter, ycenter, ainit, binit, pa, area,
+        numpatches):
     '''Calculates background from a series of elliptical patches.
 
     There needs to be an initial specification of an ellipse, which is given by
@@ -1095,7 +1103,6 @@ def background_from_patches(imagepath, xcenter, ycenter, ainit, binit, pa, area,
     bgsample = []
     stdsample = []
     imagedata = fits.getdata(imagepath)
-    imagemask = fits.getdata(maskpath)
     fullimage = np.ma.array(imagedata, mask=imagemask)
 
 
