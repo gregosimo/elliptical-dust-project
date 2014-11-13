@@ -819,8 +819,20 @@ def load_image(galaxydir, band, uncertainty=False, sky=False):
     but rather loads the entire FITS image.
     '''
     imagepath = match_filter(galaxydir, band, uncertainty=uncertainty, sky=sky)
-    image = fits.getdata(imagepath)
+    image = np.ma.array(fits.getdata(imagepath))
+    mask_invalid_areas(image, band)
     return image
+
+def mask_invalid_areas(image, band):
+    '''Masks out parts of the image which weren't exposed to the sky.
+
+    In particular, the GALEX image only has a circular region which contains sky
+    information. The rest is just zero, and is really annoying to work around
+    for objects that are close to the edge. In order to get around this, those
+    parts will just be masked out.
+    '''
+    if band in UVBANDS:
+
 
 def complete_for_bands(BASEDIR, objname, checkbands=bands):
     '''Determines if an object has full WISE and UV observations.
@@ -1381,13 +1393,10 @@ def patch_background(image, xcenter, ycenter, ain, bin, scale, pa, angle1,
     elliptical segment by taking the mean value. It also returns the standard
     deviation within that patch.
     '''
-    print "Calculating mask"
     ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter, ain,
             bin, scale, pa, angle1, angle2)
-    print "Applying mask"
     segmentimage = np.ma.array(image, mask=ellipsewindow)
-    print "Done applying mask"
-    background = np.ma.extras.median(segmentimage)
+    background = np.ma.mean(segmentimage)
     std = segmentimage.std()
     return (background, std)
 
@@ -1433,13 +1442,11 @@ def background_from_patches(imagepath, xcenter, ycenter, ainit, binit, pa, area,
     for angle1, angle2 in zip(angles[:-1], angles[1:]):
         # Because we're using a view centered on the actual image, we'll set the
         # center bits to 0.
-        print "Patch #{0}".format(len(bgsample))
         bg, std = patch_background(image, newxcenter, newycenter, ainit, binit,
                 midscale, pa, angle1, angle2)
         bgsample.append(bg)
         stdsample.append(std)
     for angle1, angle2 in zip(angles[:-1], angles[1:]):
-        print "Patch #{0}".format(len(bgsample))
         bg, std = patch_background(image, newxcenter, newycenter, amid, bmid,
                 outscale, pa, angle1, angle2)
         bgsample.append(bg)
@@ -1529,6 +1536,14 @@ def mask_ellipse(image, xcenter, ycenter, a, b, pa):
     mask = test_if_in_ellipse(image_coords[1], image_coords[0], xcenter-1,
             ycenter-1, a, b, pa)
     return mask
+
+def mask_circle(image, xcenter, ycenter, radius):
+    '''Creates a mask on the image which is shaped like a circle.
+
+    Image should be a numpy array, and xcenter and center should be in physical
+    pixels, not numpy indices; the conversion will take place in this function.
+    '''
+    return mask_ellipse(image, xcenter, ycenter, radius, radius, 0)
     
 def mask_annulus(image, xcenter, ycenter, rin, rout): 
     '''Masks out a circular annulus on an image.
