@@ -1405,7 +1405,7 @@ def patch_background(image, xcenter, ycenter, ain, bin, scale, pa, angle1,
     ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter, ain,
             bin, scale, pa, angle1, angle2)
     segmentimage = np.ma.array(image, mask=ellipsewindow)
-    background = np.ma.extras.median(segmentimage)
+    background = np.ma.mean(segmentimage)
     std = segmentimage.std()
     return (background, std)
 
@@ -1573,17 +1573,20 @@ def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion",
             parambase=parambase, runbands=runbands)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
-        skyAperture=True, skyimage=False):
+        skyAperture=True, skyimage=False, skyprefix="sky_level",
+        aperturefile="ellipse_aperture"):
     '''Runs through all objects and creates cutouts in their folder.
     '''
     current_backend = matplotlib.get_backend()
     matplotlib.use("Agg")
     runOnImages(BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands,
-            skyAperture=skyAperture, skyimage=skyimage)
+            skyAperture=skyAperture, skyimage=skyimage, skyprefix=skyprefix,
+            aperturefile=aperturefile)
     matplotlib.use(current_backend)
 
 def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
-        skyimage=False):
+        skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
+        skymethod="adaptive"):
     '''Creates a set of four cutouts with the aperture and sky ellipses
 
     A cutout for each band will be created that contains the aperture
@@ -1596,7 +1599,7 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         # be more direct, since those are actually used for photometry
         # and sky.
         aperturepars = STSDAS_to_Astropy_Table(galaxydir, 
-                format_band_dependence("ellipse_aperture", band, "tab"))
+                format_band_dependence(aperturefile, band, "tab"))
         gc = aplpy.FITSFigure(match_filter(galaxydir, band, sky=skyimage))
         gc.show_grayscale()
 
@@ -1610,7 +1613,8 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
             edgecolor="yellow")
         # Now make the sky annulus:
         if skyAperture:
-            drawSkyParams(galaxydir, band, gc)
+            drawSkyParams(galaxydir, band, gc, skyprefix=skyprefix,
+                    method=skymethod)
         if skyimage:
             filename = format_band_dependence(
                     object_name_to_dir(WISErow["objstr_01"]) + "_sky",
@@ -1630,6 +1634,8 @@ def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive")
     '''
     px = getPixelScale(band)
 
+    if method.lower() == "adaptive":
+        method = adaptive_background[band]
     if method.lower() == "annulus":
         skypars = Table.read(os.path.join(galaxydir,
             format_band_dependence("sky_level", band, "txt")),
@@ -1649,21 +1655,17 @@ def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive")
             format="ascii.basic")
         Xval, Yval = gc.pixel2world(skypars["X0"][0], 
                 skypars["Y0"][0])
-        semimajor_in = skypars["A0"] * px / 3600.0
-        semiminor_in = skypars["B0"] * px / 3600.0
-        semimajor_mid = skypars["A1"] * px / 3600.0
-        semiminor_mid = skypars["B1"] * px / 3600.0
-        semimajor_out = skypars["A2"] * px / 3600.0
-        semiminor_out = skypars["B2"] * px / 3600.0
+        semimajor_in = 2 * skypars["A0"] * px / 3600.0
+        semiminor_in = 2 * skypars["B0"] * px / 3600.0
+        semimajor_mid = 2 * skypars["A1"] * px / 3600.0
+        semiminor_mid = 2 * skypars["B1"] * px / 3600.0
+        semimajor_out = 2 * skypars["A2"] * px / 3600.0
+        semiminor_out = 2 * skypars["B2"] * px / 3600.0
         angle=skypars["PA"]
 
-        xvalues = np.array([Xval]*3)
-        yvalues = np.array([Yval]*3)
-        heights = np.array([semimajor_in, semimajor_mid, semimajor_out])
-        widths = np.array([semiminor_in, semiminor_mid, semiminor_out])
-        gc.show_ellipses([Xval]*3, [Yval]*3, [semimajor_in, semimajor_mid,
-            semimajor_out], [semiminor_in, semiminor_mid, semiminor_out],
-            angle=angle, edgecolor="cyan")
+        gc.show_ellipses([Xval]*3, [Yval]*3, [semiminor_in, semiminor_mid,
+            semiminor_out], [semimajor_in, semimajor_mid, semimajor_out],
+            angle=[angle]*3, edgecolor="cyan")
 
 
 
