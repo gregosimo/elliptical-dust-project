@@ -467,7 +467,7 @@ def load_image(galaxydir, band, mask="", uncertainty=False, sky=False):
     except IOError:
         mask = np.ma.nomask
     image = np.ma.array(fits.getdata(imagepath), mask=mask)
-    mask_invalid_areas(image, band)
+    image = mask_invalid_areas(image, band)
     return image
 
 def mask_invalid_areas(image, band):
@@ -479,9 +479,10 @@ def mask_invalid_areas(image, band):
     parts will just be masked out.
     '''
     if band in UVBANDS:
-        xcenter, ycenter = (1915, 1946)
-        radius = 1459
-        mask_circle(image, xcenter, ycenter, radius)
+        xcenter, ycenter = (1913, 1941)
+        radius = 1451
+        return np.ma.array(image, mask=np.logical_not(mask_circle(image,
+            xcenter, ycenter, radius)))
 
 def complete_for_bands(BASEDIR, objname, checkbands=bands):
     '''Determines if an object has full WISE and UV observations.
@@ -924,21 +925,25 @@ def measure_sky_from_patches(galaxydir, band, area=1000, minpatches=1000,
     '''
     ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(ellipsebase, band, "tab"))
+    imagename = match_filter(galaxydir, band, fullpath=False)
     image = load_image(galaxydir, band)
     maskpath = os.path.join(galaxydir, mask)
     xcenter, ycenter = ellipsepars["X0"][0], ellipsepars["Y0"][0]
     semimajor = scale * ellipsepars["SMA"][0]
     semiminor = semimajor * (1 - ellipsepars["ELLIP"][0])
     pa = ellipsepars["PA"][0]
-    patchbackgrounds, patchstandards = background_from_patches(image, 
-            xcenter, ycenter, semimajor, semiminor, pa, area, minpatches, 
-            maskpath)
-    tableoutline = {"name": [os.path.split(imagepath)[1]], "X0": [xcenter], 
-            "Y0": [ycenter], "A0": [semimajor], "B0": [semiminor], "PA": [pa],
+    patchbackgrounds, patchstandards, scales = background_from_patches(image, 
+            xcenter, ycenter, semimajor, semiminor, pa, area, minpatches)
+    tableoutline = {"name": [imagename], "X0": [xcenter], "Y0": [ycenter], 
+            "A0": [scales["ainit"]], "B0": [scales["binit"]], "A1":
+            [scales["amid"]], "B1": [scales["bmid"]], "A2": [scales["aout"]],
+            "B2": [scales["bout"]], "PA": [pa],
             "background": [patchbackgrounds.mean()], "error": 
-            [patchbackgrounds.std()], "dispersions": [patchstandards.mean()],
-            "patches": [len(patchbackgrounds)]} 
-    backgroundtable = Table(tableoutline)
+            [patchbackgrounds.std()], "dispersion": [patchstandards.mean()],
+            "patches": [np.ma.count(patchbackgrounds)]} 
+    backgroundtable = Table(tableoutline, names=["name", "X0", "Y0", 
+            "A0", "B0", "A1", "B1", "A2", "B2", "PA", "background", "error", 
+            "dispersion", "patches"])
     backgroundtable.write(format_band_dependence(baseskyfile, band, "txt",
         galaxydir), format="ascii.basic")
     return patchbackgrounds
@@ -1083,11 +1088,11 @@ def patch_background(image, xcenter, ycenter, ain, bin, scale, pa, angle1,
     ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter, ain,
             bin, scale, pa, angle1, angle2)
     segmentimage = np.ma.array(image, mask=ellipsewindow)
-    background = np.ma.mean(segmentimage)
+    background = np.ma.extras.median(segmentimage)
     std = segmentimage.std()
     return (background, std)
 
-def background_from_patches(image, xcenter, ycenter, ainit, binit, pa, area,
+def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
         numpatches):
     '''Calculates background from a series of elliptical patches.
 
@@ -1100,12 +1105,8 @@ def background_from_patches(image, xcenter, ycenter, ainit, binit, pa, area,
     process continues until the total number of patches is greater than
     minpatch.
     '''
-    bgsample = []
-    stdsample = []
-    imagedata = fits.getdata(imagepath)
-    fullimage = np.ma.array(imagedata, mask=imagemask)
-
-
+    bgsample = np.ma.zeros(numpatches)
+    stdsample = np.ma.zeros(numpatches)
 
     initarea = math.pi * ainit * binit
     annulusarea = area * numpatches / 2.0
@@ -1118,6 +1119,10 @@ def background_from_patches(image, xcenter, ycenter, ainit, binit, pa, area,
     aout = amid * np.sqrt(annulusarea / midarea + 1)
     outscale = aout / amid
     bout = bmid * outscale
+    # In order to move the numbers in and out of this function conveniently,
+    # we'll put them in the scales dictionary.
+    scales = {"ainit": ainit, "binit": binit, "amid": amid, "bmid": bmid,
+            "aout": aout, "bout": bout}
     image = fullimage[ycenter-(aout+5):ycenter+(aout+5),
             xcenter-(aout+5):xcenter+(aout+5)]
     newxcenter = newycenter = aout+2.5
@@ -1125,19 +1130,19 @@ def background_from_patches(image, xcenter, ycenter, ainit, binit, pa, area,
     numsections = numpatches / 2
 
     angles = np.linspace(-math.pi, math.pi, numsections+1)
-    for angle1, angle2 in zip(angles[:-1], angles[1:]):
+    for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
         # Because we're using a view centered on the actual image, we'll set the
         # center bits to 0.
         bg, std = patch_background(image, newxcenter, newycenter, ainit, binit,
                 midscale, pa, angle1, angle2)
-        bgsample.append(bg)
-        stdsample.append(std)
-    for angle1, angle2 in zip(angles[:-1], angles[1:]):
+        bgsample[i] = bg
+        stdsample[i] = std
+    for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
         bg, std = patch_background(image, newxcenter, newycenter, amid, bmid,
                 outscale, pa, angle1, angle2)
-        bgsample.append(bg)
-        stdsample.append(std)
-    return (np.array(bgsample), np.array(stdsample))
+        bgsample[i+numsections] = bg
+        stdsample[i+numsections] = std
+    return bgsample, stdsample, scales
 
 def background_from_patches_old(imagepath, xcenter, ycenter, ainit, binit, pa,
         area, numpatches, mask=""):
@@ -1303,19 +1308,7 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
             edgecolor="yellow")
         # Now make the sky annulus:
         if skyAperture:
-            skypars = Table.read(os.path.join(galaxydir,
-                format_band_dependence("sky_level", band, "txt")),
-                format="ascii.daophot")
-            Xval, Yval = gc.pixel2world(skypars["XINIT"][0], 
-                    skypars["YINIT"][0])
-            radius_in = (float(skypars.meta["keywords"]["ANNULUS"]["value"]) * 
-                    px / 3600.0)
-            radius_out = (radius_in +
-                float(skypars.meta["keywords"]["DANNULUS"]["value"]) * px / 
-                3600.0)
-            gc.show_circles([Xval]*2, [Yval]*2, [radius_in, radius_out],
-                    edgecolor="cyan")
-
+            drawSkyParams(galaxydir, band, gc)
         if skyimage:
             filename = format_band_dependence(
                     object_name_to_dir(WISErow["objstr_01"]) + "_sky",
@@ -1326,6 +1319,51 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
                     band, "png", galaxydir)
         gc.save(filename)
         plt.close("all")
+
+def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive"):
+    '''Draws shapes used for estimating the background values.
+
+    There are different methods used to measure the sky level, so this method
+    organizes which one should be used in order to get the correct answer.
+    '''
+    px = getPixelScale(band)
+
+    if method.lower() == "annulus":
+        skypars = Table.read(os.path.join(galaxydir,
+            format_band_dependence("sky_level", band, "txt")),
+            format="ascii.daophot")
+        Xval, Yval = gc.pixel2world(skypars["XINIT"][0], 
+                skypars["YINIT"][0])
+        radius_in = (float(skypars.meta["keywords"]["ANNULUS"]["value"]) * 
+                px / 3600.0)
+        radius_out = (radius_in +
+            float(skypars.meta["keywords"]["DANNULUS"]["value"]) * px / 
+            3600.0)
+        gc.show_circles([Xval]*2, [Yval]*2, [radius_in, radius_out],
+                edgecolor="cyan")
+    elif method.lower() == "patch":
+        skypars = Table.read(os.path.join(galaxydir,
+            format_band_dependence("sky_level", band, "txt")),
+            format="ascii.basic")
+        Xval, Yval = gc.pixel2world(skypars["X0"][0], 
+                skypars["Y0"][0])
+        semimajor_in = skypars["A0"] * px / 3600.0
+        semiminor_in = skypars["B0"] * px / 3600.0
+        semimajor_mid = skypars["A1"] * px / 3600.0
+        semiminor_mid = skypars["B1"] * px / 3600.0
+        semimajor_out = skypars["A2"] * px / 3600.0
+        semiminor_out = skypars["B2"] * px / 3600.0
+        angle=skypars["PA"]
+
+        xvalues = np.array([Xval]*3)
+        yvalues = np.array([Yval]*3)
+        heights = np.array([semimajor_in, semimajor_mid, semimajor_out])
+        widths = np.array([semiminor_in, semiminor_mid, semiminor_out])
+        gc.show_ellipses([Xval]*3, [Yval]*3, [semimajor_in, semimajor_mid,
+            semimajor_out], [semiminor_in, semiminor_mid, semiminor_out],
+            angle=angle, edgecolor="cyan")
+
+
 
 def generatePixelMasks(galaxydir, masterfile="foreground.reg",
         maskbasename="foreground", execbands=bands):
