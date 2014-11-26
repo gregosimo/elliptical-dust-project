@@ -704,14 +704,12 @@ def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
 # Pipeline Functions #
 ##############################################################################
 
-def allMasks(BASEDIR, fulltable, threshold=100, maskband="W1",
-        output="foreground.fits", ellipsebase="ellipsepars", 
-        maskconfigbase="default"):
+def allMasks(BASEDIR, fulltable, maskband, threshold=5,
+        output="foreground.fits", maskconfigbase="default"):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
-            maskband=maskband, output=output, ellipsebase=ellipsebase,
-            maskconfigbase=maskconfigbase)
+            maskband=maskband, output=output, maskconfigbase=maskconfigbase)
 
 def allApertureTables(BASEDIR, fulltable, runbands=bands,
         outputbase="ellipsepars"):
@@ -1452,14 +1450,18 @@ def extractEllipseParamsfromWISE(objectdir, WISErow, band):
         pa -= 180
     # The next two items are the X center and Y center.
     FITS_image = match_filter(objectdir, band)
-    hdulist = fits.open(FITS_image)
-    w = wcs.WCS(hdulist[0].header)
-    coord = np.array([[WISErow["ra"], WISErow["dec"]]])
-    x, y = w.wcs_world2pix(coord, 1)[0]
+    x, y = getpixelcoords(FITS_image, WISErow["ra"], WISErow["dec"])
     values = [[ellipticity], [sma], [pa], [x], [y]]
     data_table = Table(values, names=("ELLIP", "SMA", "PA", "X0", "Y0"))
     return data_table
 
+def getpixelcoords(imagepath, ra, dec):
+    '''Gets the coordinates of the RA and Dec from an image.'''
+    hdulist = fits.open(imagepath)
+    w = wcs.WCS(hdulist[0].header)
+    coord = np.array([[ra, dec]])
+    x, y = w.wcs_world2pix(coord, 1)[0]
+    return x, y
 
 def STSDAS_to_Astropy_Table(workdir, filename, outputfile=None):
     '''Converts data in STSDAS table to an Astropy table.
@@ -1975,10 +1977,7 @@ def elliptical_fit_with_WISE(BASEDIR, WISErow, fixedParams=True):
     for band in bands[:4]:
         pixelscale = getPixelScale(band)
         FITS_Image = match_filter(galaxydir, band)
-        hdulist = fits.open(FITS_Image)
-        w = wcs.WCS(hdulist[0].header)
-        coord = np.array([[WISErow["ra"], WISErow["dec"]]])
-        center = tuple(w.wcs_world2pix(coord, 1)[0])
+        center = getpixelcoords(FITS_Image, WISErow["ra"], WISErow["dec"])
         ellipticity = 1 - WISErow["{0}ba".format("w1")]
         sma = WISErow["{0}rsemi".format("w1")] / pixelscale
         pa = WISErow["{0}pa".format("w1")]

@@ -3,6 +3,7 @@ import os.path
 import subprocess
 import shutil
 import math
+import itertools
 
 import numpy as np
 from pyraf import iraf
@@ -10,6 +11,25 @@ from astropy.io import fits
 from astropy.table import Table
 
 import photometry as phot
+from mask_trimmer import MaskCMD
+
+def build_masks(BASEDIR, WISETable, maskband, threshold=5,
+        output="foreground.fits", maskconfigbase="default"):
+    '''Builds masks for specified objects.
+
+    The objects to be built should be specified in WISETable, which should be a
+    valid parameter construction file. The mask will be based on the image in
+    the band called maskband. As a result, there should only be one mask to be
+    used per image type.
+
+    Parameters sent to SExtractor should be the config file, specified in
+    maskconfigbase, along with the threshold of the measurement, specified in
+    threshold.
+
+    The resulting mask will written to $BASEDIR/output.
+    '''
+    phot.allMasks(BASEDIR, WISETable, maskband, threshold=threshold, 
+            output=output, maskconfigbase=maskconfigbase)
 
 def run_sextractor(image, config, **options):
     '''Runs SExtractor on an image.
@@ -76,7 +96,7 @@ def sextractor_mask(image, threshold, config, **sexargs):
     run_sextractor(image, config, **sexargs)
 
 def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50, 
-        output="foregroundmask.fits", ellipsebase="ellipsepars",
+        output="foregroundmask.fits", ellipsebase="ellipsepars", spreadpix=5,
         maskconfigbase="default"):
     '''Creates a mask file for the object in WISErow.
 
@@ -85,13 +105,18 @@ def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50,
     radius given by the isophotal aperture times lowfrac.
     '''
     galaxydir = phot.change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    mask_elliptical(galaxydir, threshold, maskband, maskfile=output,
-            ellipsebase=ellipsebase, configbase=maskconfigbase)
+    objectcoords = phot.getpixelcoords(phot.match_filter(galaxydir, maskband),
+            WISErow["ra"], WISErow["dec"])
+    mask_elliptical_galaxy(galaxydir, threshold, maskband, objectcoords,
+            maskfile=output, ellipsebase=ellipsebase, configbase=maskconfigbase,
+            spreadpix=5)
 
-def mask_elliptical(galaxydir, threshold, maskband, 
+def mask_elliptical_galaxy(galaxydir, threshold, maskband, objectcoords,
         maskfile="foregroundmask.fits", ellipsebase="ellipsepars", 
-        configbase="default", segment="segment.fits", 
-        procsegment="foreground_unnormalized.fits"):
+        configbase="default", segment="rawsegment.fits",
+        clearedsegment="segment_nogalaxy.fits",
+        procsegment="foreground_unnormalized.fits",
+        prespreadfile="foreground_normalized.fits", spreadpix=25):
     '''Creates a foreground mask for an elliptical galaxy.
 
     This function uses the ellipse output to find the location of the ellipse
@@ -99,21 +124,58 @@ def mask_elliptical(galaxydir, threshold, maskband,
    map of just the foreground objects.
    '''
     image = phot.match_filter(galaxydir, maskband)
-    ellipsefile = phot.format_band_dependence(ellipsebase, maskband, "tab",
-            galaxydir)
     configfile = os.path.join(os.path.split(galaxydir)[0],
             phot.format_band_dependence(configbase, maskband, "sex"))
     masked_image = os.path.join(galaxydir, segment)
     fullmask = os.path.join(galaxydir, maskfile)
     config = os.path.join(galaxydir, configfile)
+    galaxy_removed = os.path.join(galaxydir, clearedsegment)
     segment_needs_normalization = os.path.join(galaxydir, procsegment)
+    normalized_segment = os.path.join(galaxydir, prespreadfile)
 
-    ellipseparams = phot.STSDAS_to_Astropy_Table(galaxydir, ellipsefile)
-    coords = (int(ellipseparams["X0"][0]), int(ellipseparams["Y0"][0]))
     segmentation_mask(config, image, threshold, masked_image,
-            segment_needs_normalization, coords)
-    normalize_segmentation_map(segment_needs_normalization, fullmask)
+            segment_needs_normalization, objectcoords)
+    # We'll interactively generate masks.
+    print "Please remove object {0}.".format(os.path.basename(galaxydir))
+    maskprog = MaskCMD(segment_needs_normalization, galaxy_removed, objectcoords)
+    maskprog.cmdloop()
+    normalize_segmentation_map(galaxy_removed, normalized_segment)
+    spreadmask(galaxydir, spreadpix, normalized_segment, outputfile=fullmask)
 
+def spreadmask(workdir, pixels, maskimage, outputfile="foreground.fits", 
+        tempfolder="offsets", tempfilebase="foreground_shifted"):
+    '''Masks a square around each original pixel
+
+    This function takes each of the pixels in maskimage and then masks a box
+    with side length pixels around them.'''
+    # Use reduce for this. It'll be awesome!
+    pixelrange = range(-(pixels-1)/2, (pixels+1)/2)
+    permutations = list(itertools.product(pixelrange, pixelrange))
+    # If the directory doesn't exist, then make it!
+    try:
+        os.mkdir(os.path.join(workdir, tempfolder))
+    except OSError:
+        pass
+    temppath = os.path.join(workdir, tempfolder)
+    outputpath = os.path.join(temppath, outputfile)
+    filenames = []
+    for i,j in permutations:
+        filename = os.path.join(temppath,
+                "{0}{1:+d}{2:+d}.fits".format(tempfilebase, i, j))
+        filenames.append(filename)
+        run_imshift(os.path.join(workdir, maskimage), filename, i, j)
+    shutil.copy(filenames[0], outputpath)
+    filenames[0] = outputpath
+
+    # I don't like the way that this is done... but it's convenient.
+    # For the sake of code clarity, the iteration here should be made clearer.
+    reduce(combinemasks, filenames)
+
+def combinemasks(basefile, additionfile):
+    '''Adds a mask to a base mask.'''
+    run_imcalc([basefile, additionfile], basefile, 'im1 || im2')
+    os.remove(additionfile)
+    return basefile
 
 def subtractw3fromw1(config, w1image, w3image, w1output_nobackground, 
         w3output_nobackground, w3output_scaled, w1output_convolved, 
@@ -361,24 +423,48 @@ def run_imcalc(image, output, command, overwrite=True, newformat="old"):
     output file does not initially exist, this function will behave as expected
     and simply write the file to the destination.
     '''
+    # Weird stuff can happen when we're doing a reduction. I.e. the output file
+    # is also one of the input files. We'll try to deal with this corner case
+    # the best way I know how.
+    if output is image:
+        newimage = image.rpartition(".")[2] + ".tmp.fits"
+        shutil.move(image, newimage)
+        image = newimage
+    elif output in image:
+        reassignindex = image.index(output)
+        reassignfile = image[reassignindex]
+        newimage = reassignfile.rpartition(".")[2] + ".tmp.fits"
+        shutil.move(reassignfile, newimage)
+        image[reassignindex] = newimage
     if overwrite:
         try:
-            backup_file(output)
-        except OSError:
+            backup = backup_file(output)
+        except IOError:
             pass
     iraf.stsdas()
     iraf.toolbox()
     iraf.imgtools()
-    try:
-        iraf.imcalc.setParam("pixtype", newformat)
-    except IrafError as e:
-        restore_file(output)
-        raise e
     if type(image) is list:
         imagestring = ','.join(image)
     else:
         imagestring = image
-    iraf.imcalc(imagestring, output, command)
+    try:
+        iraf.imcalc.setParam("pixtype", newformat)
+        iraf.imcalc(imagestring, output, command)
+    except iraf.IrafError as e:
+        restore_file(output)
+        raise e
+
+def run_imshift(image, output, xshift, yshift):
+    '''Runs imshift on the image.'''
+    try:
+        os.remove(output)
+    except OSError:
+        pass
+    iraf.images()
+    iraf.imgeom()
+    iraf.imshift(image, output, xshift, yshift)
+
 
 def run_imarith(arg1, operator, arg2, output):
     '''Runs the IRAF imarith routine.
@@ -421,9 +507,13 @@ def run_immean(input):
     return meanvalue
 
 def backup_file(filepath):
-    '''Performs a backup of a file by appending .backup to it.'''
+    '''Performs a backup of a file by appending .backup to it. 
+    
+    Returns the path of the new file.'''
     dest = filepath + ".backup"
-    os.rename(filepath, dest)
+    shutil.move(filepath, dest)
+
+
 
 def restore_file(filepath):
     '''Restores a file backed up by backup_file().'''
