@@ -4,6 +4,7 @@ import shutil
 import cmd
 
 from astropy.io import fits
+from ds9 import ds9
 
 import masks
 
@@ -13,51 +14,52 @@ import masks
 # somebody in the future looks at this, understand that this is REALLY bad, and
 # that I'm actually pretty ashamed of it.
 class MaskCMD(cmd.Cmd):
-    def do_cut(self, num):
-        self.segment = masks.remove_segment(self.segment, int(num))
+    def __init__(self, inputimage, outputimage, objectcoords=None):
+        self.hdulist = fits.open(inputimage) 
+        self.target = outputimage
+        self.ds9 = ds9()
+        self.ds9.set_pyfits(self.hdulist)
+        if objectcoords:
+            self.ds9.set("cursor {0} {1}".format(objectcoords[0],
+                objectcoords[1]))
+        cmd.Cmd.__init__(self)
 
-    def do_refresh(self, args):
-        close_fits(self.segment, constructedmask)
+    def do_cut(self, num):
+        '''Removes the segment with the specified number.'''
+        self.hdulist[0].data = masks.remove_segment(self.hdulist[0].data, 
+                int(num))
+        self.ds9.set_pyfits(self.hdulist)
+
     def do_save(self, arg):
-        close_fits(self.segment, constructedmask)
-        masks.normalize_segmentation_map(constructedmask, outputmask)
+        '''Saves the image and quits.'''
+        close_fits(self.hdulist, self.target)
         return True
 
     def default(self, arg):
         self.do_cut(arg)
 
     def do_quit(self, arg):
+        '''Quits without saving.'''
         return True
     def do_q(self, arg):
         return True
+
         
-def close_fits(data, filename):
-    newhdu = fits.PrimaryHDU(data)
-    try:
-        newhdu.writeto(filename)
-    except IOError:
-        os.remove(filename)
-        newhdu.writeto(filename)
+def close_fits(header, filename):
+    header.writeto(filename, clobber=True)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("segment", help="The segment to be trimmed.")
     parser.add_argument("mask", help="The destination of the trimmed mask.")
-    parser.add_argument("--temp", help="Where to hold the temporary file.",
-        default="segtemp.fits")
     args = parser.parse_args()
     inputmask = args.segment
-    constructedmask = args.temp
     outputmask = args.mask
 
-    shutil.copyfile(inputmask, constructedmask)
-    print """Copied input file over to {0}. You may now open this file to see 
-    the progress of the trims.""".format(os.path.abspath(constructedmask))
-    hdulist = fits.open(inputmask) 
-    segment = hdulist[0].data
-    mycmd = MaskCMD()
-    mycmd.segment = hdulist[0].data
+    print """The status of the segmentation image will be displayed in a DS9
+    instance. It will be continually updated by your edits."""
+    mycmd = MaskCMD(inputmask, outputmask)
     mycmd.cmdloop()
     
 
