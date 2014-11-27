@@ -328,11 +328,8 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     fapcor = aperture_correction_factor(band)
     NA = ellipseParams["NPIX_E"]
     # TODO if time remains, make this robust to the sky method.
-    skyParams = Table.read(os.path.join(galaxydir,
-        format_band_dependence(skybase, band, "txt")), 
-        format="ascii.daophot")
-    NB = get_sky_pixels(galaxydir, skybase, skymethod)
-    sig_B = get_sky_error(galaxydir, skybase, skymethod)
+    NB = get_sky_pixels(galaxydir, band, skybase, skymethod)
+    sig_B = get_sky_error(galaxydir, band, skybase, skymethod)
     total_sigi = imageUncertainty["TFLUX_E"]
     Fcorr = calculate_correlated_pixel_noise(band)
     # We get the background level from centroiding, which seems like a
@@ -366,12 +363,14 @@ def get_sky_error(galaxydir, band, skybase, method="adaptive"):
         error = skyParams["STDEV"][0]
     return error
     
-def get_sky_pixels(galaxydir, skybase, method="adaptive"):
+def get_sky_pixels(galaxydir, band, skybase, method="adaptive"):
     '''Extracts the number of pixels used to determine the sky value.
 
     This function is meant to retrieve the sky pixels based on the method used
     to determine the background.
     '''
+    if method.lower() == "adaptive":
+        method = adaptive_background[band]
     if method.lower() == "patch":
         skyParams=Table.read(os.path.join(galaxydir,
             format_band_dependence(skybase, band, "txt")), format="ascii.basic")
@@ -381,6 +380,7 @@ def get_sky_pixels(galaxydir, skybase, method="adaptive"):
             format_band_dependence(skybase, band, "txt")),
             format="ascii.daophot")
         pixels = skyParams["NSKY"][0]
+    return pixels
 
 ##############################################################################
 # Path Routines #
