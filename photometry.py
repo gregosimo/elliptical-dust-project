@@ -8,6 +8,7 @@ from pyraf import iraf
 from astropy import wcs
 from astropy.io import fits
 from astropy.table import Table, Column
+from astropy.stats import sigma_clip
 from astroquery.ned import Ned
 import numpy as np
 import aplpy
