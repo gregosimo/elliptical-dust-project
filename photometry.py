@@ -933,6 +933,7 @@ def measure_sky_from_patches(galaxydir, band, area=4000, minpatches=90,
     pa = ellipsepars["PA"][0]
     patchbackgrounds, patchstandards, scales = background_from_patches(image, 
             xcenter, ycenter, semimajor, semiminor, pa, area, minpatches)
+    patchbackgrounds = sigma_clip(patchbackgrounds, 3, 5)
     patchstandards = np.ma.array(patchstandards, mask=patchbackgrounds.mask)
     tableoutline = {"name": [imagename], "X0": [xcenter], "Y0": [ycenter], 
             "A0": [scales["ainit"]], "B0": [scales["binit"]], "A1":
