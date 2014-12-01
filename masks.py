@@ -107,14 +107,15 @@ def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50,
     galaxydir = phot.change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     objectcoords = phot.getpixelcoords(phot.match_filter(galaxydir, maskband),
             WISErow["ra"], WISErow["dec"])
+    # Add regionbase.
     mask_elliptical_galaxy(galaxydir, threshold, maskband, objectcoords,
             maskfile=output, ellipsebase=ellipsebase, configbase=maskconfigbase,
             spreadpix=5)
 
 def mask_elliptical_galaxy(galaxydir, threshold, maskband, objectcoords,
-        maskfile="foregroundmask.fits", ellipsebase="ellipsepars", 
-        configbase="default", segment="rawsegment.fits",
-        clearedsegment="segment_nogalaxy.fits",
+        maskfile="foregroundmask.fits", regionbase="ellipseregion",
+        ellipsebase="ellipsepars", configbase="default", 
+        segment="rawsegment.fits", clearedsegment="segment_nogalaxy.fits",
         procsegment="foreground_unnormalized.fits",
         prespreadfile="foreground_normalized.fits", spreadpix=25):
     '''Creates a foreground mask for an elliptical galaxy.
@@ -124,6 +125,8 @@ def mask_elliptical_galaxy(galaxydir, threshold, maskband, objectcoords,
    map of just the foreground objects.
    '''
     image = phot.match_filter(galaxydir, maskband)
+    regionpath = phot.format_band_dependence(regionbase, maskband, "reg", 
+            galaxydir)
     configfile = os.path.join(os.path.split(galaxydir)[0],
             phot.format_band_dependence(configbase, maskband, "sex"))
     masked_image = os.path.join(galaxydir, segment)
@@ -137,7 +140,8 @@ def mask_elliptical_galaxy(galaxydir, threshold, maskband, objectcoords,
             segment_needs_normalization, objectcoords)
     # We'll interactively generate masks.
     print "Please remove object {0}.".format(os.path.basename(galaxydir))
-    maskprog = MaskCMD(segment_needs_normalization, galaxy_removed, objectcoords)
+    maskprog = MaskCMD(segment_needs_normalization, galaxy_removed, 
+            regionpath)
     maskprog.cmdloop()
     normalize_segmentation_map(galaxy_removed, normalized_segment)
     spreadmask(galaxydir, spreadpix, normalized_segment, outputfile=fullmask)
@@ -224,9 +228,9 @@ def segmentation_mask(config, image, threshold, masked_image, fullmask,
     '''
     sextractor_mask(image, threshold, config, 
             CHECKIMAGE_NAME=masked_image)
-    remove_galaxy_mask(masked_image, fullmask, coords)
+    remove_galaxy_from_mask(masked_image, fullmask, coords)
 
-def remove_galaxy_mask(imagepath, newimagepath, coord):
+def remove_galaxy_from_mask(imagepath, newimagepath, coord):
     '''Removes a galaxy from a segmentation image.
 
     The coordinate of the galaxy in image pixels should be given. After that,

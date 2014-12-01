@@ -344,7 +344,7 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
         sig_B**2) + sig_conf**2)
     return sourceerr
 
-def get_sky_error(galaxydir, band, skybase, method="adaptive"):
+def get_sky_error(galaxydir, band, skybase="sky_level", method="adaptive"):
     '''Extracts the error in the sky measurement from a method.
 
     This function is meant to retrieve sky errors based on which method was used
@@ -363,7 +363,7 @@ def get_sky_error(galaxydir, band, skybase, method="adaptive"):
         error = skyParams["STDEV"][0]
     return error
     
-def get_sky_pixels(galaxydir, band, skybase, method="adaptive"):
+def get_sky_pixels(galaxydir, band, skybase="sky_level", method="adaptive"):
     '''Extracts the number of pixels used to determine the sky value.
 
     This function is meant to retrieve the sky pixels based on the method used
@@ -913,8 +913,9 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
             measure_sky_from_patches(galaxydir, band, patch_area, num_patches, 
                     baseskyfile, ellipsebase, skyratio, mask=mask)
 
-def measure_sky_from_patches(galaxydir, band, area=1000, minpatches=1000,
-        baseskyfile="sky_level", ellipsebase="ellipsepars", scale=1.5, mask=""):
+def measure_sky_from_patches(galaxydir, band, area=4000, minpatches=90,
+        baseskyfile="sky_level", ellipsebase="ellipsepars", scale=1.5, mask="",
+        backgroundmapbase="background_map"):
     '''Uses elliptical patches to measure the sky level from an image.
 
     This function takes squar-ish patches with an area approximately equal to
@@ -924,8 +925,7 @@ def measure_sky_from_patches(galaxydir, band, area=1000, minpatches=1000,
     ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(ellipsebase, band, "tab"))
     imagename = match_filter(galaxydir, band, fullpath=False)
-    image = load_image(galaxydir, band)
-    maskpath = os.path.join(galaxydir, mask)
+    image = load_image(galaxydir, band, mask=mask)
     xcenter, ycenter = ellipsepars["X0"][0], ellipsepars["Y0"][0]
     semimajor = scale * ellipsepars["SMA"][0]
     semiminor = semimajor * (1 - ellipsepars["ELLIP"][0])
@@ -944,7 +944,6 @@ def measure_sky_from_patches(galaxydir, band, area=1000, minpatches=1000,
             "dispersion", "patches"])
     backgroundtable.write(format_band_dependence(baseskyfile, band, "txt",
         galaxydir), format="ascii.basic")
-    return patchbackgrounds
 
 
 def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
@@ -1090,6 +1089,60 @@ def patch_background(image, xcenter, ycenter, ain, bin, scale, pa, angle1,
     std = segmentimage.std()
     return (background, std)
 
+def calculate_sky_ellipses(ainit, binit, totalarea):
+    '''Calculates ellipse sizes for the Gil de Paz sky algorithm.
+
+    This function starts with an initial ellipse, and then returns two
+    elliptical annuli which each contain half of totalarea. This function will
+    return a 4-tuple with amid, bmid, aout, bout.'''
+
+    initarea = math.pi * ainit * binit
+    annulusarea = totalarea / 2.0
+
+    amid = ainit * np.sqrt(annulusarea / initarea + 1)
+    midscale = amid / ainit
+    bmid = binit * midscale
+    midarea = math.pi * amid * bmid
+
+    aout = amid * np.sqrt(annulusarea / midarea + 1)
+    outscale = aout / amid
+    bout = bmid * outscale
+
+    return amid, bmid, aout, bout
+
+def backgroundmap(backgrounddata, fullimage, xcenter, ycenter, ainit, binit, pa,
+        area, numpatches):
+    '''Creates a map of background values on the original image to determine
+    where background variations occur.'''
+
+    amid, bmid, aout, bout = calculate_sky_ellipses(ainit, binit,
+            numpatches*area)
+
+    image = np.ma.array(fullimage[ycenter-(aout+5):ycenter+(aout+5),
+            xcenter-(aout+5):xcenter+(aout+5)], copy=True)
+    image.fill(0)
+    newxcenter = newycenter = aout+2.5
+
+    numsections = numpatches / 2
+
+    angles = np.linspace(-math.pi, math.pi, numsections+1)
+    for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
+        midscale = amid / ainit
+        ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter,
+            ain, bin, midscale, pa, angle1, angle2)
+        segmentimage = np.ma.array(image, mask=ellipsewindow)
+        validpatch = np.ma.array(segmentimage.data, mask=~segmentimage.mask)
+        image[~validpatch.mask] = background[i]
+    for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
+        outscale = aout / amid
+        ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter,
+            ain, bin, outscale, pa, angle1, angle2)
+        segmentimage = np.ma.array(image, mask=ellipsewindow)
+        validpatch = np.ma.array(segmentimage.data, mask=~segmentimage.mask)
+        image[~validpatch.mask] = background[i+numsections]
+    return image
+    
+
 def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
         numpatches):
     '''Calculates background from a series of elliptical patches.
@@ -1106,17 +1159,9 @@ def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
     bgsample = np.ma.zeros(numpatches)
     stdsample = np.ma.zeros(numpatches)
 
-    initarea = math.pi * ainit * binit
-    annulusarea = area * numpatches / 2.0
+    amid, bmid, aout, bout = calculate_sky_ellipses(ainit, binit,
+            numpatches*area)
 
-    amid = ainit * np.sqrt(annulusarea / initarea + 1)
-    midscale = amid / ainit
-    bmid = binit * midscale
-    midarea = math.pi * amid * bmid
-
-    aout = amid * np.sqrt(annulusarea / midarea + 1)
-    outscale = aout / amid
-    bout = bmid * outscale
     # In order to move the numbers in and out of this function conveniently,
     # we'll put them in the scales dictionary.
     scales = {"ainit": ainit, "binit": binit, "amid": amid, "bmid": bmid,
@@ -1129,13 +1174,15 @@ def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
 
     angles = np.linspace(-math.pi, math.pi, numsections+1)
     for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
-        # Because we're using a view centered on the actual image, we'll set the
-        # center bits to 0.
+        midscale = amid / ainit
+        # Because we're using a view centered on the actual image, we'll set 
+        # the center bits to 0.
         bg, std = patch_background(image, newxcenter, newycenter, ainit, binit,
                 midscale, pa, angle1, angle2)
         bgsample[i] = bg
         stdsample[i] = std
     for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
+        outscale = aout / amid
         bg, std = patch_background(image, newxcenter, newycenter, amid, bmid,
                 outscale, pa, angle1, angle2)
         bgsample[i+numsections] = bg

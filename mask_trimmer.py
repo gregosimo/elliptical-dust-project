@@ -14,14 +14,15 @@ import masks
 # somebody in the future looks at this, understand that this is REALLY bad, and
 # that I'm actually pretty ashamed of it.
 class MaskCMD(cmd.Cmd):
-    def __init__(self, inputimage, outputimage, objectcoords=None):
+    def __init__(self, inputimage, outputimage, regionfile):
         self.hdulist = fits.open(inputimage) 
         self.target = outputimage
         self.ds9 = ds9()
         self.ds9.set_pyfits(self.hdulist)
-        if objectcoords:
-            self.ds9.set("cursor {0} {1}".format(objectcoords[0],
-                objectcoords[1]))
+        regionhandle = open(regionfile)
+        self.region = ''.join(regionhandle.readlines())
+        self.ds9.set('regions', self.region)
+        regionhandle.close()
         cmd.Cmd.__init__(self)
 
     def do_cut(self, num):
@@ -29,6 +30,7 @@ class MaskCMD(cmd.Cmd):
         self.hdulist[0].data = masks.remove_segment(self.hdulist[0].data, 
                 int(num))
         self.ds9.set_pyfits(self.hdulist)
+        self.ds9.set('regions', self.region)
 
     def do_save(self, arg):
         '''Saves the image and quits.'''
