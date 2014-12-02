@@ -925,6 +925,8 @@ def measure_sky_from_patches(galaxydir, band, area=4000, minpatches=90,
     '''
     ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(ellipsebase, band, "tab"))
+    backgroundmapfile = format_band_dependence(backgroundmapbase, band, "fits",
+            galaxydir)
     imagename = match_filter(galaxydir, band, fullpath=False)
     image = load_image(galaxydir, band, mask=mask)
     xcenter, ycenter = ellipsepars["X0"][0], ellipsepars["Y0"][0]
@@ -932,7 +934,8 @@ def measure_sky_from_patches(galaxydir, band, area=4000, minpatches=90,
     semiminor = semimajor * (1 - ellipsepars["ELLIP"][0])
     pa = ellipsepars["PA"][0]
     patchbackgrounds, patchstandards, scales = background_from_patches(image, 
-            xcenter, ycenter, semimajor, semiminor, pa, area, minpatches)
+            xcenter, ycenter, semimajor, semiminor, pa, area, minpatches,
+            backgroundmapfile=backgroundmapfile)
     patchbackgrounds = sigma_clip(patchbackgrounds, 3, 5)
     patchstandards = np.ma.array(patchstandards, mask=patchbackgrounds.mask)
     tableoutline = {"name": [imagename], "X0": [xcenter], "Y0": [ycenter], 
@@ -1078,18 +1081,25 @@ def mask_elliptical_shell_portion(image, xcenter, ycenter, ain, bin, scale, pa,
     return mask
 
 def patch_background(image, xcenter, ycenter, ain, bin, scale, pa, angle1, 
-        angle2):
+        angle2, bgmap=None):
     '''Calculates the background and error in an elliptical segment
     
     Takes an image as a numpy array, and then finds the background at the
     elliptical segment by taking the mean value. It also returns the standard
     deviation within that patch.
+
+    This function also has the option of filling in a background map with the
+    same size as the image. The region used to calculate the background will be
+    set to the background value. This may be useful in determining which areas
+    are particularly deviant in background value.
     '''
     ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter, ain,
             bin, scale, pa, angle1, angle2)
     segmentimage = np.ma.array(image, mask=ellipsewindow)
     background = np.ma.mean(segmentimage)
     std = segmentimage.std()
+    if bgmap is not None:
+        bgmap[~segmentimage.mask] = background
     return (background, std)
 
 def calculate_sky_ellipses(ainit, binit, totalarea):
@@ -1147,7 +1157,7 @@ def backgroundmap(backgrounddata, fullimage, xcenter, ycenter, ainit, binit, pa,
     
 
 def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
-        numpatches):
+        numpatches, backgroundmapfile=''):
     '''Calculates background from a series of elliptical patches.
 
     There needs to be an initial specification of an ellipse, which is given by
@@ -1171,6 +1181,14 @@ def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
             "aout": aout, "bout": bout}
     image = fullimage[ycenter-(aout+5):ycenter+(aout+5),
             xcenter-(aout+5):xcenter+(aout+5)]
+    if backgroundmapfile:
+        fullbgimage = np.ma.array(fullimage, copy=True)
+        fullbgimage.fill(0)
+        bgimage = fullbgimage[ycenter-(aout+5):ycenter+(aout+5),
+            xcenter-(aout+5):xcenter+(aout+5)]
+    else:
+        bgimage=None
+
     newxcenter = newycenter = aout+2.5
 
     numsections = numpatches / 2
@@ -1181,67 +1199,20 @@ def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
         # Because we're using a view centered on the actual image, we'll set 
         # the center bits to 0.
         bg, std = patch_background(image, newxcenter, newycenter, ainit, binit,
-                midscale, pa, angle1, angle2)
+                midscale, pa, angle1, angle2, bgmap=bgimage)
         bgsample[i] = bg
         stdsample[i] = std
     for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
         outscale = aout / amid
         bg, std = patch_background(image, newxcenter, newycenter, amid, bmid,
-                outscale, pa, angle1, angle2)
+                outscale, pa, angle1, angle2, bgmap=bgimage)
         bgsample[i+numsections] = bg
         stdsample[i+numsections] = std
+    if bgimage is not None:
+        hdu = fits.PrimaryHDU(fullbgimage.data)
+        hdulist = fits.HDUList([hdu])
+        hdulist.writeto(backgroundmapfile, clobber=True)
     return bgsample, stdsample, scales
-
-def background_from_patches_old(imagepath, xcenter, ycenter, ainit, binit, pa,
-        area, numpatches, mask=""):
-    while len(bgsample) < minpatches:
-        # We note that dr is independent of what the actual ellipse parameters
-        # are.
-        dr = calc_background_ellipse_difference(area)
-        # We're going to use the semiminor axis to determine the scale factor
-        # between the two ellipses. This is to ensure that EVERY patch has at 
-        # least area pixels in it. Other patches may have more.
-        bout = binit + dr
-        scale = bout / bin
-        aout = ainit * scale
-        dtheta = dr / ain 
-        angles = np.arange(-math.pi, math.pi, dtheta)
-        for angle1, angle2 in zip(angles[:-1], angles[1:]):
-            print (patch_background(image, xcenter, ycenter, ainit, 
-                    binit, scale, pa, angle1, angle2))
-        ainit, binit = aout, bout
-    return np.array(bgsample)
-
-
-def ellipsepolarfunc(a, b, theta):
-    '''Returns the radius form of an ellipse given an angle.
-
-    This function is in a polar coordinate system centered at the center of the
-    ellipse, not at a focus.
-    '''
-    return a * b / np.sqrt((b * np.cos(theta))**2 + (a * np.sin(theta))**2)
-
-def calc_ellipse_bounds(rin, angle1, area):
-    '''Calculates bounds for an ellipse portion.
-
-    The result will be a 4-tuple containing rin, rout, angle1, and angle2. The
-    outer radius and outer angle will be determined by the constraint to be as
-    close to the area as possible, as well as being most "square".
-    '''
-    dr = calc_background_ellipse_size(rin, area)
-    rout = rin + dr
-    angle2 = angle1 + calc_background_ellipse_angle_difference(rin, dr)
-    return (rin, rout, angle1, angle2)
-
-def calc_background_ellipse_difference(area):
-    '''Calculates the ellipse size which will lead to squarish patches.'''
-    dr = np.sqrt(area)
-    return dr
-
-def calc_background_ellipse_angle_difference(r, dr):
-    '''Calculates the angle cut which will lead to squarish patches.'''
-    dtheta = dr / r
-    return dtheta
 
 def test_if_in_ellipse(x, y, xcenter, ycenter, a, b, pa):
     '''Tests if the point x,y lies within the described ellipse.
