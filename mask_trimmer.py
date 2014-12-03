@@ -18,17 +18,20 @@ class MaskCMD(cmd.Cmd):
         self.hdulist = fits.open(inputimage) 
         self.target = outputimage
         self.ds9 = ds9()
-        self.ds9.set_pyfits(self.hdulist)
         regionhandle = open(regionfile)
         self.region = ''.join(regionhandle.readlines())
-        self.ds9.set('regions', self.region)
         regionhandle.close()
         cmd.Cmd.__init__(self)
+        self.load_image()
 
     def do_cut(self, num):
         '''Removes the segment with the specified number.'''
         self.hdulist[0].data = masks.remove_segment(self.hdulist[0].data, 
                 int(num))
+        self.load_image()
+
+    def load_image(self):
+        '''Reloads the ds9 window.'''
         self.ds9.set_pyfits(self.hdulist)
         self.ds9.set('regions', self.region)
 
@@ -46,6 +49,11 @@ class MaskCMD(cmd.Cmd):
     def do_q(self, arg):
         return True
 
+def parseregion(regionstring):
+    '''Takes a region file and parses information from it.'''
+    # I'm assuming there's only ellipses right now. I can make changes (or use
+    # pyregion), when things get more complicated.
+    coord, shape = regionstring.split("\n")
         
 def close_fits(header, filename):
     header.writeto(filename, clobber=True)
