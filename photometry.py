@@ -914,14 +914,24 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
             measure_sky_from_patches(galaxydir, band, patch_area, num_patches, 
                     baseskyfile, ellipsebase, skyratio, mask=mask)
 
-def measure_sky_from_patches(galaxydir, band, area=4000, minpatches=90,
+def measure_sky_from_patches(galaxydir, band, area=4000, numpatches=90,
         baseskyfile="sky_level", ellipsebase="ellipsepars", scale=1.5, mask="",
         backgroundmapbase="background_map"):
     '''Uses elliptical patches to measure the sky level from an image.
 
-    This function takes squar-ish patches with an area approximately equal to
-    the area given to estimate the background. The minimum number of patches
-    to be used is given as minpatches. 
+    This function measures the sky in two concentric elliptical apertures
+    centered around the object, with the innermost boundary having size scale *
+    the photometric aperture. The other aperture sizes will be chosen such that
+    they will yield a total number of regions equal to numpatches, each
+    containing area pixels.
+
+    This function will then write to {baseskyfile}.{band}.txt with the
+    background level as well as statistics about the method used to calculate
+    the background.
+
+    If backgroundmapbase is given, this function will also output a map
+    illustrating the locations of the patches along with the value in each patch
+    at {backgroundmapbase}.{band}.fits.
     '''
     ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
             format_band_dependence(ellipsebase, band, "tab"))
@@ -934,7 +944,7 @@ def measure_sky_from_patches(galaxydir, band, area=4000, minpatches=90,
     semiminor = semimajor * (1 - ellipsepars["ELLIP"][0])
     pa = ellipsepars["PA"][0]
     patchbackgrounds, patchstandards, scales = background_from_patches(image, 
-            xcenter, ycenter, semimajor, semiminor, pa, area, minpatches,
+            xcenter, ycenter, semimajor, semiminor, pa, area, numpatches,
             backgroundmapfile=backgroundmapfile)
     patchbackgrounds = sigma_clip(patchbackgrounds, 3, 5)
     patchstandards = np.ma.array(patchstandards, mask=patchbackgrounds.mask)
@@ -1189,7 +1199,7 @@ def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
     else:
         bgimage=None
 
-    newxcenter = newycenter = aout+2.5
+    newxcenter = newycenter = aout+5
 
     numsections = numpatches / 2
 
