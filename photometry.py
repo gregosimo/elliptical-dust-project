@@ -1502,7 +1502,7 @@ def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
     else:
         bgimage=None
 
-    newxcenter = newycenter = aout+2.5
+    newxcenter = newycenter = aout+5
 
     numsections = numpatches / 2
 
