@@ -99,7 +99,7 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     '''
     galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
     DNflux = calc_DNflux(galaxydir, band, baseobjectfile, useskybase,
-            skymethod)
+            skymethod, apertureCorrection=apertureCorrection)
     
     if errors:
         objectError = calc_DNerr(galaxydir, band, ellipsebase=baseobjectfile,
@@ -125,14 +125,14 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
         else:
             photvalue = conv.DNflux2ABmag(band, DNflux)
             
-        return flux
+        return photvalue
 
 def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
         maskoutput="foreground.fits", ellipsepars="ellipsepars",
         maskconfigbase="default", ellipseoutput="ellipse_aperture",
         skycoord="fitsky", skybase="sky_level", skygens="adaptive",
         skyratio=1.5, uncertaintybase="uncertainty", skipmask=False,
-        alt_mask="foreground_alt.fits", runbands=bands):
+        alt_mask="foreground_alt.fits", runbands=bands, clip_background=False):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -167,7 +167,8 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
     print "Making Sky Tables..."
     allSkyValues(BASEDIR, WISETable, runbands=runbands, coordbase=skycoord, 
             baseskyfile=skybase, skygens=skygens, ellipsebase=ellipsepars,
-            mask=maskoutput, alt_mask=alt_mask, skyratio=skyratio)
+            mask=maskoutput, alt_mask=alt_mask, skyratio=skyratio,
+            clip=clip_background)
     print "Making Uncertainty Tables..."
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
             ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
@@ -730,14 +731,15 @@ def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty",
 
 def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky", 
         baseskyfile="sky_level", skygens="adaptive", ellipsebase="ellipsepars",
-        mask="foreground.fits", alt_mask="foreground_alt.fits", skyratio=2.5):
+        mask="foreground.fits", alt_mask="foreground_alt.fits", skyratio=2.5,
+        clip=False):
     '''Goes through BASEDIR and generates all sky tables.
 
     This function also allows for single-object corrections to be made.
     '''
     runOnImages(BASEDIR, fulltable, genSkyValues, runbands=runbands,
             coordbase=coordbase, baseskyfile=baseskyfile, skygens=skygens,
-            ellipsebase=ellipsebase, skyratio=skyratio)
+            ellipsebase=ellipsebase, skyratio=skyratio, clip=clip)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
         mask="foreground.fits", baseoutput="ellipse_aperture",
@@ -878,7 +880,8 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         ellipsebase="ellipsepars", baseskyfile="sky_level", skygens="adaptive", 
         skyratio=2.5, annulus=0, dannulus=30, runbands=bands, patch_area=4000,
-        num_patches=90, mask="foreground.fits", alt_mask="foreground_alt.fits"):
+        num_patches=90, mask="foreground.fits", alt_mask="foreground_alt.fits",
+        clip=False):
     '''Generates sky values for each galaxy.
     
     The sky values can be generated in two ways: through an annulus or through a
@@ -912,11 +915,11 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
                     ellipsebase, annulus, skyratio, dannulus)
         elif skygens.lower() == "patch":
             measure_sky_from_patches(galaxydir, band, patch_area, num_patches, 
-                    baseskyfile, ellipsebase, skyratio, mask=mask)
+                    baseskyfile, ellipsebase, skyratio, mask=mask, clip=clip)
 
 def measure_sky_from_patches(galaxydir, band, area=4000, numpatches=90,
         baseskyfile="sky_level", ellipsebase="ellipsepars", scale=1.5, mask="",
-        backgroundmapbase="background_map"):
+        backgroundmapbase="background_map", clip=False):
     '''Uses elliptical patches to measure the sky level from an image.
 
     This function measures the sky in two concentric elliptical apertures
@@ -946,18 +949,19 @@ def measure_sky_from_patches(galaxydir, band, area=4000, numpatches=90,
     patchbackgrounds, patchstandards, scales = background_from_patches(image, 
             xcenter, ycenter, semimajor, semiminor, pa, area, numpatches,
             backgroundmapfile=backgroundmapfile)
-    patchbackgrounds = sigma_clip(patchbackgrounds, 3, 5)
-    patchstandards = np.ma.array(patchstandards, mask=patchbackgrounds.mask)
+    if clip:
+        patchbackgrounds = sigma_clip(patchbackgrounds, 3, 5)
+        patchstandards = np.ma.array(patchstandards, mask=patchbackgrounds.mask)
     tableoutline = {"name": [imagename], "X0": [xcenter], "Y0": [ycenter], 
             "A0": [scales["ainit"]], "B0": [scales["binit"]], "A1":
             [scales["amid"]], "B1": [scales["bmid"]], "A2": [scales["aout"]],
             "B2": [scales["bout"]], "PA": [pa],
             "background": [patchbackgrounds.mean()], "error": 
             [patchbackgrounds.std()], "dispersion": [patchstandards.mean()],
-            "patches": [np.ma.count(patchbackgrounds)]} 
+            "patches": [np.ma.count(patchbackgrounds)], "clipped":[clip]} 
     backgroundtable = Table(tableoutline, names=["name", "X0", "Y0", 
             "A0", "B0", "A1", "B1", "A2", "B2", "PA", "background", "error", 
-            "dispersion", "patches"])
+            "dispersion", "patches", "clipped"])
     backgroundtable.write(format_band_dependence(baseskyfile, band, "txt",
         galaxydir), format="ascii.basic")
 
