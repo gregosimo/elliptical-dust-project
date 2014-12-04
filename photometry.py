@@ -101,7 +101,7 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     '''
     galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
     DNflux = calc_DNflux(galaxydir, band, baseobjectfile, useskybase,
-            skymethod)
+            skymethod, apertureCorrection=apertureCorrection)
     
     if errors:
         objectError = calc_DNerr(galaxydir, band, ellipsebase=baseobjectfile,
@@ -127,14 +127,14 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
         else:
             photvalue = conv.DNflux2ABmag(band, DNflux)
             
-        return flux
+        return photvalue
 
 def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
         maskoutput="foreground.fits", ellipsepars="ellipsepars",
         maskconfigbase="default", ellipseoutput="ellipse_aperture",
         skycoord="fitsky", skybase="sky_level", skygens="adaptive",
         skyratio=1.5, uncertaintybase="uncertainty", skipmask=False,
-        alt_mask="foreground_alt.fits", runbands=bands):
+        alt_mask="foreground_alt.fits", runbands=bands, clip_background=False):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -169,7 +169,8 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
     print "Making Sky Tables..."
     allSkyValues(BASEDIR, WISETable, runbands=runbands, coordbase=skycoord, 
             baseskyfile=skybase, skygens=skygens, ellipsebase=ellipsepars,
-            mask=maskoutput, alt_mask=alt_mask, skyratio=skyratio)
+            mask=maskoutput, alt_mask=alt_mask, skyratio=skyratio,
+            clip=clip_background)
     print "Making Uncertainty Tables..."
     allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
             ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
