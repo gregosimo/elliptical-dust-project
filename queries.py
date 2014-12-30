@@ -10,6 +10,7 @@ import requests
 import astropy
 from astropy.table import Table, vstack
 from astroquery.ned import Ned
+from astroquery.irsa import Irsa
 import numpy as np
 
 import photometry as phot
@@ -29,7 +30,7 @@ UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3
 
 # This is the code which corresponds to the latest WISE catalog. In this case,
 # it is for ALLWISE.
-LATEST_WISE_CODE = "ac"
+LATEST_WISE_CODE = "ab"
 
 def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
         uncertainty=True, overwrite=True):
@@ -44,6 +45,13 @@ def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
         coaddID = query_metadata(ra, dec)
         query_image(BASEDIR, object, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
+
+def query_catalog(objects, catalog="wise_allwise_p3as_psd"):
+    '''Queries IRSA for the objects found in the given catalog.'''
+    entries = [Irsa.query_region(object, catalog=catalog) for object in objects]
+    print entries
+    fulltable = vstack(entries)
+    return fulltable
 
 def query_metadata(ra, dec):
     '''Queries the WISE Image Metadata service for image information.
