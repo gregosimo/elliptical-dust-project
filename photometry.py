@@ -1723,8 +1723,8 @@ def genApertureTable(BASEDIR, WISErow, outputbase="ellipsepars", runbands=bands)
     objectdir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     for band in runbands:
         output = format_band_dependence(outputbase, band)
-        tableForEllipseRoutine = extractEllipseParamsfromWISE(BASEDIR, WISErow,
-                band)
+        tableForEllipseRoutine = extractEllipseParamsfromWISE(objectdir, 
+                WISErow, band)
         createEllipseParamTable(objectdir, tableForEllipseRoutine, output)
 
 
