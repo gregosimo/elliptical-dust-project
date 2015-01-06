@@ -15,6 +15,13 @@ import numpy as np
 
 import photometry as phot
 
+# This is the entry point for the catalog.
+CATALOG_BASE = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query"
+
+# These are a bunch of lookup tables for the WISE catalog.
+CATALOGS=["AllWISE", "All-Sky"]
+CATALOG_NAMES={"AllWISE": "wise_allwise_p3as_psd",  "All-Sky": "wise_allsky_4band_p3as_psd"}
+
 # We begin with an IPAC table which has object names and ra/dec coordinates. We
 # must first query the WISE Image metadata server to get the images which
 # correspond to those coordinates. The WISE Image metadata server is located at:
@@ -46,12 +53,32 @@ def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
         query_image(BASEDIR, object, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
 
-def query_catalog(objects, catalog="wise_allwise_p3as_psd"):
-    '''Queries IRSA for the objects found in the given catalog.'''
-    entries = [Irsa.query_region(object, catalog=catalog) for object in objects]
-    print entries
-    fulltable = vstack(entries)
-    return fulltable
+def query_catalog(filename, catalog=CATALOG_NAMES["AllWISE"], radius=10, 
+		cols=['objstr', 'ra', 'dec', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
+		'w1sat', 'w2rsemi', 'w2ba', 'w2pa', 'w2gmag', 'w2sat', 'w3rsemi', 
+		'w3ba', 'w3pa', 'w3gmag', 'w3sat', 'w4rsemi', 'w4ba', 'w4pa', 'w4gmag'
+		'w4sat']):
+		# Probably need to add more columns here. Particularly for saturation.
+		# To take its place, I'll use "w?sat". Change it once I have internet
+		# connectivity.
+    '''Queries IRSA for the objects found in the given catalog.
+	The filename '''	
+	data = {"catalog": catalog, "spatial: "Upload", "uradius": radius, 
+		"outfmt": 1}
+	files = {'filename': open(filename, "rb")}
+	ipac_output = requests.post(CATALOG_URL, data=data, files=files)
+	ipac_table = Table.read(ipac_output, format="ascii.ipac")
+	return ipac_table
+	
+def get_catalog_entries(objectfile):
+	'''Gets entries from objectfile and returns it as a table.
+	
+	This function first gets the AllWISE data for the objects in objectfile, and then gets the WISE All-Sky data for the objects in objectfile. For objects which are saturated in the AllWISE data, it will replace them with objects in the All-Sky data, thereby decreasing the effects of saturation.'''
+	allwiseTable = query_catalog(objectfile, catalog=CATALOG_NAMES["AllWISE"])
+	allskyTable = query_catalog(objectfile, catalog=CATALOG_NAMES["All-Sky"])
+	allwise
+	# Need a way to do allwiseTable[["w1sat", "w2sat", "w3sat", "w4sat"]].any(), 
+	# so that I get one column-length array that says whether 
 
 def query_metadata(ra, dec):
     '''Queries the WISE Image Metadata service for image information.
