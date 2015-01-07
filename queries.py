@@ -62,7 +62,7 @@ def query_WISE_catalog(filename, url=CATALOG_BASE,
     '''Queries IRSA for the objects found in the given catalog.
     The filename '''	
     data = {"catalog": catalog, "spatial": "Upload", "uradius": radius, 
-            "outfmt": 3, 'selcols': ','.join(cols)}
+            "outfmt": 1, 'selcols': ','.join(cols)}
     files = {'filename': open(filename, "rb")}
     ipac_output = requests.post(url, data=data, files=files)
     ipac_table = Table.read(ipac_output.content, format="votable")
@@ -236,3 +236,19 @@ def ned_resolve(objects):
             names=("ID", "RA", "DEC"))
     relevanttable["ID"] = objects
     return relevanttable
+
+def run_stilts(taskname, **taskargs):
+    '''Wrapper function for the stilts program.
+
+    Runs the STILTS program with the given taskname, and the arguments required
+    for that task. The options for that task should be given in taskargs.
+    '''
+    command = ["stilts"] + [taskname] + ["{0}={1}".format(k,v) for k,v in 
+            taskargs.items()]
+    subprocess.check_call(command)
+
+def expand_IPAC_table(inputfile, outputfile):
+    '''De-abbreviates an IPAC file.
+
+    Takes an abbreviated IPAC file at input, and then rewrites it to output,
+    which will not be contracted.'''
