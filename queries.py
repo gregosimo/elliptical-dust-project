@@ -32,6 +32,10 @@ METADATA_SERVER ="http://irsa.ipac.caltech.edu/ibe/search/wise/allsky/4band_p3am
 # This query will return an IPAC table which contains the coaddgrp, coadd_ra,
 # coadd_id and bands available for that location. We then place the images into
 # the correct folder in the BASEDIR.
+ALLWISE_BASE = "http://irsa.ipac.caltech.edu/ibe/sia/wise/allwise/p3am_cdd"
+ALLSKY_BASE  = \
+        "http://irsa.ipac.caltech.edu/ibe/sia/wise/allsky/4band_p3am_cdd"
+
 IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
 UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-unc-3.fits.gz"
 
@@ -168,6 +172,8 @@ def upgrade_images(galaxydir, coadddic, ra, dec, size=600):
     for band in phot.IRBANDS:
         os.remove(os.path.join(galaxydir, phot.match_filter(galaxydir, band)))
     download_images(galaxydir, coadddic, ra, dec, size)
+
+#def construct_image_query(BASEURL, coadddic, ra, dec, size 
 
 def download_images(galaxydir, coadddic, ra, dec, size, uncertainty=True):
     '''Downloads the images into the given directory.
