@@ -53,7 +53,7 @@ def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
         query_image(BASEDIR, object, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
 
-def query_WISE_catalog(filename, url=CATALOG_BASE, 
+def query_WISE_catalog(inputpath, url=CATALOG_BASE, 
         catalog=CATALOG_NAMES["AllWISE"], radius=10, 
         cols=['objstr', 'ra', 'dec', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
         'w1sat', 'w2rsemi', 'w2ba', 'w2pa', 'w2gmag', 'w2sat', 'w3rsemi', 
@@ -63,9 +63,24 @@ def query_WISE_catalog(filename, url=CATALOG_BASE,
     The filename '''	
     data = {"catalog": catalog, "spatial": "Upload", "uradius": radius, 
             "outfmt": 1, 'selcols': ','.join(cols)}
-    files = {'filename': open(filename, "rb")}
+    files = {'filename': open(inputpath, "rb")}
     ipac_output = requests.post(url, data=data, files=files)
-    ipac_table = Table.read(ipac_output.content, format="votable")
+    ##########################################################################
+    # This section of code will be unnecessary when astropy 1.0.0 is released.
+    # Remove at that point.
+    filedir, filename = os.path.dirname(inputpath)
+    outputpath = os.path.join(filedir, "output_{0}".format(filename))
+    outputhandle = open(temppath, 'w')
+    outputhandle.write(ipac_output.content)
+    expandedpath = os.path.join(filedir, "expanded_{0}".format(filename))
+    expand_IPAC_table(outputpath, expandedpath)
+    # This is sleazy and crappy, but it's what you gotta do in order to get a
+    # convenient way to make the code excisable by just removing the code
+    # between the octothropes.
+    ipac_output.content = expandedpath
+    ##########################################################################
+    ipac_table = Table.read(ipac_output.content, format="ascii.ipac")
+    ipac_table["cat"] = catalog
     return ipac_table
 	
 def get_WISE_catalog_entries(objectfile):
