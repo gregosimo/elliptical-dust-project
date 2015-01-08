@@ -69,17 +69,21 @@ def query_WISE_catalog(filename, url=CATALOG_BASE,
     return ipac_table
 	
 def get_WISE_catalog_entries(objectfile):
-	'''Gets entries from objectfile and returns it as a table.
+    '''Gets entries from objectfile and returns it as a table.
 	
-	This function first gets the AllWISE data for the objects in objectfile, and then gets the WISE All-Sky data for the objects in objectfile. For objects which are saturated in the AllWISE data, it will replace them with objects in the All-Sky data, thereby decreasing the effects of saturation.'''
-	allwiseTable = query_WISE_catalog(objectfile, catalog=CATALOG_NAMES["AllWISE"])
-	allskyTable = query_WISE_catalog(objectfile, catalog=CATALOG_NAMES["All-Sky"])
-	satobjects  = (allwiseTable["w1sat"] + allwiseTable["w2sat"] +
+    This function first gets the AllWISE data for the objects in objectfile,
+    and then gets the WISE All-Sky data for the objects in objectfile. For 
+    objects which are saturated in the AllWISE data, it will replace them 
+    with objects in the All-Sky data, thereby decreasing the effects of 
+    saturation.'''
+    allwiseTable = query_WISE_catalog(objectfile, catalog=CATALOG_NAMES["AllWISE"])
+    allskyTable = query_WISE_catalog(objectfile, catalog=CATALOG_NAMES["All-Sky"])
+    satobjects  = (allwiseTable["w1sat"] + allwiseTable["w2sat"] +
             allwiseTable["w3sat"] + allwiseTable["w4sat"])
-        for i, satpixels in enumerate(satobjects):
-            if satpixels != 0:
-                allwiseTable[i] = allskyTable[i]
-        return allwiseTable
+    for i, satpixels in enumerate(satobjects):
+        if satpixels != 0:
+            allwiseTable[i] = allskyTable[i]
+    return allwiseTable
 
 def query_metadata(ra, dec):
     '''Queries the WISE Image Metadata service for image information.
@@ -252,3 +256,7 @@ def expand_IPAC_table(inputfile, outputfile):
 
     Takes an abbreviated IPAC file at input, and then rewrites it to output,
     which will not be contracted.'''
+    # Since "in" and "out" are reserved python keywords, I will have to
+    # work around the fact that I can't use them as keyword args.
+    run_stilts(tcopy, ifmt="ipac", ofmt="ipac", **{"in": inputfile, 
+        "out": outputfile})
