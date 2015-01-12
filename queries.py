@@ -33,15 +33,8 @@ METADATA_SERVER = \
 # This query will return an IPAC table which contains the coaddgrp, coadd_ra,
 # coadd_id and bands available for that location. We then place the images into
 # the correct folder in the BASEDIR.
-<<<<<<< HEAD
-IMAGE_SERVER = \
-    "http://irsa.ipac.caltech.edu/ibe/data/wise/merge/4band_p3am_cdd"
-QUERY_STRING = \
-        "/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-{type:s}-3.fits.gz"
-=======
 IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
 UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-unc-3.fits.gz"
->>>>>>> parent of 260f202... Now attempting to redo the image downloads to utilize catalog
 
 # This is the code which corresponds to the latest WISE catalog. In this case,
 # it is for ALLWISE.
