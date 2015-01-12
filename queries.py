@@ -172,8 +172,6 @@ def upgrade_images(galaxydir, coadddic, ra, dec, size=600):
         os.remove(os.path.join(galaxydir, phot.match_filter(galaxydir, band)))
     download_images(galaxydir, coadddic, ra, dec, size)
 
-#def construct_image_query(BASEURL, coadddic, ra, dec, size 
-
 def download_images(galaxydir, coadddic, ra, dec, size, uncertainty=True):
     '''Downloads the images into the given directory.
     
