@@ -41,7 +41,7 @@ UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cd
 
 # This is the code which corresponds to the latest WISE catalog. In this case,
 # it is for ALLWISE.
-LATEST_WISE_CODE = "ab"
+WISE_CODES = {CATALOGS[0]: "ac51", CATALOGS[1]: "ab41"}
 
 def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
         uncertainty=True, overwrite=True):
@@ -104,7 +104,7 @@ def get_WISE_catalog_entries(objectfile):
             allwiseTable[i] = allskyTable[i]
     return allwiseTable
 
-def query_metadata(ra, dec):
+def query_metadata(ra, dec, server=METADATA_SERVER):
     '''Queries the WISE Image Metadata service for image information.
 
     This function will send a GET query to the WISE Image Metadata service. It
@@ -117,8 +117,7 @@ def query_metadata(ra, dec):
     # give the most centered tile anyway.
     payload = {"POS": "{0},{1}".format(ra, dec), "mcen": "1"}
     payloadget = urllib.urlencode(payload)
-    metatable = Table.read(get_url(METADATA_SERVER, payloadget), 
-        format="ascii.ipac")
+    metatable = Table.read(get_url(server, payloadget), format="ascii.ipac")
     if len(metatable) < 4:
         raise ValueError("Not all WISE Colors found")
     elif len(metatable) > 4:
@@ -126,7 +125,7 @@ def query_metadata(ra, dec):
     coaddID = np.unique(metatable["coadd_id"])
     if len(coaddID) != 1:
         raise ValueError("More than one coadd found")
-    return coaddID[0]
+    return metatable
 
 def query_image(BASEDIR, objstr, coaddID, ra, dec, size=600, upgrade=False,
         uncertainty=True, overwrite=True):
