@@ -21,27 +21,76 @@ CATALOG_BASE = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query"
 # These are a bunch of lookup tables for the WISE catalog.
 CATALOGS=["AllWISE", "All-Sky"]
 CATALOG_NAMES={"AllWISE": "wise_allwise_p3as_psd",  "All-Sky": "wise_allsky_4band_p3as_psd"}
+# A bunch of helper functions to organize the dictionaries here.
+# The dictionaries can probably be bypassed entirely in favor of these helper
+# functions... but that's more architecture change than I'm currently willing to
+# take.
+def extract_mission_from_full_catalog_name(catalog):
+    '''Extracts the mission part from a catalog name.'''
+    return catalog[:catalog.index("_")] 
+
+def extract_survey_from_full_catalog_name(catalog):
+    '''Extracts the survey part from a catalog name.'''
+    missionremoved = catalog[catalog.index("_")+1:]
+    return missionremoved[:missionremoved.index("_")]
+
+def extract_catalog_folder_from_full_catalog_name(catalog):
+    '''Extracts the catalog folder from a catalog name.'''
+    missionremoved = catalog[catalog.index("_")+1:]
+    return missionremoved[missionremoved.index("_")+1:]
+# I noticed that the data directories seem to be subdivided the same way the
+# catalog is. Therefore, building up a directory catalog string doesn' seem to
+# be too bad.
+# Please kill me for doing things in this spaghettified way. I'm basically
+# trying to split the CATALOG_NAMES into the component parts. For example,
+# "wise_allwise_p3as_psd" becomes "wise", "allwise", "p3as_psd". There should
+# just be a group of functions that extract the values...
+MISSION_NAMES = {k: extract_mission_from_full_catalog_name(v) for (k,v) in 
+        CATALOG_NAMES.iteritems()}
+SURVEY_NAMES = {k: extract_survey_from_full_catalog_name(v) for (k,v) in 
+        CATALOG_NAMES.iteritems()}
+CATALOG_FOLDER_NAMES = {k: extract_catalog_folder_from_full_catalog_name(v) for 
+        (k,v) in CATALOG_NAMES.iteritems()}
 
 # We begin with an IPAC table which has object names and ra/dec coordinates. We
 # must first query the WISE Image metadata server to get the images which
 # correspond to those coordinates. The WISE Image metadata server is located at:
-METADATA_SERVER ="http://irsa.ipac.caltech.edu/ibe/search/wise/allsky/4band_p3am_cdd"
-# Further queries should be placed after the url beginning with a ? and then
-# parameters
-#
-# This query will return an IPAC table which contains the coaddgrp, coadd_ra,
-# coadd_id and bands available for that location. We then place the images into
-# the correct folder in the BASEDIR.
-ALLWISE_BASE = "http://irsa.ipac.caltech.edu/ibe/sia/wise/allwise/p3am_cdd"
-ALLSKY_BASE  = \
-        "http://irsa.ipac.caltech.edu/ibe/sia/wise/allsky/4band_p3am_cdd"
+IRSA_BASE = "http://irsa.ipac.caltech.edu"
+CATALOG_EXTENSION = "ibe/{operation:s}/{mission:s}/{survey:s}/{catalog:s}"
+FILE_EXTENSION = "{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
 
-IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
+IMAGE_SERVER = "/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
 UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-unc-3.fits.gz"
 
 # This is the code which corresponds to the latest WISE catalog. In this case,
 # it is for ALLWISE.
 LATEST_WISE_CODE = "ab"
+
+
+
+def construct_search_url(survey):
+    '''Constructs a metadata search url for a survey.
+
+    This url will *NOT* contain the query info, just the resource name.
+    '''
+    # Ehhh.... make a new function that does this line automatically?
+    extension = CATALOG_EXTENSION.format(operation="search",
+            mission=MISSION_NAMES[survey], survey=SURVEY_NAMES[survey],
+            catalog=CATALOG_FOLDER_NAMES[survey])
+    fullurl = urlparse.urljoin(IRSA_BASE, extension)
+    return fullurl
+
+def construct_image_url(survey, coaddid, band):
+    '''Constructs an image URL.'''
+    extension = CATALOG_EXTENSION.format(operation="data",
+            mission=MISSION_NAMES[survey], survey=SURVEY_NAMES[survey],
+            catalog=CATALOG_FOLDER_NAMES[survey])
+    firstbase = urlparse.urljoin(IRSA_BASE, extension)
+    coaddgrp, coaddra = parse_coaddID(coaddid)
+    fileextend = FILE_EXTENSION.format(coaddgrp=coaddgrp, coadd_ra=coaddra,
+            coadd_id=coaddid, band=band)
+    fullurl = urlparse.urljoin(firstbase, fileextend)
+    return fullurl
 
 def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
         uncertainty=True, overwrite=True):
@@ -112,6 +161,10 @@ def query_metadata(ra, dec):
     then return a dictionary containing the coaddgrp, coadd_ra, coadd_id.
 
     The RA and Dec should be given in decimal format. No sexagecimal stuff!
+
+    NOTE: This method assumes the coaddID is the same for all surveys. This may
+    not necessarily be the case. However, it's easier to assume that as a
+    workaround.
     '''
     # The value given to mcen is ignored, but it will cause the database to only
     # give the most centered tile anyway.
@@ -128,8 +181,8 @@ def query_metadata(ra, dec):
         raise ValueError("More than one coadd found")
     return coaddID[0]
 
-def query_image(BASEDIR, objstr, coaddID, ra, dec, size=600, upgrade=False,
-        uncertainty=True, overwrite=True):
+def query_image(BASEDIR, objstr, survey, coaddID, ra, dec, size=600, 
+        upgrade=False, uncertainty=True, overwrite=True):
     '''Downloads WISE images into the correct directories.
 
     Objstr should be the full name of the object. If the directory corresponding
@@ -152,30 +205,30 @@ def query_image(BASEDIR, objstr, coaddID, ra, dec, size=600, upgrade=False,
     # using upgrade_images.
     if os.path.isdir(galaxydir):
         if overwrite:
-            download_images(galaxydir, coadddic, ra, dec, size)
+            download_images(galaxydir, survey, coadddic, ra, dec, size)
         elif upgrade and not check_galaxy_images_version(galaxydir):
             print "Upgrading images for {0}".format(objstr)
-            upgrade_images(galaxydir, coadddic, ra, dec, size)
+            upgrade_images(galaxydir, survey, coadddic, ra, dec, size)
         else:
             print "Skipping {0}: Folder exists.".format(objstr)
     # If the folder doesn't exist, make it and download the images into it.
     else:
         os.mkdir(galaxydir)
-        download_images(galaxydir, coadddic, ra, dec, size)
+        download_images(galaxydir, survey, coadddic, ra, dec, size)
     print "Images for {0} downloaded".format(objstr)
 
-def upgrade_images(galaxydir, coadddic, ra, dec, size=600):
+def upgrade_images(galaxydir, survey, coadddic, ra, dec, size=600):
     '''Performs an upgrade for images in a directory.
     
     This requies going through the WISE images, deleting them, and then
     downloading the new images.'''
     for band in phot.IRBANDS:
         os.remove(os.path.join(galaxydir, phot.match_filter(galaxydir, band)))
-    download_images(galaxydir, coadddic, ra, dec, size)
+    download_images(galaxydir, survey, coadddic, ra, dec, size)
 
 #def construct_image_query(BASEURL, coadddic, ra, dec, size 
 
-def download_images(galaxydir, coadddic, ra, dec, size, uncertainty=True):
+def download_images(galaxydir, survey, coadddic, ra, dec, size, uncertainty=True):
     '''Downloads the images into the given directory.
     
     This function will download cutouts. Therefore, it will need to know the RA,
@@ -184,13 +237,13 @@ def download_images(galaxydir, coadddic, ra, dec, size, uncertainty=True):
     # Downloading all bands
     for i in range(1,5):
         coadddic["band"] = i
-        image_url = IMAGE_SERVER.format(**coadddic)
+        imagebase = construct_image_url("AllWISE", coaddID, "w"+str(i))
         query_params = {"center": "{0},{1}".format(ra, dec), "size":
                 "{0}arcsec".format(size)}
         image_query = get_url(image_url, urllib.urlencode(query_params))
         download_image(galaxydir, image_query, "w{0}".format(i))
         if uncertainty:
-            uncert_url = UNCERTAINTY_SERVER.format(**coadddic)
+            uncert_url = imagebase.replace("int", "unc") + ".tar.gz"
             uncert_query = get_url(uncert_url, urllib.urlencode(query_params))
             download_image(galaxydir, uncert_query, "w{0}".format(i))
                 
@@ -228,6 +281,10 @@ def check_galaxy_images_version(galaxydir):
 def get_version(filename):
     '''Extracts the version code from the filename of a file'''
     return filename[9:11]
+
+def parse_coaddID(coaddID):
+    '''Returns a tuple with the coaddgrp an coaddra'''
+    return get_coaddgrp(coaddID), get_coadd_ra(coaddID)
 
 def get_coaddgrp(coaddID):
     '''Extracts the coaddgrp from the coaddID'''
