@@ -136,7 +136,7 @@ def mask_elliptical_galaxy(galaxydir, maskband, objectcoords, threshold=5,
     regionpath = phot.format_band_dependence(regionbase, maskband, "reg", 
             galaxydir)
     if not maskconfig:
-        maskconfig = select_sextractor_config(SEXTRACTOR_DIR, image)
+        maskconfig = select_sextractor_config(SEXTRACTOR_DIR, maskband)
     masked_image = os.path.join(galaxydir, segment)
     fullmask = os.path.join(galaxydir, maskfile)
     galaxy_removed = os.path.join(galaxydir, clearedsegment)
@@ -523,11 +523,12 @@ def select_sextractor_config(SEXTRACTOR_PATH, band):
     There are different sextractor configs for images from different
     instruments, so this method selects the most appropriate config file.
     '''
-    imagebase = os.path.basename(image)
     if band in phot.UVBANDS:
         configname = "UV.sex"
     elif band in phot.IRBANDS:
         configname = "WISE.sex"
+    else:
+        raise ValueError("Band {0} not recognized".format(band))
     return os.path.join(SEXTRACTOR_PATH, configname)
 
 def backup_file(filepath):

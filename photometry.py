@@ -769,9 +769,8 @@ def run_imfunc(infile, outfile, func):
     # which already exists, it will simply add on another layer, which
     # confuses the hell out of ellipse. So if a previous file exists, I'll
     # delete it manually.
-    if os.path.isfile(varfile):
-        os.remove(varfile)
-    run_imfunc(uncfile, varfile, "square")
+    if os.path.isfile(outfile):
+        os.remove(outfile)
 
     iraf.images()
     iraf.imutil()
@@ -846,12 +845,12 @@ def source_uncertainty_from_uncertainty_file(galaxydir, band, uncfile,
     TFLUX_E parameter.
     '''
     varfile = rreplace(uncfile, "unc", "var", 1)
+    run_imfunc(uncfile, varfile, "square")
 
 
     ellipse_file = format_band_dependence(ellipsebase, band, "tab",
             galaxydir)
-    output = format_band_dependence(baseuncertainty,
-        band, "tab", galaxydir)
+    output = format_band_dependence(outputbase, band, "tab", galaxydir)
     run_ellipse(varfile, ellipse_file, output)
 
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
