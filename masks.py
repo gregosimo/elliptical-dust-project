@@ -530,6 +530,8 @@ def select_sextractor_config(SEXTRACTOR_PATH, band):
         configname = "UV.sex"
     elif band in phot.IRBANDS:
         configname = "WISE.sex"
+    else:
+        raise ValueError("Band {0} not recognized".format(band))
     return os.path.join(SEXTRACTOR_PATH, configname)
 
 def backup_file(filepath):
