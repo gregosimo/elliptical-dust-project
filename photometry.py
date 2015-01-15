@@ -113,7 +113,7 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
             if brightness is "AB":
                 photvalue = conv.DNflux2ABmag(band, DNflux)
             else:
-                photvalue = conv.DNflux2WISEmag(band, DNflux)
+                photvalue = conv.DNflux2Vegamag(band, DNflux)
             err = conv.DN_err_to_mag_err(galaxydir, band, objectError,
                     DNflux=DNflux, ZPunc=ZPuncertainty)
         return (photvalue, err)
@@ -121,7 +121,7 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
         if brightness is "flux":
             photvalue = conv.DN_flux_to_Jy(band, DNflux, colorIndex)
         elif brightness is "Vega":
-            photvalue = conv.DNflux2WISEmag(band, DNflux)
+            photvalue = conv.DNflux2Vegamag(band, DNflux)
         else:
             photvalue = conv.DNflux2ABmag(band, DNflux)
             
@@ -768,9 +768,8 @@ def run_imfunc(infile, outfile, func):
     # which already exists, it will simply add on another layer, which
     # confuses the hell out of ellipse. So if a previous file exists, I'll
     # delete it manually.
-    if os.path.isfile(varfile):
-        os.remove(varfile)
-    run_imfunc(uncfile, varfile, "square")
+    if os.path.isfile(outfile):
+        os.remove(outfile)
 
     iraf.images()
     iraf.imutil()
@@ -845,12 +844,12 @@ def source_uncertainty_from_uncertainty_file(galaxydir, band, uncfile,
     TFLUX_E parameter.
     '''
     varfile = rreplace(uncfile, "unc", "var", 1)
+    run_imfunc(uncfile, varfile, "square")
 
 
     ellipse_file = format_band_dependence(ellipsebase, band, "tab",
             galaxydir)
-    output = format_band_dependence(baseuncertainty,
-        band, "tab", galaxydir)
+    output = format_band_dependence(outputbase, band, "tab", galaxydir)
     run_ellipse(varfile, ellipse_file, output)
 
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
