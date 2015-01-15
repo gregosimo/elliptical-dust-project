@@ -55,7 +55,7 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
     inputinfo["nuv_exptime"].fill_value = 0.0
     inputinfo_filled = inputinfo.filled()
 
-    surveys = ["AIS", "DIS", "GII", "GIS", "MIS", "NGS"]
+    surveys = ["AIS", "DIS", "GII", "GIS", "MIS", "NGS", "ETS"]
     # Make a dictionary associated with each filename.
     filepaths = dict((survey, os.path.join(output_dir,
         "{0}.csv".format(survey))) for survey in surveys)
@@ -133,7 +133,13 @@ def galex_tilename(MASTrow):
 
 def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath, 
         tempfolder="images"):
-    """Processes a tarfile downloaded from GALEX using sortTable."""
+    """Processes a tarfile downloaded from GALEX using sortTable.
+    
+    BASEDIR is the directory where we want the image folders to be.
+    Workfolder is the location which contains the tarfiles as well as the
+    location that will have tempfolder. This does not necessarily have to be
+    identical to BASEDIR, but often is.
+    Sorttablepath is the path to the sorttable file."""
     tempfolder = os.path.join(workfolder, tempfolder)
     # We first want to go through all of the tar archives and extract them into
     # tempfolder. This will make a single location that contains all of the
@@ -153,15 +159,16 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
         fuvtile = entry["FUV_Tile"].replace("-", "_")
         FUVstring = os.path.join(tempfolder, 
                 folder_matchstring(fuvtile), 
-                "{tile}*-fd-*.fits.gz".format(tile=fuvtile))
+                "*-fd-*.fits.gz".format(tile=fuvtile))
         nuvtile = entry["NUV_Tile"].replace("-", "_")
         NUVstring = os.path.join(tempfolder, 
                 folder_matchstring(nuvtile), 
-                "{tile}*-nd-*.fits.gz".format(tile=nuvtile))
+                "*-nd-*.fits.gz".format(tile=nuvtile))
         galexFUVfiles = glob.glob(FUVstring) 
         galexNUVfiles = glob.glob(NUVstring)
         if not galexFUVfiles:
             print "Could not match {0}.".format(entry["FUV_Tile"])
+            raise WTFError
         for imagefile in galexFUVfiles + galexNUVfiles:
             try:
                 gunzip(imagefile, galaxydir)

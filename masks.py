@@ -13,8 +13,10 @@ from astropy.table import Table
 import photometry as phot
 from mask_trimmer import MaskCMD
 
+SEXTRACTOR_DIR = "/home/regulus/simonian/year1/wise/sextractor"
+
 def build_masks(BASEDIR, WISETable, maskband, threshold=5,
-        output="foreground.fits", maskconfigbase="default"):
+        output="foreground.fits", maskconfig=""):
     '''Builds masks for specified objects.
 
     The objects to be built should be specified in WISETable, which should be a
@@ -29,7 +31,7 @@ def build_masks(BASEDIR, WISETable, maskband, threshold=5,
     The resulting mask will written to $BASEDIR/output.
     '''
     phot.allMasks(BASEDIR, WISETable, maskband, threshold=threshold, 
-            output=output, maskconfigbase=maskconfigbase)
+            output=output)
 
 def run_sextractor(image, config, **options):
     '''Runs SExtractor on an image.
@@ -41,6 +43,13 @@ def run_sextractor(image, config, **options):
     specified as additional keyword arguments.
     '''
     command = ["sex", image, "-c", config]
+    # If I can't get rid of the threshold parameter, then I need to just delete
+    # a nonsensical parameter.
+    try:
+        if options["threshold"] == 0:
+            del(options["threshold"])
+    except KeyError:
+        pass
     for key, value in options.iteritems():
         command.append("-"+key)
         command.append(str(value))
@@ -79,7 +88,7 @@ def sextractor_subtracted_background(image, config,
     sexargs["CHECKIMAGE_TYPE"] = "-BACKGROUND"
     run_sextractor(image, config, **sexargs)
 
-def sextractor_mask(image, threshold, config, **sexargs):
+def sextractor_mask(image, config, **sexargs):
     '''
     Creates a mask for an image.
 
@@ -93,12 +102,11 @@ def sextractor_mask(image, threshold, config, **sexargs):
     CHECKIMAGE_NAME: The location of the mask.
     '''
     sexargs["CHECKIMAGE_TYPE"] = "SEGMENTATION"
-    sexargs["DETECT_THRESH"] = threshold
     run_sextractor(image, config, **sexargs)
 
 def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50, 
         output="foregroundmask.fits", ellipsebase="ellipsepars", spreadpix=5,
-        maskconfigbase="default"):
+        maskconfig=""):
     '''Creates a mask file for the object in WISErow.
 
     The general algorithm for the mask creation algorithm is to find bright
@@ -109,14 +117,14 @@ def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50,
     objectcoords = phot.getpixelcoords(phot.match_filter(galaxydir, maskband),
             WISErow["ra"], WISErow["dec"])
     # Add regionbase.
-    mask_elliptical_galaxy(galaxydir, threshold, maskband, objectcoords,
-            maskfile=output, ellipsebase=ellipsebase, configbase=maskconfigbase,
-            spreadpix=5)
+    mask_elliptical_galaxy(galaxydir, maskband, objectcoords,
+            threshold=threshold, maskfile=output, ellipsebase=ellipsebase, 
+            spreadpix=5, maskconfig="")
 
-def mask_elliptical_galaxy(galaxydir, threshold, maskband, objectcoords,
+def mask_elliptical_galaxy(galaxydir, maskband, objectcoords, threshold=5,
         maskfile="foregroundmask.fits", regionbase="ellipseregion",
-        ellipsebase="ellipsepars", configbase="default", 
-        segment="rawsegment.fits", clearedsegment="segment_nogalaxy.fits",
+        ellipsebase="ellipsepars", maskconfig="", segment="rawsegment.fits", 
+        clearedsegment="segment_nogalaxy.fits",
         procsegment="foreground_unnormalized.fits",
         prespreadfile="foreground_normalized.fits", spreadpix=25):
     '''Creates a foreground mask for an elliptical galaxy.
@@ -128,17 +136,16 @@ def mask_elliptical_galaxy(galaxydir, threshold, maskband, objectcoords,
     image = phot.match_filter(galaxydir, maskband)
     regionpath = phot.format_band_dependence(regionbase, maskband, "reg", 
             galaxydir)
-    configfile = os.path.join(os.path.split(galaxydir)[0],
-            phot.format_band_dependence(configbase, maskband, "sex"))
+    if not maskconfig:
+        maskconfig = select_sextractor_config(SEXTRACTOR_DIR, image)
     masked_image = os.path.join(galaxydir, segment)
     fullmask = os.path.join(galaxydir, maskfile)
-    config = os.path.join(galaxydir, configfile)
     galaxy_removed = os.path.join(galaxydir, clearedsegment)
     segment_needs_normalization = os.path.join(galaxydir, procsegment)
     normalized_segment = os.path.join(galaxydir, prespreadfile)
 
-    segmentation_mask(config, image, threshold, masked_image,
-            segment_needs_normalization, objectcoords)
+    segmentation_mask(maskconfig, image, masked_image, segment_needs_normalization, 
+            objectcoords, threshold=threshold)
     # We'll interactively generate masks.
     print "Please remove object {0}.".format(os.path.basename(galaxydir))
     maskprog = MaskCMD(segment_needs_normalization, galaxy_removed, 
@@ -215,8 +222,8 @@ def subtractw3fromw1(config, w1image, w3image, w1output_nobackground,
     print "Subtracting images."
     run_imarith(w1output_convolved, '-', w3output_scaled, subtracted_output)
 
-def segmentation_mask(config, image, threshold, masked_image, fullmask,
-        coords):
+def segmentation_mask(config, image, masked_image, fullmask, coords, 
+        threshold=5):
     '''Creates a mask from a segmentation image and object coordinates.
 
     SExtractor is only run once, but is used to generate a segmentation map.
@@ -227,8 +234,8 @@ def segmentation_mask(config, image, threshold, masked_image, fullmask,
     image with the galaxyy removed is saved in fullmask, which is the desirable
     product.
     '''
-    sextractor_mask(image, threshold, config, 
-            CHECKIMAGE_NAME=masked_image)
+    sextractor_mask(image, config, CHECKIMAGE_NAME=masked_image,
+            threshold=threshold)
     remove_galaxy_from_mask(masked_image, fullmask, coords)
 
 def remove_galaxy_from_mask(imagepath, newimagepath, coord):
@@ -510,6 +517,19 @@ def run_immean(input):
     iraf.immean(input)
     meanvalue = iraf.immean.getParam("mean")
     return meanvalue
+
+def select_sextractor_config(SEXTRACTOR_PATH, band):
+    '''Picks a sextractor config file for the appropriate band.
+
+    There are different sextractor configs for images from different
+    instruments, so this method selects the most appropriate config file.
+    '''
+    imagebase = os.path.basename(image)
+    if band in phot.UVBANDS:
+        configname = "UV.sex"
+    elif band in phot.IRBANDS:
+        configname = "WISE.sex"
+    return os.path.join(SEXTRACTOR_PATH, configname)
 
 def backup_file(filepath):
     '''Performs a backup of a file by appending .backup to it. 

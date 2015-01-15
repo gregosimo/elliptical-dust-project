@@ -24,6 +24,7 @@ import masks
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
 UVBANDS = bands[4:]
+MASKBANDS = ["W1", "NUV"]
 MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ', 
                    "markeredgewidth": 1.5},
                1: {"marker": '^', "markerfacecolor": 'orange', "ls": ' '},
@@ -127,11 +128,11 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
             
         return photvalue
 
-def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
+def build_pipeline(BASEDIR, WISETable, maskthresh=0, inputband=MASKBANDS,
         maskoutput="foreground.fits", ellipsepars="ellipsepars",
-        maskconfigbase="default", ellipseoutput="ellipse_aperture",
-        skycoord="fitsky", skybase="sky_level", skygens="adaptive",
-        skyratio=1.5, uncertaintybase="uncertainty", skipmask=False,
+        maskconfig="", ellipseoutput="ellipse_aperture", skycoord="fitsky", 
+        skybase="sky_level", skygens="adaptive", skyratio=1.5, 
+        uncertaintybase="uncertainty", skipmask=False,
         alt_mask="foreground_alt.fits", runbands=bands, clip_background=False):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
@@ -157,9 +158,9 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
         skipmask = True
     if not skipmask:
         print "Making Masks..."
-        allMasks(BASEDIR, WISETable, threshold=maskthresh, maskband=inputband,
-                output=maskoutput, ellipsebase=ellipsepars,
-                maskconfigbase="default")
+        for band in maskbands:
+            masks.build_masks(BASEDIR, WISETable, band, threshold=maskthresh,
+                    output=maskoutput, maskconfig=maskconfig)
     print "Making Ellipse Tables..."
     allEllipseTables(BASEDIR, WISETable, runbands=runbands, mask=maskoutput,
             baseoutput=ellipseoutput, baseparamname=ellipsepars,
@@ -176,7 +177,7 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=150, inputband="W1",
     write_pipeline_file("{0}.par".format(ellipsepars), 
             mask_threshold=maskthresh, mask_band=inputband, 
             mask_output=maskoutput, ellipse_parameters=ellipsepars, 
-            mask_config_base=maskconfigbase, aperture_file=ellipseoutput, 
+            mask_config_base=maskconfig, aperture_file=ellipseoutput, 
             sky_coordinates=skycoord, sky_base=skybase, 
             uncertainty_base=uncertaintybase, bands_written=runbands)
 
@@ -707,11 +708,11 @@ def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
 ##############################################################################
 
 def allMasks(BASEDIR, fulltable, maskband, threshold=5,
-        output="foreground.fits", maskconfigbase="default"):
+        output="foreground.fits", maskconfig=""):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
-            maskband=maskband, output=output, maskconfigbase=maskconfigbase)
+            maskband=maskband, output=output, maskconfig=maskconfig)
 
 def allApertureTables(BASEDIR, fulltable, runbands=bands,
         outputbase="ellipsepars"):
@@ -1437,8 +1438,8 @@ def genApertureTable(BASEDIR, WISErow, outputbase="ellipsepars", runbands=bands)
     objectdir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     for band in runbands:
         output = format_band_dependence(outputbase, band)
-        tableForEllipseRoutine = extractEllipseParamsfromWISE(BASEDIR, WISErow,
-                band)
+        tableForEllipseRoutine = extractEllipseParamsfromWISE(objectdir, 
+                WISErow, band)
         createEllipseParamTable(objectdir, tableForEllipseRoutine, output)
 
 
@@ -1631,6 +1632,26 @@ def doubleDifferencePlot(xfirst, xsecond, yfirst, ysecond, xfirsterr,
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
+
+def plotSED(bands, mags, errs, modelx=[], modely=[], modellabels=[],
+        title="SED", xlabel="Wavelength (nm)", ylabel="AB Mag"):
+    '''Plots an SED of the given bands.
+
+    The bands should be a list of band names, their effective wavelengths will
+    be looked-up internally. Mags should be the flux-magnitude corresponding to
+    those bands, and errs should be the errors of those magnitudes.
+
+    The optional keywords modelx and modely plot models in addition to the SED.
+    They are meant to be lists of arrays, so an empty list means there are no
+    model arrays.
+    '''
+    wavelengths = np.array([effective_wavelength(band) for band in bands])
+    plt.errorbar(wavelengths, mags, errs)
+    for x, y, label in zip(modelx, modely, modellabels):
+        plt.plot(modelx, modely, label=label)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.legend()
 
 def calc_statistical_difference(minuend, subtrahend, minuerr, subtraerr):
     '''Returns statistically subtracted value of two arrays.
