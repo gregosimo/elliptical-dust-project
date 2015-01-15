@@ -44,9 +44,10 @@ def run_sextractor(image, config, **options):
     for key, value in options.iteritems():
         command.append("-"+key)
         command.append(str(value))
-    returncode = subprocess.call(command)
+        returncode = subprocess.call(command)
     if returncode:
         print returncode
+        print "Could not run ''{0}''".format(' '.join(command))
         raise ValueError("Fatal Error in SExtractor.")
 
 def sextractor_background(image, config, **sexargs):

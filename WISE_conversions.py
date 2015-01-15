@@ -16,7 +16,7 @@ def DN_flux_to_Jy(band, objectflux, colorIndex=-2):
 
 def DN_err_to_Jansky_err(galaxydir, band, DNerr, 
         baseobjectfile="ellipse_aperture", mask="", useskybase="sky_level", 
-        DNflux=0, colorIndex=-2):
+        DNflux=0, colorIndex=-2, ZPunc=True):
     '''Converts an error in Data Numbers to an error in Janskys.
 
     If DNflux is given, this function will use it as the value for the object's
@@ -36,8 +36,6 @@ def DN_err_to_Jansky_err(galaxydir, band, DNerr,
             (zpfluxunc**2 / zpfluxlevel**2 + 0.8483 * zpmagunc**2) + 
             DNerr**2)**(0.5)
     return sigma_Jy
-
-
 
 def DNflux2Vegamag(band, flux):
     '''Converts the flux from a raw image to a Vega magnitude.
