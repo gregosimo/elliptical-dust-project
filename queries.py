@@ -15,6 +15,13 @@ import numpy as np
 
 import photometry as phot
 
+# This is the entry point for the catalog.
+CATALOG_BASE = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query"
+
+# These are a bunch of lookup tables for the WISE catalog.
+CATALOGS=["AllWISE", "All-Sky"]
+CATALOG_NAMES={"AllWISE": "wise_allwise_p3as_psd",  "All-Sky": "wise_allsky_4band_p3as_psd"}
+
 # We begin with an IPAC table which has object names and ra/dec coordinates. We
 # must first query the WISE Image metadata server to get the images which
 # correspond to those coordinates. The WISE Image metadata server is located at:
@@ -25,6 +32,10 @@ METADATA_SERVER ="http://irsa.ipac.caltech.edu/ibe/search/wise/allsky/4band_p3am
 # This query will return an IPAC table which contains the coaddgrp, coadd_ra,
 # coadd_id and bands available for that location. We then place the images into
 # the correct folder in the BASEDIR.
+ALLWISE_BASE = "http://irsa.ipac.caltech.edu/ibe/sia/wise/allwise/p3am_cdd"
+ALLSKY_BASE  = \
+        "http://irsa.ipac.caltech.edu/ibe/sia/wise/allsky/4band_p3am_cdd"
+
 IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
 UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-unc-3.fits.gz"
 
@@ -46,12 +57,52 @@ def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
         query_image(BASEDIR, object, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
 
-def query_catalog(objects, catalog="wise_allwise_p3as_psd"):
-    '''Queries IRSA for the objects found in the given catalog.'''
-    entries = [Irsa.query_region(object, catalog=catalog) for object in objects]
-    print entries
-    fulltable = vstack(entries)
-    return fulltable
+def query_WISE_catalog(inputpath, url=CATALOG_BASE, 
+        catalog=CATALOG_NAMES["AllWISE"], radius=10, 
+        cols=['objstr', 'ra', 'dec', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
+        'w1sat', 'w2rsemi', 'w2ba', 'w2pa', 'w2gmag', 'w2sat', 'w3rsemi', 
+        'w3ba', 'w3pa', 'w3gmag', 'w3sat', 'w4rsemi', 'w4ba', 'w4pa', 
+        'w4gmag' 'w4sat']):
+    '''Queries IRSA for the objects found in the given catalog.
+    The filename '''	
+    data = {"catalog": catalog, "spatial": "Upload", "uradius": radius, 
+            "outfmt": 1, 'selcols': ','.join(cols)}
+    files = {'filename': open(inputpath, "rb")}
+    ipac_output = requests.post(url, data=data, files=files)
+    ##########################################################################
+    # This section of code will be unnecessary when astropy 1.0.0 is released.
+    # Remove at that point.
+    filedir, filename = os.path.dirname(inputpath)
+    outputpath = os.path.join(filedir, "output_{0}".format(filename))
+    outputhandle = open(temppath, 'w')
+    outputhandle.write(ipac_output.content)
+    expandedpath = os.path.join(filedir, "expanded_{0}".format(filename))
+    expand_IPAC_table(outputpath, expandedpath)
+    # This is sleazy and crappy, but it's what you gotta do in order to get a
+    # convenient way to make the code excisable by just removing the code
+    # between the octothropes.
+    ipac_output.content = expandedpath
+    ##########################################################################
+    ipac_table = Table.read(ipac_output.content, format="ascii.ipac")
+    ipac_table["cat"] = catalog
+    return ipac_table
+	
+def get_WISE_catalog_entries(objectfile):
+    '''Gets entries from objectfile and returns it as a table.
+	
+    This function first gets the AllWISE data for the objects in objectfile,
+    and then gets the WISE All-Sky data for the objects in objectfile. For 
+    objects which are saturated in the AllWISE data, it will replace them 
+    with objects in the All-Sky data, thereby decreasing the effects of 
+    saturation.'''
+    allwiseTable = query_WISE_catalog(objectfile, catalog=CATALOG_NAMES["AllWISE"])
+    allskyTable = query_WISE_catalog(objectfile, catalog=CATALOG_NAMES["All-Sky"])
+    satobjects  = (allwiseTable["w1sat"] + allwiseTable["w2sat"] +
+            allwiseTable["w3sat"] + allwiseTable["w4sat"])
+    for i, satpixels in enumerate(satobjects):
+        if satpixels != 0:
+            allwiseTable[i] = allskyTable[i]
+    return allwiseTable
 
 def query_metadata(ra, dec):
     '''Queries the WISE Image Metadata service for image information.
@@ -121,6 +172,8 @@ def upgrade_images(galaxydir, coadddic, ra, dec, size=600):
     for band in phot.IRBANDS:
         os.remove(os.path.join(galaxydir, phot.match_filter(galaxydir, band)))
     download_images(galaxydir, coadddic, ra, dec, size)
+
+#def construct_image_query(BASEURL, coadddic, ra, dec, size 
 
 def download_images(galaxydir, coadddic, ra, dec, size, uncertainty=True):
     '''Downloads the images into the given directory.
@@ -208,3 +261,23 @@ def ned_resolve(objects):
             names=("ID", "RA", "DEC"))
     relevanttable["ID"] = objects
     return relevanttable
+
+def run_stilts(taskname, **taskargs):
+    '''Wrapper function for the stilts program.
+
+    Runs the STILTS program with the given taskname, and the arguments required
+    for that task. The options for that task should be given in taskargs.
+    '''
+    command = ["stilts"] + [taskname] + ["{0}={1}".format(k,v) for k,v in 
+            taskargs.items()]
+    subprocess.check_call(command)
+
+def expand_IPAC_table(inputfile, outputfile):
+    '''De-abbreviates an IPAC file.
+
+    Takes an abbreviated IPAC file at input, and then rewrites it to output,
+    which will not be contracted.'''
+    # Since "in" and "out" are reserved python keywords, I will have to
+    # work around the fact that I can't use them as keyword args.
+    run_stilts(tcopy, ifmt="ipac", ofmt="ipac", **{"in": inputfile, 
+        "out": outputfile})
