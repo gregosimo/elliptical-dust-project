@@ -25,7 +25,7 @@ CATALOG_NAMES={"AllWISE": "wise_allwise_p3as_psd",  "All-Sky": "wise_allsky_4ban
 # We begin with an IPAC table which has object names and ra/dec coordinates. We
 # must first query the WISE Image metadata server to get the images which
 # correspond to those coordinates. The WISE Image metadata server is located at:
-METADATA_SERVER ="http://irsa.ipac.caltech.edu/ibe/search/wise/allsky/4band_p3am_cdd"
+METADATA_SERVER ="http://irsa.ipac.caltech.edu/ibe/search/wise/allwise/p3am_cdd"
 # Further queries should be placed after the url beginning with a ? and then
 # parameters
 #
@@ -36,8 +36,8 @@ ALLWISE_BASE = "http://irsa.ipac.caltech.edu/ibe/sia/wise/allwise/p3am_cdd"
 ALLSKY_BASE  = \
         "http://irsa.ipac.caltech.edu/ibe/sia/wise/allsky/4band_p3am_cdd"
 
-IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
-UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-unc-3.fits.gz"
+IMAGE_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
+UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-unc-3.fits.gz"
 
 # This is the code which corresponds to the latest WISE catalog. In this case,
 # it is for ALLWISE.
@@ -208,12 +208,12 @@ def download_image(galaxydir, image_query, band):
     # the file. However, the current version of wget installed on this machine
     # is 1.12, and I'm running into a bug with it. When wget is upgraded to
     # 1.15, we'll see if that is still a problem.
-    wget_command = ["/usr/current/wget/bin/wget", "--directory-prefix={0}".format(galaxydir), 
+    wget_command = ["wget", "--directory-prefix={0}".format(galaxydir), 
             "--content-disposition", image_query]
     subprocess.call(wget_command)
     # Once the image is downloaded, we want to uncompress it, and then
     # delete the compressed file.
-    subprocess.call(["gunzip", compressed_path])
+    subprocess.call(["gunzip", "--force", compressed_path])
 
 def check_galaxy_images_version(galaxydir):
     '''Checks if the WISE images are from the latest catalog.

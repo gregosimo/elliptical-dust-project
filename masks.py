@@ -13,7 +13,7 @@ from astropy.table import Table
 import photometry as phot
 from mask_trimmer import MaskCMD
 
-SEXTRACTOR_DIR = "/home/regulus/simonian/year1/wise/sextractor"
+SEXTRACTOR_DIR = "/home/gregory/work/sextractor"
 
 def build_masks(BASEDIR, WISETable, maskband, threshold=5,
         output="foreground.fits", maskconfig=""):
@@ -236,7 +236,7 @@ def segmentation_mask(config, image, masked_image, fullmask, coords,
     product.
     '''
     sextractor_mask(image, config, CHECKIMAGE_NAME=masked_image,
-            threshold=threshold)
+            DETECT_THRESH=threshold)
     remove_galaxy_from_mask(masked_image, fullmask, coords)
 
 def remove_galaxy_from_mask(imagepath, newimagepath, coord):

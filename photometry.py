@@ -33,7 +33,7 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
 
-STSDAS_COLUMN = "/home/regulus/simonian/year1/wise/ellipse_columns.txt"
+STSDAS_COLUMN = "/home/gregory/work//ellipse_columns.txt"
 
 ###############################################################################
 # Aperture Photometry Routines                                                #
@@ -112,7 +112,7 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
                     DNflux=DNflux, ZPunc=ZPuncertainty, colorIndex=colorIndex)
         else:
             if brightness is "AB":
-                photvalue = conv.DNflux2ABmag(band, DNflux)
+                photvalue = conv.DNflux1ABmag(band, DNflux)
             else:
                 photvalue = conv.DNflux2Vegamag(band, DNflux)
             err = conv.DN_err_to_mag_err(galaxydir, band, objectError,
