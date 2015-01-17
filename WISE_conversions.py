@@ -132,7 +132,7 @@ def mag2flux(mag, calibmag, calibflux):
 def magerr2fluxerr(mag, magerr, calibmag, calibmagerr, calibflux, calibfluxerr):
     '''Converts magnitude errors to flux errors.'''
     fluxerr = 10**(-(mag-calibmag)/2.5) * np.sqrt(calibfluxerr**2 + 0.8483 *
-            (magerr**2 + calibmagerr**2))
+            calibflux**2 * (magerr**2 + calibmagerr**2))
     return fluxerr
 
 def WISEmag2Jansky(band, mag, colorIndex=-2):

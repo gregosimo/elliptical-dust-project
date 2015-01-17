@@ -24,9 +24,10 @@ def build_masks(BASEDIR, WISETable, maskband, threshold=5,
     the band called maskband. As a result, there should only be one mask to be
     used per image type.
 
-    Parameters sent to SExtractor should be the config file, specified in
-    maskconfigbase, along with the threshold of the measurement, specified in
-    threshold.
+    Optional parameters are the threshold, which will override the value in the
+    configuration file, the name of the output, as well as the config file. If
+    the config file is left blank, an appropriate config file located in
+    SEXTRACTOR_DIR will be used instead.
 
     The resulting mask will written to $BASEDIR/output.
     '''
@@ -137,7 +138,7 @@ def mask_elliptical_galaxy(galaxydir, maskband, objectcoords, threshold=5,
     regionpath = phot.format_band_dependence(regionbase, maskband, "reg", 
             galaxydir)
     if not maskconfig:
-        maskconfig = select_sextractor_config(SEXTRACTOR_DIR, image)
+        maskconfig = select_sextractor_config(SEXTRACTOR_DIR, maskband)
     masked_image = os.path.join(galaxydir, segment)
     fullmask = os.path.join(galaxydir, maskfile)
     galaxy_removed = os.path.join(galaxydir, clearedsegment)
@@ -524,7 +525,6 @@ def select_sextractor_config(SEXTRACTOR_PATH, band):
     There are different sextractor configs for images from different
     instruments, so this method selects the most appropriate config file.
     '''
-    imagebase = os.path.basename(image)
     if band in phot.UVBANDS:
         configname = "UV.sex"
     elif band in phot.IRBANDS:
