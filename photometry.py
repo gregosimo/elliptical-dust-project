@@ -33,7 +33,8 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
 
-STSDAS_COLUMN = "/home/gregory/work//ellipse_columns.txt"
+#STSDAS_COLUMN = "/home/gregory/work/ellipse_columns.txt"
+STSDAS_COLUMN = "/home/regulus/simonian/year1/wise/ellipse_columns.txt"
 
 ###############################################################################
 # Aperture Photometry Routines                                                #

@@ -13,7 +13,8 @@ from astropy.table import Table
 import photometry as phot
 from mask_trimmer import MaskCMD
 
-SEXTRACTOR_DIR = "/home/gregory/work/sextractor"
+#SEXTRACTOR_DIR = "/home/gregory/work/sextractor"
+SEXTRACTOR_DIR = "/home/regulus/simonian/year1/wise/sextractor"
 
 def build_masks(BASEDIR, WISETable, maskband, threshold=5,
         output="foreground.fits", maskconfig=""):
