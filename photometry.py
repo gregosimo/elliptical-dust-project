@@ -35,7 +35,8 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
 LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4": 
         -0.029}
 
-STSDAS_COLUMN = "/home/gregory/work//ellipse_columns.txt"
+#STSDAS_COLUMN = "/home/gregory/work/ellipse_columns.txt"
+STSDAS_COLUMN = "/home/regulus/simonian/year1/wise/ellipse_columns.txt"
 
 ###############################################################################
 # Aperture Photometry Routines                                                #

@@ -74,7 +74,7 @@ def DN_to_Jy_conversion_factor(band, colorIndex=-2):
     http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
     '''
     DN_to_Jy = {"W1": 1.9350e-6, "W2": 2.7048e-06, "W3": 1.8326e-06, "W4":
-            5.2269e-05}
+            5.2269e-05, "NUV": 3.53e-5, "FUV": 1.07e-4}
     return DN_to_Jy[band] / color_correction(band, colorIndex)
 
 ###############################################################################
@@ -180,7 +180,8 @@ def get_zero_point_flux_level(band, colorIndex=-2):
     Taken from:
     http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
     '''
-    f0 = {"W1": 306.682, "W2": 170.663, "W3": 29.0448, "W4": 8.2839}
+    f0 = {"W1": 306.682, "W2": 170.663, "W3": 29.0448, "W4": 8.2839, "NUV":
+            3810, "FUV": 3620}
     corrected_zero_point = f0[band] / color_correction(band, colorIndex)
     return corrected_zero_point
 
@@ -190,7 +191,7 @@ def get_zero_point_flux_uncertainty(band):
     Taken from:
     http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
     '''
-    sig_f0 = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124}
+    sig_f0 = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124, "NUV": 0, "FUV": 0}
     return sig_f0[band]
 
 def get_zero_point_magnitude_level(band):
