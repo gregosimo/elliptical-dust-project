@@ -94,6 +94,10 @@ def construct_image_url(survey, coaddid, band):
             catalog=CATALOG_FOLDER_NAMES[survey])
     firstbase = urlparse.urljoin(IRSA_BASE, extension)
     coaddgrp, coaddra = parse_coaddID(coaddid)
+    # Let both 2 and W2 be valid.
+    band = str(band)
+    if band.startswith("w") or band.startswith("W"):
+        band = band[-1]
     fileextend = FILE_EXTENSION.format(coaddgrp=coaddgrp, coadd_ra=coaddra,
             coadd_id=coaddid, band=band)
     fullurl = urlparse.urljoin(firstbase, fileextend)
@@ -109,6 +113,7 @@ def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
     corresponding uncertainty files.
     '''
     for object, ra, dec in zip(objects, ras, decs):
+        
         coaddID = query_metadata(ra, dec)
         query_image(BASEDIR, object, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
