@@ -57,7 +57,7 @@ CATALOG_FOLDER_NAMES = {k: extract_catalog_folder_from_full_catalog_name(v) for
 # correspond to those coordinates. The WISE Image metadata server is located at:
 IRSA_BASE = "http://irsa.ipac.caltech.edu"
 CATALOG_EXTENSION = "ibe/{operation:s}/{mission:s}/{survey:s}/{catalog:s}"
-FILE_EXTENSION = "{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
+FILE_EXTENSION = "{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:s}-int-3.fits.gz"
 
 IMAGE_SERVER = "/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-int-3.fits.gz"
 UNCERTAINTY_SERVER = "http://irsa.ipac.caltech.edu/ibe/data/wise/allsky/4band_p3am_cdd/{coaddgrp:s}/{coadd_ra:s}/{coadd_id:s}/{coadd_id:s}-w{band:1d}-unc-3.fits.gz"
@@ -87,6 +87,10 @@ def construct_image_url(survey, coaddid, band):
             catalog=CATALOG_FOLDER_NAMES[survey])
     firstbase = urlparse.urljoin(IRSA_BASE, extension)
     coaddgrp, coaddra = parse_coaddID(coaddid)
+    # Let both 2 and W2 be valid.
+    band = str(band)
+    if band.startswith("w") or band.startswith("W"):
+        band = band[-1]
     fileextend = FILE_EXTENSION.format(coaddgrp=coaddgrp, coadd_ra=coaddra,
             coadd_id=coaddid, band=band)
     fullurl = urlparse.urljoin(firstbase, fileextend)
@@ -102,6 +106,7 @@ def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
     corresponding uncertainty files.
     '''
     for object, ra, dec in zip(objects, ras, decs):
+        
         coaddID = query_metadata(ra, dec)
         query_image(BASEDIR, object, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
