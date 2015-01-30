@@ -21,6 +21,7 @@ CATALOG_BASE = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query"
 # These are a bunch of lookup tables for the WISE catalog.
 CATALOGS=["AllWISE", "All-Sky"]
 CATALOG_NAMES={"AllWISE": "wise_allwise_p3as_psd",  "All-Sky": "wise_allsky_4band_p3as_psd"}
+INVERTED_CATALOG_NAMES = {v: k for k,v in CATALOG_NAMES.items()}
 # A bunch of helper functions to organize the dictionaries here.
 # The dictionaries can probably be bypassed entirely in favor of these helper
 # functions... but that's more architecture change than I'm currently willing to
@@ -39,7 +40,7 @@ def extract_catalog_folder_from_full_catalog_name(catalog):
     missionremoved = catalog[catalog.index("_")+1:]
     return missionremoved[missionremoved.index("_")+1:]
 # I noticed that the data directories seem to be subdivided the same way the
-# catalog is. Therefore, building up a directory catalog string doesn' seem to
+# catalog is. Therefore, building up a directory catalog string doesn't seem to
 # be too bad.
 # Please kill me for doing things in this spaghettified way. I'm basically
 # trying to split the CATALOG_NAMES into the component parts. For example,
@@ -78,7 +79,10 @@ LATEST_WISE_CODE = "ab"
 def construct_search_url(survey):
     '''Constructs a metadata search url for a survey.
 
-    This url will *NOT* contain the query info, just the resource name.
+    This url will *NOT* contain the query info, just the resource name. For
+    example, the URL for the AllWISE database would be 
+
+    http://irsa.ipac.caltech.edu/ibe/search/wise/allwise/p3am_cdd
     '''
     # Ehhh.... make a new function that does this line automatically?
     extension = CATALOG_EXTENSION.format(operation="search",
@@ -88,7 +92,11 @@ def construct_search_url(survey):
     return fullurl
 
 def construct_image_url(survey, coaddid, band):
-    '''Constructs an image URL.'''
+    '''Constructs an image URL.
+    
+    This URL will be the path to an image tile. An example of this would be:
+        
+    http://irsa.ipac.caltech.edu/ibe/data/wise/allwise/p3am_cdd/03/0390/0390p605_ac51/0390p605_ac51-w1-int-3.fits'''
     extension = CATALOG_EXTENSION.format(operation="data",
             mission=MISSION_NAMES[survey], survey=SURVEY_NAMES[survey],
             catalog=CATALOG_FOLDER_NAMES[survey])
@@ -103,8 +111,8 @@ def construct_image_url(survey, coaddid, band):
     fullurl = urlparse.urljoin(firstbase, fileextend)
     return fullurl
 
-def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
-        uncertainty=True, overwrite=True):
+def batch_download_images(BASEDIR, objects, ras, decs, surveys, size=600, 
+        upgrade=False, uncertainty=True, overwrite=True):
     '''Downloads all images for many objects.
 
     The objects, ras, and decs variables should be arrays with the same length.
@@ -112,18 +120,23 @@ def batch_download_images(BASEDIR, objects, ras, decs, size=600, upgrade=False,
     uncertainty keyword is given as true, it will additionally download the
     corresponding uncertainty files.
     '''
-    for object, ra, dec in zip(objects, ras, decs):
-        
-        coaddID = query_metadata(ra, dec)
-        query_image(BASEDIR, object, coaddID, ra, dec, size=size,
+    # I'm not exactly sure how to deal with this, so I will hack away!
+    catalogtablepath = "/tmp/table"
+    objecttable = Table({"objstr": objects, "ra": ras, "dec": decs})
+    objecttable.write(catalogtablepath, format="ascii.ipac")
+    objectcatalog = get_WISE_catalog_entries(catalogtablepath)
+    for object, ra, dec, survey in objectcatalog[["objstr_01", "ra", "dec",
+            "cat"]]:
+        coaddID = query_metadata(ra, dec, survey)
+        query_image(BASEDIR, object, survey, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
 
-def query_WISE_catalog(inputpath, url=CATALOG_BASE, 
+def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE, 
         catalog=CATALOG_NAMES["AllWISE"], radius=10, 
-        cols=['objstr', 'ra', 'dec', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
+        cols=['ra', 'dec', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
         'w1sat', 'w2rsemi', 'w2ba', 'w2pa', 'w2gmag', 'w2sat', 'w3rsemi', 
         'w3ba', 'w3pa', 'w3gmag', 'w3sat', 'w4rsemi', 'w4ba', 'w4pa', 
-        'w4gmag' 'w4sat']):
+        'w4gmag', 'w4sat']):
     '''Queries IRSA for the objects found in the given catalog.
     The filename '''	
     data = {"catalog": catalog, "spatial": "Upload", "uradius": radius, 
@@ -133,21 +146,32 @@ def query_WISE_catalog(inputpath, url=CATALOG_BASE,
     ##########################################################################
     # This section of code will be unnecessary when astropy 1.0.0 is released.
     # Remove at that point.
-    filedir, filename = os.path.dirname(inputpath)
+    filedir, filename = os.path.split(inputpath)
     outputpath = os.path.join(filedir, "output_{0}".format(filename))
-    outputhandle = open(temppath, 'w')
+    outputhandle = open(outputpath, 'w')
     outputhandle.write(ipac_output.content)
+    outputhandle.close()
     expandedpath = os.path.join(filedir, "expanded_{0}".format(filename))
     expand_IPAC_table(outputpath, expandedpath)
-    # This is sleazy and crappy, but it's what you gotta do in order to get a
-    # convenient way to make the code excisable by just removing the code
-    # between the octothropes.
-    ipac_output.content = expandedpath
+    ipac_table = Table.read(expandedpath, format="ascii.ipac")
     ##########################################################################
-    ipac_table = Table.read(ipac_output.content, format="ascii.ipac")
-    ipac_table["cat"] = catalog
+    # Uncomment the line below in order in order to upgrade to astropy 1.0.0.
+    #ipac_table = Table.read(ipac_output.content, format="ascii.ipac")
+    ipac_table = clear_invalid_entries(ipac_table, ipac_table["w1rsemi"])
+    ipac_table["cat"] = INVERTED_CATALOG_NAMES[catalog]
     return ipac_table
 	
+def clear_invalid_entries(fulltable, indexcolumn):
+    '''Removes rows that are invalid in indexcolumn from the fulltable.
+
+    Invalid entries in this case are entries with masked values.'''
+    try:
+        return fulltable[~indexcolumn.mask]
+    # If the mask doesn't exist, then indexcolumn isn't a masked column, and we
+    # shouldn't have a problem.
+    except AttributeError:
+        return fulltable
+
 def get_WISE_catalog_entries(objectfile):
     '''Gets entries from objectfile and returns it as a table.
 	
@@ -156,16 +180,23 @@ def get_WISE_catalog_entries(objectfile):
     objects which are saturated in the AllWISE data, it will replace them 
     with objects in the All-Sky data, thereby decreasing the effects of 
     saturation.'''
-    allwiseTable = query_WISE_catalog(objectfile, catalog=CATALOG_NAMES["AllWISE"])
-    allskyTable = query_WISE_catalog(objectfile, catalog=CATALOG_NAMES["All-Sky"])
+    allwiseTable = query_WISE_catalog_file_upload(objectfile, 
+            catalog=CATALOG_NAMES["AllWISE"])
+    allskyTable = query_WISE_catalog_file_upload(objectfile, 
+            catalog=CATALOG_NAMES["All-Sky"])
     satobjects  = (allwiseTable["w1sat"] + allwiseTable["w2sat"] +
             allwiseTable["w3sat"] + allwiseTable["w4sat"])
+    # I'm hoping there's a better way to iterate through lists, because we're
+    # not guaranteed that there will be a correct number of valid entries. Some
+    # weird poblems could occur where this is not the case.
+    # I'd rather do something like joining and then processing or just
+    # processing by objstr rather than index.
     for i, satpixels in enumerate(satobjects):
         if satpixels != 0:
             allwiseTable[i] = allskyTable[i]
     return allwiseTable
 
-def query_metadata(ra, dec):
+def query_metadata(ra, dec, survey):
     '''Queries the WISE Image Metadata service for image information.
 
     This function will send a GET query to the WISE Image Metadata service. It
@@ -182,7 +213,7 @@ def query_metadata(ra, dec):
     # give the most centered tile anyway.
     payload = {"POS": "{0},{1}".format(ra, dec), "mcen": "1"}
     payloadget = urllib.urlencode(payload)
-    metatable = Table.read(get_url(METADATA_SERVER, payloadget), 
+    metatable = Table.read(get_url(construct_search_url(survey), payloadget), 
         format="ascii.ipac")
     if len(metatable) < 4:
         raise ValueError("Not all WISE Colors found")
@@ -249,7 +280,7 @@ def download_images(galaxydir, survey, coadddic, ra, dec, size, uncertainty=True
     # Downloading all bands
     for i in range(1,5):
         coadddic["band"] = i
-        imagebase = construct_image_url("AllWISE", coaddID, "w"+str(i))
+        imagebase = construct_image_url(survey, coaddID, "w"+str(i))
         query_params = {"center": "{0},{1}".format(ra, dec), "size":
                 "{0}arcsec".format(size)}
         image_query = get_url(image_url, urllib.urlencode(query_params))
@@ -348,5 +379,5 @@ def expand_IPAC_table(inputfile, outputfile):
     which will not be contracted.'''
     # Since "in" and "out" are reserved python keywords, I will have to
     # work around the fact that I can't use them as keyword args.
-    run_stilts(tcopy, ifmt="ipac", ofmt="ipac", **{"in": inputfile, 
+    run_stilts("tcopy", ifmt="ipac", ofmt="ipac", **{"in": inputfile, 
         "out": outputfile})
