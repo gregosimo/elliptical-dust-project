@@ -20,8 +20,9 @@ CATALOG_BASE = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query"
 
 # These are a bunch of lookup tables for the WISE catalog.
 CATALOGS=["AllWISE", "All-Sky"]
-CATALOG_NAMES={"AllWISE": "wise_allwise_p3as_psd",  "All-Sky": "wise_allsky_4band_p3as_psd"}
-INVERTED_CATALOG_NAMES = {v: k for k,v in CATALOG_NAMES.items()}
+ATLAS_CATALOG_NAMES = {"AllWISE": "wise_allwise_p3am_cdd", "All-Sky":
+        "wise_allsky_4band_p3am_cdd"}
+INVERTED_ATLAS_CATALOG_NAMES = {v: k for k,v in CATALOG_NAMES.items()}
 # A bunch of helper functions to organize the dictionaries here.
 # The dictionaries can probably be bypassed entirely in favor of these helper
 # functions... but that's more architecture change than I'm currently willing to
@@ -47,11 +48,11 @@ def extract_catalog_folder_from_full_catalog_name(catalog):
 # "wise_allwise_p3as_psd" becomes "wise", "allwise", "p3as_psd". There should
 # just be a group of functions that extract the values...
 MISSION_NAMES = {k: extract_mission_from_full_catalog_name(v) for (k,v) in 
-        CATALOG_NAMES.iteritems()}
+        ATLAS_CATALOG_NAMES.iteritems()}
 SURVEY_NAMES = {k: extract_survey_from_full_catalog_name(v) for (k,v) in 
-        CATALOG_NAMES.iteritems()}
+        ATLAS_CATALOG_NAMES.iteritems()}
 CATALOG_FOLDER_NAMES = {k: extract_catalog_folder_from_full_catalog_name(v) for 
-        (k,v) in CATALOG_NAMES.iteritems()}
+        (k,v) in ATLAS_CATALOG_NAMES.iteritems()}
 
 # We begin with an IPAC table which has object names and ra/dec coordinates. We
 # must first query the WISE Image metadata server to get the images which
@@ -280,10 +281,10 @@ def download_images(galaxydir, survey, coadddic, ra, dec, size, uncertainty=True
     # Downloading all bands
     for i in range(1,5):
         coadddic["band"] = i
-        imagebase = construct_image_url(survey, coaddID, "w"+str(i))
+        imagebase = construct_image_url(survey, coadddic["coadd_id"], "w"+str(i))
         query_params = {"center": "{0},{1}".format(ra, dec), "size":
                 "{0}arcsec".format(size)}
-        image_query = get_url(image_url, urllib.urlencode(query_params))
+        image_query = get_url(imagebase, urllib.urlencode(query_params))
         download_image(galaxydir, image_query, "w{0}".format(i))
         if uncertainty:
             uncert_url = imagebase.replace("int", "unc") + ".tar.gz"
