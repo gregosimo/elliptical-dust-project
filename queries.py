@@ -109,7 +109,11 @@ def construct_image_url(survey, coaddid, band):
         band = band[-1]
     fileextend = FILE_EXTENSION.format(coaddgrp=coaddgrp, coadd_ra=coaddra,
             coadd_id=coaddid, band=band)
-    fullurl = urlparse.urljoin(firstbase, fileextend)
+    # Without the slash, urljoin assumes the very last part of firstbase is a
+    # filename and removes it. However, I can't add the slash to
+    # CATALOG_EXTENSION because that breaks the metadata query. So this is a way
+    # to trick urljoin into recognizing that firstbase is a whole directory.
+    fullurl = urlparse.urljoin(firstbase+"/", fileextend)
     return fullurl
 
 def batch_download_images(BASEDIR, objects, ras, decs, surveys, size=600, 
@@ -287,7 +291,7 @@ def download_images(galaxydir, survey, coadddic, ra, dec, size, uncertainty=True
         image_query = get_url(imagebase, urllib.urlencode(query_params))
         download_image(galaxydir, image_query, "w{0}".format(i))
         if uncertainty:
-            uncert_url = imagebase.replace("int", "unc") + ".tar.gz"
+            uncert_url = imagebase.replace("int", "unc")
             uncert_query = get_url(uncert_url, urllib.urlencode(query_params))
             download_image(galaxydir, uncert_query, "w{0}".format(i))
                 
