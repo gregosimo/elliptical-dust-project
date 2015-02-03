@@ -180,6 +180,7 @@ def get_zero_point_flux_level(band, colorIndex=-2):
 
     Taken from:
     http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html#tbl1
+    http://galexgi.gsfc.nasa.gov/docs/galex/FAQ/counts_background.html
     '''
     f0 = {"W1": 306.682, "W2": 170.663, "W3": 29.0448, "W4": 8.2839, "NUV":
             3810, "FUV": 3620}
