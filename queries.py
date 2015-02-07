@@ -20,6 +20,8 @@ CATALOG_BASE = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query"
 
 # These are a bunch of lookup tables for the WISE catalog.
 CATALOGS=["AllWISE", "All-Sky"]
+CATALOG_NAMES={"AllWISE": "wise_allwise_p3as_psd",  "All-Sky":
+        "wise_allsky_4band_p3as_psd"}
 ATLAS_CATALOG_NAMES = {"AllWISE": "wise_allwise_p3am_cdd", "All-Sky":
         "wise_allsky_4band_p3am_cdd"}
 INVERTED_ATLAS_CATALOG_NAMES = {v: k for k,v in CATALOG_NAMES.items()}
