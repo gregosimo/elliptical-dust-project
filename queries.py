@@ -19,12 +19,12 @@ import photometry as phot
 CATALOG_BASE = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query"
 
 # These are a bunch of lookup tables for the WISE catalog.
-CATALOGS=["AllWISE", "All-Sky"]
+CATALOGS=["AllWISE", "All-Sky", "2MASS"]
 CATALOG_NAMES={"AllWISE": "wise_allwise_p3as_psd",  "All-Sky":
-        "wise_allsky_4band_p3as_psd"}
+        "wise_allsky_4band_p3as_psd", "2MASS": "fp_xsc"}
 ATLAS_CATALOG_NAMES = {"AllWISE": "wise_allwise_p3am_cdd", "All-Sky":
         "wise_allsky_4band_p3am_cdd"}
-INVERTED_ATLAS_CATALOG_NAMES = {v: k for k,v in CATALOG_NAMES.items()}
+INVERTED_CATALOG_NAMES = {v: k for k,v in CATALOG_NAMES.items()}
 # A bunch of helper functions to organize the dictionaries here.
 # The dictionaries can probably be bypassed entirely in favor of these helper
 # functions... but that's more architecture change than I'm currently willing to
@@ -136,7 +136,7 @@ def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE,
         cols=['ra', 'dec', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
         'w1sat', 'w2rsemi', 'w2ba', 'w2pa', 'w2gmag', 'w2sat', 'w3rsemi', 
         'w3ba', 'w3pa', 'w3gmag', 'w3sat', 'w4rsemi', 'w4ba', 'w4pa', 
-        'w4gmag', 'w4sat']):
+        'w4gmag', 'w4sat'], clearentries=[]):
     '''Queries IRSA for the objects found in the given catalog.
     The filename '''	
     data = {"catalog": catalog, "spatial": "Upload", "uradius": radius, 
@@ -157,7 +157,8 @@ def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE,
     ##########################################################################
     # Uncomment the line below in order in order to upgrade to astropy 1.0.0.
     #ipac_table = Table.read(ipac_output.content, format="ascii.ipac")
-    ipac_table = clear_invalid_entries(ipac_table, ipac_table["w1rsemi"])
+    for colname in clearentries:
+        ipac_table = clear_invalid_entries(ipac_table, ipac_table[colname])
     ipac_table["cat"] = INVERTED_CATALOG_NAMES[catalog]
     return ipac_table
 	
@@ -181,9 +182,9 @@ def get_WISE_catalog_entries(objectfile):
     with objects in the All-Sky data, thereby decreasing the effects of 
     saturation.'''
     allwiseTable = query_WISE_catalog_file_upload(objectfile, 
-            catalog=CATALOG_NAMES["AllWISE"])
+            catalog=CATALOG_NAMES["AllWISE"], clearentries=["w1rsemi"])
     allskyTable = query_WISE_catalog_file_upload(objectfile, 
-            catalog=CATALOG_NAMES["All-Sky"])
+            catalog=CATALOG_NAMES["All-Sky"], clearentries=["w1rsemi"])
     satobjects  = (allwiseTable["w1sat"] + allwiseTable["w2sat"] +
             allwiseTable["w3sat"] + allwiseTable["w4sat"])
     # I'm hoping there's a better way to iterate through lists, because we're
@@ -195,6 +196,18 @@ def get_WISE_catalog_entries(objectfile):
         if satpixels != 0:
             allwiseTable[i] = allskyTable[i]
     return allwiseTable
+
+def get_2MASS_catalog_entries(objectfile):
+    '''Gets the catalog entries from objectfile and returns it as a table.
+
+    This function queries the 2MASS All-Sky Extended Source Catalog for objects
+    in the objectfile.
+    '''
+    twomassTable = query_WISE_catalog_file_upload(objectfile,
+            catalog=CATALOG_NAMES["2MASS"], cols=("ra", "dec", "j_m_k20fe",
+            "j_msig_k20fe", "h_m_k20fe", "h_msig_k20fe", "k_m_k20fe",
+            "k_msig_k20fe"), clearentries=[])
+    return twomassTable
 
 def query_metadata(ra, dec, survey):
     '''Queries the WISE Image Metadata service for image information.
