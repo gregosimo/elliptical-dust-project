@@ -555,15 +555,17 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
     The function must be able to accept the BASEDIR as well as an
     Astropy row. The function can also accept keyword arguments via
     kwargs.'''
+    ignore_error = kwargs["ignore_error"]
+    del(kwargs["ignore_error"])
     for row in fulltable:
         galaxydir = change_to_galaxy_dir(BASEDIR, row["objstr_01"])
         try:
             func(BASEDIR, row, **kwargs)
-        except IrafError, e:
-            if kwargs.get("ignore_error", False):
+        except (RuntimeError, iraf.IrafError) as e:
+            if ignore_error:
                 print e
-        except RuntimeError, e:
-            print e
+            else:
+                raise e
 
 
 ##############################################################################
@@ -1307,11 +1309,11 @@ def getPSFFWHM(band, pixel=False):
     return chosenwidth
 
 def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion", 
-        parambase="ellipsepars", runbands=bands):
+        parambase="ellipsepars", runbands=bands, ignore_error=False):
     '''Runs through all objects and make DS9 regions.
     '''
     runOnImages(BASEDIR, WISEtable, writeregion, outputbase=outputbase, 
-            parambase=parambase, runbands=runbands)
+            parambase=parambase, runbands=runbands, ignore_error=ignore_error)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
         skyAperture=True, skyimage=False, skyprefix="sky_level",
