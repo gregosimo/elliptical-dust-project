@@ -918,6 +918,9 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
         galaxydir = change_to_galaxy_dir(BASEDIR, row["objstr_01"])
         try:
             func(BASEDIR, row, **kwargs)
+        except IrafError, e:
+            if kwargs.get("ignore_error", False):
+                print e
         except RuntimeError, e:
             print e
 
@@ -1068,27 +1071,29 @@ def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
 ##############################################################################
 
 def allMasks(BASEDIR, fulltable, maskband, threshold=5,
-        output="foreground.fits", maskconfig=""):
+        output="foreground.fits", maskconfig="", ignore_error=False):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
-            maskband=maskband, output=output, maskconfig=maskconfig)
+            maskband=maskband, output=output, maskconfig=maskconfig,
+            ignore_error=ignore_error)
 
 def allApertureTables(BASEDIR, fulltable, runbands=bands,
-        outputbase="ellipsepars"):
+        outputbase="ellipsepars", ignore_error=False):
     '''Goes through BASEDIR and generates all the aperture tables.
 
     The full WISE table will be necessary.'''
     runOnImages(BASEDIR, fulltable, genApertureTable, runbands=runbands,
-            outputbase=outputbase)
+            outputbase=outputbase, ignore_error=ignore_error)
 
 def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty", 
         ellipsebase="ellipsepars", skybase="sky_level", skymethod="adaptive",
-        runbands=bands):
+        runbands=bands, ignore_error=False):
     '''Goes through BASEDIR and generates all uncertainty tables.'''
     runOnImages(BASEDIR, fulltable, genImageUncertainty,
             baseuncertainty=baseuncertainty, ellipsebase=ellipsebase,
-            skybase=skybase, skymethod=skymethod, runbands=runbands)
+            skybase=skybase, skymethod=skymethod, runbands=runbands,
+            ignore_error=ignore_error)
 
 def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky", 
         baseskyfile="sky_level", ellipsebase="ellipsepars", forceAnnulus=False):
@@ -1102,18 +1107,21 @@ def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky",
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
         mask="foreground.fits", baseoutput="ellipse_aperture",
-        baseparamname="ellipsepars", alt_mask="foreground_alt.fits"):
+        baseparamname="ellipsepars", alt_mask="foreground_alt.fits",
+        ignore_error=False):
     '''Goes through BASEDIR and generates all object tables.
 
     This function also allows for single-object corrections to be made.
     '''
     runOnImages(BASEDIR, fulltable, genEllipsetables,
             baseparamname=baseparamname, runbands=runbands,
-            mask=mask, alt_mask=alt_mask, baseoutput=baseoutput)
+            mask=mask, alt_mask=alt_mask, baseoutput=baseoutput,
+            ignore_error=ignore_error)
 
-def allSkyParams(BASEDIR, fulltable, runbands=bands):
+def allSkyParams(BASEDIR, fulltable, runbands=bands, ignore_error=False):
     '''Goes through BASEDIR and generates all sky parameter files.'''
-    runOnImages(BASEDIR, fulltable, genSkyParam, runbands=runbands)
+    runOnImages(BASEDIR, fulltable, genSkyParam, runbands=runbands,
+            ignore_error=ignore_error)
 
 def run_imfunc(infile, outfile, func):
     '''Runs imfunc on the given image.
