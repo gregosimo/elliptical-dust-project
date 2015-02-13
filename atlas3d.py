@@ -3,6 +3,36 @@ import matplotlib.pyplot as plt
 
 import photometry as phot
 
+# Maybe I want to subclass figure later on. But now... meh.
+class SED(object):
+    '''An object designed to provide an SED plot using internally stored points
+    and spectra.'''
+    
+    def __init__(self, title):
+        self.title = title
+
+    def add_point(self, pointobject):
+        '''Adds a point to the SED.
+
+        A point is a single wavelength/flux value pair. This adds the point to
+        an internal list of points so that it can be recalled. Labels cannot be
+        used for a single point.
+        '''
+        self.add_points([pointobject])
+
+    def add_points(self, pointobjects, label=""):
+        '''Adds a list of points to the SED.
+
+        This list should normally be associated in some way. 
+
+SED(title)
+SED.add_point(pointobject)
+SED.add_points(pointobjects)
+SED.add_points(pointobjects, label="Survey")
+SED.add_spectrum(spec, label="Spectrum")
+SED.add_spectrum(xspec_no_units, yspec_no_units, xunit=u.Jy, yunit=u.Jy)
+SED.plot()
+
 # W1, W2, W3, W4
 WISE_wavelengths = np.array([3.4e-6, 4.6e-6, 12e-6, 22e-6])*1e6
 # NUV, FUV
