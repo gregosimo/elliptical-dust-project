@@ -10,6 +10,7 @@ class SED(object):
     
     def __init__(self, title):
         self.title = title
+        self.plotgroups = []
 
     def add_point(self, pointobject):
         '''Adds a point to the SED.
@@ -23,7 +24,36 @@ class SED(object):
     def add_points(self, pointobjects, label=""):
         '''Adds a list of points to the SED.
 
-        This list should normally be associated in some way. 
+        This list should normally be associated in some way, such as a group of 
+        observations from a given survey. This is mainly for grouping things
+        together with meaningful colors. In order to have the group show up in a
+        legend, the label should be given.
+        '''
+        pointobject = SEDEntry(pointobjects, label)
+        self.plotgroups.append(pointobject)
+        
+    def add_spectrum(spec, yspec_no_units=None, label="", xunit=None, 
+            yunit=None):
+        '''Adds a spectrum to the SED.
+        
+        A spectrum should ideally be a spectrum object as defined in this 
+        module. If a spectrum is not created, add_spectrum should be called with
+        the signature add_spectrum(xspec, yspec, xunit=unit, yunit=unit). 
+        
+        Labels are also allowed for legends.
+        '''
+        # defspec is an object which we know is definitely a spectrum!
+        if not isInstance(spec, Spectrum):
+            if xunit is None or yunit is None:
+                # Have this inherit from astropy.units.UnitError
+                # Used to indicate that you NEED a unit.
+                raise UnitMissing
+            defspec = Spectrum(spec, yspec_no_units, xunit=xunit, yunit=yunit)
+        else:
+            defspec=spec
+        
+        
+        
 
 SED(title)
 SED.add_point(pointobject)
