@@ -55,7 +55,7 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
     inputinfo["nuv_exptime"].fill_value = 0.0
     inputinfo_filled = inputinfo.filled()
 
-    surveys = ["AIS", "DIS", "GII", "GIS", "MIS", "NGS", "ETS"]
+    surveys = ["AIS", "DIS", "GII", "GIS", "MIS", "NGS", "ETS", "CAS", "CAI"]
     # Make a dictionary associated with each filename.
     filepaths = dict((survey, os.path.join(output_dir,
         "{0}.csv".format(survey))) for survey in surveys)

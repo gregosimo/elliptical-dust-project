@@ -78,18 +78,21 @@ TWOMASS_ZP = np.array([1594, 1024, 666.7])
 def plot_Conroy_SED(ATLAS3DBASE, atlas3d_sample_row
     '''Plots an SED against the Conroy model for ATLAS3D targets.'''
     # Generate photometry.
-    W1, W1_err = phot.galaxy_photometry(ATLAS3DBASE, 
-        atlas3d_sample_row["objstr_01"], "W1", brightness="flux")
-    W2, W2_err = phot.galaxy_photometry(ATLAS3DBASE, 
-        atlas3d_sample_row["objstr_01"], "W2", brightness="flux")
-    W3, W3_err = phot.galaxy_photometry(ATLAS3DBASE, 
-        atlas3d_sample_row["objstr_01"], "W3", brightness="flux")
-    W4, W4_err = phot.galaxy_photometry(ATLAS3DBASE, 
-        atlas3d_sample_row["objstr_01"], "W4", brightness="flux")
-    NUV, NUV_err = phot.galaxy_photometry(ATLAS3DBASE, 
-        atlas3d_sample_row["objstr_01"], "NUV", brightness="flux")
-    FUV, FUV_err = phot.galaxy_photometry(ATLAS3DBASE, 
-        atlas3d_sample_row["objstr_01"], "FUV", brightness="flux")
+    try:
+        W1, W1_err = phot.galaxy_photometry(ATLAS3DBASE, 
+            atlas3d_sample_row["objstr_01"], "W1", brightness="flux")
+        W2, W2_err = phot.galaxy_photometry(ATLAS3DBASE, 
+            atlas3d_sample_row["objstr_01"], "W2", brightness="flux")
+        W3, W3_err = phot.galaxy_photometry(ATLAS3DBASE, 
+            atlas3d_sample_row["objstr_01"], "W3", brightness="flux")
+        W4, W4_err = phot.galaxy_photometry(ATLAS3DBASE, 
+            atlas3d_sample_row["objstr_01"], "W4", brightness="flux")
+        NUV, NUV_err = phot.galaxy_photometry(ATLAS3DBASE, 
+            atlas3d_sample_row["objstr_01"], "NUV", brightness="flux")
+        FUV, FUV_err = phot.galaxy_photometry(ATLAS3DBASE, 
+            atlas3d_sample_row["objstr_01"], "FUV", brightness="flux")
+    except BaseException:
+        return
 
     WISE_flux = np.array([W1, W2, W3, W4])
     WISE_flux_err = np.array([W1_err, W2_err, W3_err, W4_err])
