@@ -132,8 +132,8 @@ def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50,
     if maskband in phot.IRBANDS and maskband is not "W1":
         shutil.copy(phot.format_band_dependence(outputbase, "W1", "fits",
             galaxydir), phot.change_to_galaxy_dir(galaxydir, maskfile))
-    elif maskband == "FUV" and (phot.match_filter(galaxydir, "FUV") == 
-            phot.match_filter(galaxydir, "NUV")):
+    elif maskband == "FUV" and (phot.match_filter(galaxydir, 
+        "FUV").replace("-fd-", "-nd-") == phot.match_filter(galaxydir, "NUV")):
         shutil.copy(phot.format_band_dependence(outputbase, "NUV", "fits",
             galaxydir), phot.change_to_galaxy_dir(galaxydir, maskfile))
     else:
@@ -167,7 +167,8 @@ def mask_elliptical_galaxy(galaxydir, maskband, objectcoords, threshold=5,
     segmentation_mask(maskconfig, image, masked_image, segment_needs_normalization, 
             objectcoords, threshold=threshold)
     # We'll interactively generate masks.
-    print "Please remove object {0}.".format(os.path.basename(galaxydir))
+    print "Please remove object {0} in {1}.".format(os.path.basename(galaxydir), 
+            maskband)
     maskprog = MaskCMD(segment_needs_normalization, galaxy_removed, 
             regionpath)
     maskprog.cmdloop()
