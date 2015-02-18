@@ -55,7 +55,7 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
     inputinfo["nuv_exptime"].fill_value = 0.0
     inputinfo_filled = inputinfo.filled()
 
-    surveys = ["AIS", "DIS", "GII", "GIS", "MIS", "NGS", "ETS"]
+    surveys = ["AIS", "DIS", "GII", "GIS", "MIS", "NGS", "ETS", "CAS", "CAI"]
     # Make a dictionary associated with each filename.
     filepaths = dict((survey, os.path.join(output_dir,
         "{0}.csv".format(survey))) for survey in surveys)
@@ -77,6 +77,7 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
     NUVlist = []
     FUVlist = []
     sortdict = defaultdict(list)
+    skipped_objects = []
     inputgroup = inputinfo_filled.group_by("uploadID")
     for objectinfo in inputgroup.groups:
         # Weird bug where the -1 index cannot be given as an argument to rows.
@@ -105,6 +106,7 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
                 print "Did not have NUV exposure."
             if topfuv["fuv_exptime"] <= 0:
                 print "Did not have FUV exposure."
+            skipped_objects += topfuv["uploadID"]
             
     for survey in surveys: 
         tab = surveytables[survey]
@@ -114,6 +116,7 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
     sortTable = Table([objectlist, NUVlist, FUVlist], names=("object",
         "NUV_Tile", "FUV_Tile"))
     sortTable.write(os.path.join(output_dir, keytable), format="ascii.csv")
+    return skipped_objects
 
 def galex_tilename(MASTrow):
     '''Transforms the MAST row into a full tilename.
