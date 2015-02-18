@@ -1,5 +1,6 @@
 
 import matplotlib.pyplot as plt
+import numpy as np
 
 import photometry as phot
 
@@ -55,13 +56,13 @@ class SED(object):
         
         
 
-SED(title)
-SED.add_point(pointobject)
-SED.add_points(pointobjects)
-SED.add_points(pointobjects, label="Survey")
-SED.add_spectrum(spec, label="Spectrum")
-SED.add_spectrum(xspec_no_units, yspec_no_units, xunit=u.Jy, yunit=u.Jy)
-SED.plot()
+# SED(title)
+# SED.add_point(pointobject)
+# SED.add_points(pointobjects)
+# SED.add_points(pointobjects, label="Survey")
+# SED.add_spectrum(spec, label="Spectrum")
+# SED.add_spectrum(xspec_no_units, yspec_no_units, xunit=u.Jy, yunit=u.Jy)
+# SED.plot()
 
 # W1, W2, W3, W4
 WISE_wavelengths = np.array([3.4e-6, 4.6e-6, 12e-6, 22e-6])*1e6
@@ -75,7 +76,7 @@ GALEX_frequencies = 3e10 / (GALEX_wavelengths * 1e-4)
 TWOMASS_frequencies = 3e10 / (TWOMASS_wavelengths * 1e-4)
 TWOMASS_ZP = np.array([1594, 1024, 666.7])
 
-def plot_Conroy_SED(ATLAS3DBASE, atlas3d_sample_row
+def plot_Conroy_SED(ATLAS3DBASE, atlas3d_sample_row):
     '''Plots an SED against the Conroy model for ATLAS3D targets.'''
     # Generate photometry.
     try:
@@ -107,7 +108,7 @@ def plot_Conroy_SED(ATLAS3DBASE, atlas3d_sample_row
     TWOMASS_ZP, 0)
 
     # This is normalized to H-band
-    fsps = Table.read(os.path.join(ATLAS3dBASE, "fsps-egals.txt", format="ascii", 
+    fsps = Table.read(os.path.join(ATLAS3dBASE, "fsps-egals.txt"), format="ascii", 
                       names=["Wave", "F(0.2Gyr)", "F(2Gyr)", "F(5Gyr)", "F(10Gyr)"])
     fsps_02 = fsps["F(0.2Gyr)"] * TWOMASS_flux[1] / fsps["F(0.2Gyr)"][802]
     fsps_2 = fsps["F(2Gyr)"] * TWOMASS_flux[1] / fsps["F(2Gyr)"][802]
