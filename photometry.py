@@ -1613,7 +1613,7 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS,
 
 def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
-        skymethod="adaptive"):
+        skymethod="adaptive", maskbase="foreground"):
     '''Creates a set of four cutouts with the aperture and sky ellipses
 
     A cutout for each band will be created that contains the aperture
@@ -1627,7 +1627,15 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         # and sky.
         aperturepars = STSDAS_to_Astropy_Table(galaxydir, 
                 format_band_dependence(aperturefile, band, "tab"))
-        gc = aplpy.FITSFigure(match_filter(galaxydir, band, sky=skyimage))
+        # This is to show masked values in the cutout.
+        imagehdulist = fits.open(match_filter(galaxydir, band, sky=skyimage))
+        imagehdu = imagehdulist[0]
+        maskhdulist = fits.open(format_band_dependence(maskbase, band, "fits",
+            galaxydir))
+        maskhdu = maskhdulist[0]
+        # Since maskhdu is binary 0/1, this should yield the desired outcome.
+        imagehdu.data *= maskhdu.data
+        gc = aplpy.FITSFigure(imagehdu)
         gc.show_grayscale()
 
         px = getPixelScale(band)
