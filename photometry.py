@@ -1108,16 +1108,15 @@ def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky",
             ellipsebase=ellipsebase, forceAnnulus=forceAnnulus)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
-        mask="foreground.fits", baseoutput="ellipse_aperture",
-        baseparamname="ellipsepars", alt_mask="foreground_alt.fits",
-        ignore_error=False):
+        maskbase="foreground", baseoutput="ellipse_aperture",
+        baseparamname="ellipsepars", ignore_error=False):
     '''Goes through BASEDIR and generates all object tables.
 
     This function also allows for single-object corrections to be made.
     '''
     runOnImages(BASEDIR, fulltable, genEllipsetables,
             baseparamname=baseparamname, runbands=runbands,
-            mask=mask, alt_mask=alt_mask, baseoutput=baseoutput,
+            maskbase=maskbase, baseoutput=baseoutput,
             ignore_error=ignore_error)
 
 def allSkyParams(BASEDIR, fulltable, runbands=bands, ignore_error=False):
@@ -1222,8 +1221,7 @@ def source_uncertainty_from_uncertainty_file(galaxydir, band, uncfile,
     run_ellipse(varfile, ellipse_file, output)
 
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
-        baseoutput="ellipse_aperture", mask="foreground.fits",
-        alt_mask="foreground_alt.fits", runbands=bands):
+        baseoutput="ellipse_aperture", maskbase="foreground", runbands=bands):
     '''Generates a table on the object for each band.
     
     It uses parameters provided in ellipsepars, and outputs the table into
@@ -1237,13 +1235,12 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
     # There should be a better way of joining this and genSkyTables, but that's
     # taking too much effort, and I want to just have this part done.
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    if os.path.exists(os.path.join(galaxydir, alt_mask)):
-        mask=alt_mask
     for band in runbands:
         objimage = match_filter(galaxydir, band)
         run_ellipse(objimage, format_band_dependence(baseparamname, band, 'tab',
             galaxydir), format_band_dependence(baseoutput, band, 'tab', 
-            galaxydir), mask=os.path.join(galaxydir, mask))
+            galaxydir), mask=format_band_dependence(maskbase, band, "fits",
+            galaxydir))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         ellipsebase="ellipsepars", baseskyfile="sky_level", skyratio=2.5,
@@ -1265,8 +1262,6 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     rule like this, but I think we'll have enough leeway with our object to make
     this approximation.'''
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    if os.path.exists(os.path.join(galaxydir, alt_mask)):
-        mask=alt_mask
 
     # If annulus is 0, that means we want to scale the annulus off of the
     # aperture. If we don't make a separate annulus_override variable, 
