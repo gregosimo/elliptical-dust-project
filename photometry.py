@@ -714,11 +714,11 @@ def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
 ##############################################################################
 
 def allMasks(BASEDIR, fulltable, maskband, threshold=5,
-        output="foreground.fits", maskconfig="", ignore_error=False):
+        outputbase="foreground", maskconfig="", ignore_error=False):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
-            maskband=maskband, output=output, maskconfig=maskconfig,
+            maskband=maskband, outputbase=outputbase, maskconfig=maskconfig,
             ignore_error=ignore_error)
 
 def allApertureTables(BASEDIR, fulltable, runbands=bands,
@@ -740,7 +740,7 @@ def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty",
 
 def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky", 
         baseskyfile="sky_level", skygens="adaptive", ellipsebase="ellipsepars",
-        mask="foreground.fits", alt_mask="foreground_alt.fits", skyratio=2.5,
+        maskbase="foreground", alt_mask="foreground_alt.fits", skyratio=2.5,
         clip=False, ignore_error=False):
     '''Goes through BASEDIR and generates all sky tables.
 
@@ -749,19 +749,18 @@ def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky",
     runOnImages(BASEDIR, fulltable, genSkyValues, runbands=runbands,
             coordbase=coordbase, baseskyfile=baseskyfile, skygens=skygens,
             ellipsebase=ellipsebase, skyratio=skyratio, clip=clip,
-            ignore_error=ignore_error)
+            ignore_error=ignore_error, maskbase=maskbase)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
-        mask="foreground.fits", baseoutput="ellipse_aperture",
-        baseparamname="ellipsepars", alt_mask="foreground_alt.fits",
-        ignore_error=False):
+        maskbase="foreground", baseoutput="ellipse_aperture",
+        baseparamname="ellipsepars", ignore_error=False):
     '''Goes through BASEDIR and generates all object tables.
 
     This function also allows for single-object corrections to be made.
     '''
     runOnImages(BASEDIR, fulltable, genEllipsetables,
             baseparamname=baseparamname, runbands=runbands,
-            mask=mask, alt_mask=alt_mask, baseoutput=baseoutput,
+            maskbase=maskbase, baseoutput=baseoutput,
             ignore_error=ignore_error)
 
 def allSkyParams(BASEDIR, fulltable, runbands=bands, ignore_error=False):
@@ -866,8 +865,7 @@ def source_uncertainty_from_uncertainty_file(galaxydir, band, uncfile,
     run_ellipse(varfile, ellipse_file, output)
 
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
-        baseoutput="ellipse_aperture", mask="foreground.fits",
-        alt_mask="foreground_alt.fits", runbands=bands):
+        baseoutput="ellipse_aperture", maskbase="foreground", runbands=bands):
     '''Generates a table on the object for each band.
     
     It uses parameters provided in ellipsepars, and outputs the table into
@@ -881,18 +879,17 @@ def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
     # There should be a better way of joining this and genSkyTables, but that's
     # taking too much effort, and I want to just have this part done.
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    if os.path.exists(os.path.join(galaxydir, alt_mask)):
-        mask=alt_mask
     for band in runbands:
         objimage = match_filter(galaxydir, band)
         run_ellipse(objimage, format_band_dependence(baseparamname, band, 'tab',
             galaxydir), format_band_dependence(baseoutput, band, 'tab', 
-            galaxydir), mask=os.path.join(galaxydir, mask))
+            galaxydir), mask=format_band_dependence(maskbase, band, "fits",
+            galaxydir))
 
 def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
         ellipsebase="ellipsepars", baseskyfile="sky_level", skygens="adaptive", 
         skyratio=2.5, annulus=0, dannulus=30, runbands=bands, patch_area=4000,
-        num_patches=90, mask="foreground.fits", alt_mask="foreground_alt.fits",
+        num_patches=90, maskbase="foreground", alt_mask="foreground_alt.fits",
         clip=False):
     '''Generates sky values for each galaxy.
     
@@ -911,8 +908,6 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     rule like this, but I think we'll have enough leeway with our object to make
     this approximation.'''
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    if os.path.exists(os.path.join(galaxydir, alt_mask)):
-        mask=alt_mask
 
     # If annulus is 0, that means we want to scale the annulus off of the
     # aperture. If we don't make a separate annulus_override variable, 
@@ -927,11 +922,12 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
                     ellipsebase, annulus, skyratio, dannulus)
         elif skygens.lower() == "patch":
             measure_sky_from_patches(galaxydir, band, patch_area, num_patches, 
-                    baseskyfile, ellipsebase, skyratio, mask=mask, clip=clip)
+                    baseskyfile, ellipsebase, skyratio,
+                    mask=format_band_dependence(maskbase, band, "fits"), clip=clip)
 
 def measure_sky_from_patches(galaxydir, band, area=4000, numpatches=90,
-        baseskyfile="sky_level", ellipsebase="ellipsepars", scale=1.5, mask="",
-        backgroundmapbase="background_map", clip=False):
+        baseskyfile="sky_level", ellipsebase="ellipsepars", scale=1.5,
+        mask="", backgroundmapbase="background_map", clip=False):
     '''Uses elliptical patches to measure the sky level from an image.
 
     This function measures the sky in two concentric elliptical apertures

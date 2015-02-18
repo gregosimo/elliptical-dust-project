@@ -16,24 +16,33 @@ from mask_trimmer import MaskCMD
 #SEXTRACTOR_DIR = "/home/gregory/work/sextractor"
 SEXTRACTOR_DIR = "/home/regulus/simonian/year1/wise/sextractor"
 
-def build_masks(BASEDIR, WISETable, maskband, threshold=5,
-        output="foreground.fits", maskconfig=""):
+def build_masks(BASEDIR, WISETable, threshold=5, runbands=None,
+        outputbase="foreground", maskconfig=""):
     '''Builds masks for specified objects.
 
     The objects to be built should be specified in WISETable, which should be a
-    valid parameter construction file. The mask will be based on the image in
-    the band called maskband. As a result, there should only be one mask to be
-    used per image type.
+    valid parameter construction file. Masks will be generated for all maskbands
+    given in runbands. The default values for runbands is that given in
+    phot.BANDS. The default distribution of masks is currently given by masking
+    W1, copying that mask to W2-4, and then masking NUV, and possibly masking
+    FUV if it uses a different file than NUV, otherwise copying it.
 
     Optional parameters are the threshold, which will override the value in the
     configuration file, the name of the output, as well as the config file. If
     the config file is left blank, an appropriate config file located in
     SEXTRACTOR_DIR will be used instead.
 
-    The resulting mask will written to $BASEDIR/output.
+    The resulting masks will written to $BASEDIR/{outputbase}.{maskband}.fits.
     '''
-    phot.allMasks(BASEDIR, WISETable, maskband, threshold=threshold, 
-            output=output)
+    # This is to prevent problems with referring to phot  before it's able to be
+    # imported.
+    if not runbands:
+        runbands=phot.bands
+    # All WISE images should be identical. So just run one, and then copy-paste
+    # the rest.
+    for maskband in runbands:
+        phot.allMasks(BASEDIR, WISETable, maskband, threshold=threshold, 
+                outputbase=outputbase)
 
 def run_sextractor(image, config, **options):
     '''Runs SExtractor on an image.
@@ -107,7 +116,7 @@ def sextractor_mask(image, config, **sexargs):
     run_sextractor(image, config, **sexargs)
 
 def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50, 
-        output="foregroundmask.fits", ellipsebase="ellipsepars", spreadpix=5,
+        outputbase="foregroundmask", ellipsebase="ellipsepars", spreadpix=5,
         maskconfig=""):
     '''Creates a mask file for the object in WISErow.
 
@@ -118,9 +127,18 @@ def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50,
     galaxydir = phot.change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     objectcoords = phot.getpixelcoords(phot.match_filter(galaxydir, maskband),
             WISErow["ra"], WISErow["dec"])
+    maskfile = phot.format_band_dependence(outputbase, maskband, "fits")
     # Add regionbase.
-    mask_elliptical_galaxy(galaxydir, maskband, objectcoords,
-            threshold=threshold, maskfile=output, ellipsebase=ellipsebase, 
+    if maskband in phot.IRBANDS and maskband is not "W1":
+        shutil.copy(phot.format_band_dependence(outputbase, "W1", "fits",
+            galaxydir), phot.change_to_galaxy_dir(galaxydir, maskfile))
+    elif maskband == "FUV" and (phot.match_filter(galaxydir, 
+        "FUV").replace("-fd-", "-nd-") == phot.match_filter(galaxydir, "NUV")):
+        shutil.copy(phot.format_band_dependence(outputbase, "NUV", "fits",
+            galaxydir), phot.change_to_galaxy_dir(galaxydir, maskfile))
+    else:
+        mask_elliptical_galaxy(galaxydir, maskband, objectcoords,
+            threshold=threshold, maskfile=maskfile, ellipsebase=ellipsebase, 
             spreadpix=5, maskconfig="")
 
 def mask_elliptical_galaxy(galaxydir, maskband, objectcoords, threshold=5,
@@ -149,7 +167,8 @@ def mask_elliptical_galaxy(galaxydir, maskband, objectcoords, threshold=5,
     segmentation_mask(maskconfig, image, masked_image, segment_needs_normalization, 
             objectcoords, threshold=threshold)
     # We'll interactively generate masks.
-    print "Please remove object {0}.".format(os.path.basename(galaxydir))
+    print "Please remove object {0} in {1}.".format(os.path.basename(galaxydir), 
+            maskband)
     maskprog = MaskCMD(segment_needs_normalization, galaxy_removed, 
             regionpath)
     maskprog.cmdloop()
