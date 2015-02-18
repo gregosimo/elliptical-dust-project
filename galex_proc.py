@@ -168,7 +168,6 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
         galexNUVfiles = glob.glob(NUVstring)
         if not galexFUVfiles:
             print "Could not match {0}.".format(entry["FUV_Tile"])
-            raise WTFError
         for imagefile in galexFUVfiles + galexNUVfiles:
             try:
                 gunzip(imagefile, galaxydir)
