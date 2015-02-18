@@ -37,12 +37,12 @@ def build_masks(BASEDIR, WISETable, threshold=5, runbands=None,
     # This is to prevent problems with referring to phot  before it's able to be
     # imported.
     if not runbands:
-        runbands=phot.BANDS
+        runbands=phot.bands
     # All WISE images should be identical. So just run one, and then copy-paste
     # the rest.
     for maskband in runbands:
         phot.allMasks(BASEDIR, WISETable, maskband, threshold=threshold, 
-                output=outputbase)
+                outputbase=outputbase)
 
 def run_sextractor(image, config, **options):
     '''Runs SExtractor on an image.
@@ -131,6 +131,10 @@ def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50,
     # Add regionbase.
     if maskband in phot.IRBANDS and maskband is not "W1":
         shutil.copy(phot.format_band_dependence(outputbase, "W1", "fits",
+            galaxydir), phot.change_to_galaxy_dir(galaxydir, maskfile))
+    elif maskband == "FUV" and (phot.match_filter(galaxydir, "FUV") == 
+            phot.match_filter(galaxydir, "NUV")):
+        shutil.copy(phot.format_band_dependence(outputbase, "NUV", "fits",
             galaxydir), phot.change_to_galaxy_dir(galaxydir, maskfile))
     else:
         mask_elliptical_galaxy(galaxydir, maskband, objectcoords,
