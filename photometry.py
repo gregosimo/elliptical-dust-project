@@ -777,9 +777,9 @@ def filterTableforExistingObjects(BASEDIR, fulltable):
     '''Creates another table that only has the objects with images.'''
     return filterTable(BASEDIR, fulltable, objectHasImage)
 
-def filterTableforCompleteBands(BASEDIR, fulltable):
+def filterTableforCompleteBands(BASEDIR, fulltable, copy=True):
     '''Returns a table that only has objects with complete observations'''
-    return filterTable(BASEDIR, fulltable, complete_for_bands)
+    return filterTable(BASEDIR, fulltable, complete_for_bands, copy=copy)
 
 def match_filter(directory, filter, fullpath=True, uncertainty=False, 
         sky=False):
@@ -899,9 +899,9 @@ def extract_subtable_from_column(table, column, selections):
         indices.append(astropy_table_index(table, column, object)[0][0])
     return table[indices]
 
-def filterTable(BASEDIR, fulltable, isTrue):
+def filterTable(BASEDIR, fulltable, isTrue, copy=True):
     '''Filters a table based on a boolean method isTrue.'''
-    filteredTable = Table(fulltable, copy=True, masked=False)
+    filteredTable = Table(fulltable, copy=copy, masked=False)
     for i, object in enumerate(fulltable["objstr_01"]):
         if not isTrue(BASEDIR, object):
             filteredTable.remove_row(np.argwhere(filteredTable["objstr_01"] ==

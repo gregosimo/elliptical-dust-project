@@ -144,8 +144,14 @@ def galex_tilename(MASTrow):
 def extract_GALEX_folder(tarfolder, extractedfolder):
     '''Extracts GALEX tar files into a folder.
 
-    
+    The contents of the tar file is put into extractedfolder.
     '''
+    # We first want to go through all of the tar archives and extract them into
+    # tempfolder. This will make a single location that contains all of the
+    # tiles.
+    filelist = glob.glob(os.path.join(tarfolder, "Galex*.tar"))
+    for tarball in filelist:
+        untar(tarball, extractedfolder)
 
 
 def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath, 
@@ -161,17 +167,8 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
     Sorttablepath is the path to the sorttable file. The sorttable file should
     be in the form of:
     NGCXXXX,NUV_TILE_NAME_NUMBER,FUV_TILE_NAME_NUMBER"""
-    tempfolder = os.path.join(workfolder, tempfolder)
-    # We first want to go through all of the tar archives and extract them into
-    # tempfolder. This will make a single location that contains all of the
-    # tiles.
-    filelist = glob.glob(os.path.join(workfolder, "Galex*.tar"))
-    for tarball in filelist:
-        untar(tarball, tempfolder)
-    # Next, go through the images and sort them into the correct directories in
+    # We'll go through the images and sort them into the correct directories in
     # BASEDIR.
-    # We can potentially separate the extraction and the sorting into two
-    # different functions. It might actually make more sense.
     sortTable = Table.read(sortTablepath, format="ascii.csv", guess=False)
     for entry in sortTable:
         galaxydir = phot.change_to_galaxy_dir(BASEDIR, entry["object"])
@@ -193,13 +190,15 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
             extractedimage = imagefile[:-3]
             imagedir, imagename = os.path.split(extractedimage)
             gunzip(imagefile, imagedir)
-            ra, dec = entry["RA"], entry["DEC"]
-            try:
-                extract_image_with_coordinates(extractedimage, ra, dec, 600,
-                        600, galaxydir)
-            except iraf.IRAFError:
-                extract_image_with_coordinates(extractedimage, ra, dec, 600,
-                        600, galaxydir)
+            if "-flags" not in imagefile:
+                ra, dec = entry["RA"], entry["DEC"]
+                try:
+                    extract_image_with_coordinates(extractedimage, ra, dec, 
+                            600, 600, galaxydir)
+                except iraf.IrafError:
+                    os.mkdir(galaxydir)
+                    extract_image_with_coordinates(extractedimage, ra, dec, 
+                            600, 600, galaxydir)
                 
 def extract_image_with_coordinates(original, centerra, centerdec, arcsecwidth,
         arcsecheight, destination, band="NUV"):
@@ -209,7 +208,7 @@ def extract_image_with_coordinates(original, centerra, centerdec, arcsecwidth,
     computation is done on physical coordinates, so for particularl distortion
     portions of the image, weird geometries may occur.
     '''
-    centerx, centery = phot.getPixelCoords(original, centerra, centerdec)
+    centerx, centery = phot.getpixelcoords(original, centerra, centerdec)
     width = arcsecwidth / phot.getPixelScale(band)
     height = arcsecheight / phot.getPixelScale(band)
 
@@ -237,7 +236,7 @@ def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery,
     The original image plus bounds in pixels will be written to the destination.
     The destination will be clobbered.
     '''
-    subimage = "{0}[{1}:{2},{3}:{4}]".format(int(original), int(lowerx),
+    subimage = "{0}[{1}:{2},{3}:{4}]".format(original, int(lowerx),
             int(upperx), int(lowery), int(uppery))
     run_imcopy(subimage, destination)
 
@@ -256,7 +255,7 @@ def run_imcopy(original, destination):
 
     iraf.images()
     iraf.imutil()
-    iraf.imcopy(infile, outfile)
+    iraf.imcopy(original, destination)
 
 
 def folder_matchstring(filetile):
