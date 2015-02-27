@@ -7,6 +7,7 @@ import glob
 import gzip
 
 from astropy.table import Table
+from pyraf import iraf
 
 import photometry as phot
 
@@ -76,6 +77,10 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
     objectlist = []
     NUVlist = []
     FUVlist = []
+    RAlist = []
+    DEClist = []
+    # Now that I have RA and Dec, this seems like a weird way of doing things.
+    # It leaves a bad taste in my mouth.
     sortdict = defaultdict(list)
     skipped_objects = []
     inputgroup = inputinfo_filled.group_by("uploadID")
@@ -96,6 +101,8 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
             if topnuv["survey"] != topfuv["survey"]:
                 surveytables[topfuv["survey"]].add_row(topfuv)
             objectlist.append(topfuv["uploadID"])
+            RAlist.append(topfuv["uploadRA"])
+            DEClist.append(topfuv["uploadDEC"])
             NUVlist.append(galex_tilename(topnuv))
             FUVlist.append(galex_tilename(topfuv))
             print "{0}: {1}, {2}".format(objectlist[-1], NUVlist[-1], 
@@ -113,8 +120,8 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
         path = filepaths[survey]
         create_upload_file(tab["uploadID"], tab["uploadRA"], tab["uploadDEC"],
                 path)       
-    sortTable = Table([objectlist, NUVlist, FUVlist], names=("object",
-        "NUV_Tile", "FUV_Tile"))
+    sortTable = Table([objectlist, RAlist, DEClist, NUVlist, FUVlist], 
+            names=("object", "RA", "DEC", "NUV_Tile", "FUV_Tile"))
     sortTable.write(os.path.join(output_dir, keytable), format="ascii.csv")
     return skipped_objects
 
@@ -134,15 +141,26 @@ def galex_tilename(MASTrow):
         tilename = "{0}_sg{1:02g}".format(base_tilename, subtile)
     return tilename
 
+def extract_GALEX_folder(tarfolder, extractedfolder):
+    '''Extracts GALEX tar files into a folder.
+
+    
+    '''
+
+
 def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath, 
         tempfolder="images"):
     """Processes a tarfile downloaded from GALEX using sortTable.
     
     BASEDIR is the directory where we want the image folders to be.
+    
     Workfolder is the location which contains the tarfiles as well as the
     location that will have tempfolder. This does not necessarily have to be
     identical to BASEDIR, but often is.
-    Sorttablepath is the path to the sorttable file."""
+
+    Sorttablepath is the path to the sorttable file. The sorttable file should
+    be in the form of:
+    NGCXXXX,NUV_TILE_NAME_NUMBER,FUV_TILE_NAME_NUMBER"""
     tempfolder = os.path.join(workfolder, tempfolder)
     # We first want to go through all of the tar archives and extract them into
     # tempfolder. This will make a single location that contains all of the
@@ -172,11 +190,74 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
         if not galexFUVfiles:
             print "Could not match {0}.".format(entry["FUV_Tile"])
         for imagefile in galexFUVfiles + galexNUVfiles:
+            extractedimage = imagefile[:-3]
+            imagedir, imagename = os.path.split(extractedimage)
+            gunzip(imagefile, imagedir)
+            ra, dec = entry["RA"], entry["DEC"]
             try:
-                gunzip(imagefile, galaxydir)
-            except IOError:
-                os.mkdir(galaxydir)
-                gunzip(imagefile, galaxydir)
+                extract_image_with_coordinates(extractedimage, ra, dec, 600,
+                        600, galaxydir)
+            except iraf.IRAFError:
+                extract_image_with_coordinates(extractedimage, ra, dec, 600,
+                        600, galaxydir)
+                
+def extract_image_with_coordinates(original, centerra, centerdec, arcsecwidth,
+        arcsecheight, destination, band="NUV"):
+    '''Copies a part of an image to a destination file.
+
+    The coordinates will be given in celestial coordinates. Note that the actual
+    computation is done on physical coordinates, so for particularl distortion
+    portions of the image, weird geometries may occur.
+    '''
+    centerx, centery = phot.getPixelCoords(original, centerra, centerdec)
+    width = arcsecwidth / phot.getPixelScale(band)
+    height = arcsecheight / phot.getPixelScale(band)
+
+    extract_from_image_with_height_width(original, centerx, centery, height,
+            width, destination)
+
+def extract_from_image_with_height_width(original, centerx, centery, height,
+        width, destination):
+    '''Copies a part of an image to a destination file.
+
+    The part will have the center given by centerx, centery, and will have a
+    given height and width'''
+    lowerx = centerx - width
+    upperx = centerx + width
+    lowery = centery - width
+    uppery = centery + width
+
+    extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery,
+            destination)
+
+def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery, 
+        destination):
+    '''Copies a part of an image to a destination file.
+
+    The original image plus bounds in pixels will be written to the destination.
+    The destination will be clobbered.
+    '''
+    subimage = "{0}[{1}:{2},{3}:{4}]".format(int(original), int(lowerx),
+            int(upperx), int(lowery), int(uppery))
+    run_imcopy(subimage, destination)
+
+def run_imcopy(original, destination):
+    '''A raw layer on top of imcopy.
+
+    Imcopy has a lot of flexibility, such as with copying multiple images, or
+    copying sections of an image, or pattern-matching. However, utilizing these
+    features shouldn't be done by working directly with this file, but rather by
+    having layers on top of it which are more pythonic.
+
+    For simple image copying, this function should be simple enough.
+    '''
+    if os.path.isfile(destination):
+        os.remove(destination)
+
+    iraf.images()
+    iraf.imutil()
+    iraf.imcopy(infile, outfile)
+
 
 def folder_matchstring(filetile):
     '''Creates an approprite matchstring for a folder from a file tile.
