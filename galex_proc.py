@@ -189,16 +189,31 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
         for imagefile in galexFUVfiles + galexNUVfiles:
             extractedimage = imagefile[:-3]
             imagedir, imagename = os.path.split(extractedimage)
-            gunzip(imagefile, imagedir)
+            try:
+                gunzip(imagefile, imagedir)
+            except:
+                print "Error with {0}".format(imagefile)
             if "-flags" not in imagefile:
                 ra, dec = entry["RA"], entry["DEC"]
+                # If it throws an IrafError, that means the destination
+                # directory didn't exist, and we'd like to change that.
                 try:
-                    extract_image_with_coordinates(extractedimage, ra, dec, 
-                            600, 600, galaxydir)
-                except iraf.IrafError:
-                    os.mkdir(galaxydir)
-                    extract_image_with_coordinates(extractedimage, ra, dec, 
-                            600, 600, galaxydir)
+                    try:
+                        extract_image_with_coordinates(
+                            extractedimage, ra, dec, 600, 600, galaxydir)
+                    except iraf.IrafError:
+                        os.mkdir(galaxydir)
+                        extract_image_with_coordinates(
+                            extractedimage, ra, dec, 600, 600, galaxydir)
+                # If an IOError is thrown, that means there was something
+                # strange that occurred with the extraction and I'd like to
+                # look into it.
+                except IOError:
+                    print
+                    print "Error extracting {0}.".format(extractedimage)
+                    print
+                # Although, it seems like there just might have been issues on
+                # the GALEX portion, not this portion.
                 
 def extract_image_with_coordinates(original, centerra, centerdec, arcsecwidth,
         arcsecheight, destination, band="NUV"):
@@ -252,11 +267,16 @@ def run_imcopy(original, destination):
     '''
     if os.path.isfile(destination):
         os.remove(destination)
+    elif os.path.isdir(destination):
+        extension = ".fits"
+        basefile = os.path.basename(original)
+        filename = basefile[:basefile.index(extension)+len(extension)]
+        destination_path = os.path.join(destination, filename)
+        os.remove(destination_path)
 
     iraf.images()
     iraf.imutil()
     iraf.imcopy(original, destination)
-
 
 def folder_matchstring(filetile):
     '''Creates an approprite matchstring for a folder from a file tile.
