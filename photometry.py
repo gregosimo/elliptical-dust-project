@@ -565,7 +565,7 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
             if ignore_error:
                 print e
             else:
-                raise e
+                raise
 
 
 ##############################################################################
