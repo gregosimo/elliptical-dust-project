@@ -136,6 +136,7 @@ def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50,
         "FUV").replace("-fd-", "-nd-") == phot.match_filter(galaxydir, "NUV")):
         shutil.copy(phot.format_band_dependence(outputbase, "NUV", "fits",
             galaxydir), phot.change_to_galaxy_dir(galaxydir, maskfile))
+        print "Copying NUV mask to FUV for {0}".format(WISErow["objstr_01"])
     else:
         mask_elliptical_galaxy(galaxydir, maskband, objectcoords,
             threshold=threshold, maskfile=maskfile, ellipsebase=ellipsebase, 
