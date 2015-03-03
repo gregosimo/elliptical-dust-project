@@ -181,28 +181,29 @@ def spreadmask(workdir, pixels, maskimage, outputfile="foreground.fits",
 
     This function takes each of the pixels in maskimage and then masks a box
     with side length pixels around them.'''
-    # Use reduce for this. It'll be awesome!
-    pixelrange = range(-(pixels-1)/2, (pixels+1)/2)
-    permutations = list(itertools.product(pixelrange, pixelrange))
-    # If the directory doesn't exist, then make it!
-    try:
-        os.mkdir(os.path.join(workdir, tempfolder))
-    except OSError:
-        pass
-    temppath = os.path.join(workdir, tempfolder)
-    outputpath = os.path.join(temppath, outputfile)
-    filenames = []
-    for i,j in permutations:
-        filename = os.path.join(temppath,
-                "{0}{1:+d}{2:+d}.fits".format(tempfilebase, i, j))
-        filenames.append(filename)
-        run_imshift(os.path.join(workdir, maskimage), filename, i, j)
-    shutil.copy(filenames[0], outputpath)
-    filenames[0] = outputpath
+    hdulist = fits.open(os.path.join(workdir, maskimage))
+    origmask = hdulist[0].data
+    mask_indices = np.transpose(np.nonzero(origmask))
+    for coord in mask_indices:
+        setedges(origmask, coord[0], coord[1], size=pixels, edgevalue=1)
+    hdulist.writeto(os.path.join(workdir, outputfile))
+    hdulist.close()
+    
+def setedges(fullarray, i, j, size=5, edgevalue=1):
+    '''Takes a pixel at the center of fullarray and then sets all of the
+    surrounding pixels within a box of side length size to edgevalue. For 
+    example, a size of 5 would set all pixels within a distance of 2 pixels 
+    from the center as edgevalue.
 
-    # I don't like the way that this is done... but it's convenient.
-    # For the sake of code clarity, the iteration here should be made clearer.
-    reduce(combinemasks, filenames)
+    It ignores edge cases.
+    '''
+    distance = (size-1) / 2
+    for ib in range(-distance, distance+1):
+        for jb in range(-distance, distance+1):
+            try:
+                fullarray[i+ib][j+jb] = edgevalue
+            except IndexError:
+                pass
 
 def combinemasks(basefile, additionfile):
     '''Adds a mask to a base mask.'''

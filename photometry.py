@@ -561,7 +561,7 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
         galaxydir = change_to_galaxy_dir(BASEDIR, row["objstr_01"])
         try:
             func(BASEDIR, row, **kwargs)
-        except (RuntimeError, iraf.IrafError) as e:
+        except (Exception, iraf.IrafError) as e:
             if ignore_error:
                 print e
             else:
