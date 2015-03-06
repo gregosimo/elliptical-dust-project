@@ -714,12 +714,13 @@ def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
 ##############################################################################
 
 def allMasks(BASEDIR, fulltable, maskband, threshold=5,
-        outputbase="foreground", maskconfig="", ignore_error=False):
+        outputbase="foreground", maskconfig="", ignore_error=False,
+             overwrite=False):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
             maskband=maskband, outputbase=outputbase, maskconfig=maskconfig,
-            ignore_error=ignore_error)
+            ignore_error=ignore_error, overwrite=overwrite)
 
 def allApertureTables(BASEDIR, fulltable, runbands=bands,
         outputbase="ellipsepars", ignore_error=False):
@@ -914,16 +915,20 @@ def genSkyValues(BASEDIR, WISErow, coordbase="fitsky",
     # setting annulus for W1 is disable resetting it for W2-4.
     for band in runbands:
         if skygens.lower() == "adaptive":
-            skygens = adaptive_background[band]
-        if skygens.lower() == "aperture":
+            background_method = adaptive_background[band]
+        else:
+            background_method = skygens.lower()
+
+        if background_method == "aperture":
             measure_sky_from_skyfile(galaxydir, band, baseskyfile, ellipsebase)
-        elif skygens.lower() == "annulus":
-            measure_sky_from_annulus(galaxydir, band, coordbase, baseskyfile,
-                    ellipsebase, annulus, skyratio, dannulus)
-        elif skygens.lower() == "patch":
-            measure_sky_from_patches(galaxydir, band, patch_area, num_patches, 
-                    baseskyfile, ellipsebase, skyratio,
-                    mask=format_band_dependence(maskbase, band, "fits"), clip=clip)
+        elif background_method == "annulus":
+            measure_sky_from_annulus(galaxydir, band, coordbase, baseskyfile, 
+                                     ellipsebase, annulus, skyratio, dannulus)
+        elif background_method == "patch":
+            measure_sky_from_patches(
+                galaxydir, band, patch_area, num_patches, baseskyfile, 
+                ellipsebase, skyratio, 
+                mask=format_band_dependence(maskbase, band, "fits"), clip=clip)
 
 def measure_sky_from_patches(galaxydir, band, area=4000, numpatches=90,
         baseskyfile="sky_level", ellipsebase="ellipsepars", scale=1.5,
