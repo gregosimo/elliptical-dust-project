@@ -1073,12 +1073,13 @@ def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
 ##############################################################################
 
 def allMasks(BASEDIR, fulltable, maskband, threshold=5,
-        outputbase="foreground", maskconfig="", ignore_error=False):
+        outputbase="foreground", maskconfig="", ignore_error=False,
+             overwrite=False):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
             maskband=maskband, outputbase=outputbase, maskconfig=maskconfig,
-            ignore_error=ignore_error)
+            ignore_error=ignore_error, overwrite=overwrite)
 
 def allApertureTables(BASEDIR, fulltable, runbands=bands,
         outputbase="ellipsepars", ignore_error=False):

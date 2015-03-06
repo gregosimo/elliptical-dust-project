@@ -1,4 +1,5 @@
 
+from astropy.table import Table
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -136,3 +137,64 @@ def plot_Conroy_SED(ATLAS3DBASE, atlas3d_sample_row):
     plt.title("SED for {0}; SSP Age: {1} Gyr".format(objname, 
         atlas3d_table["Age_SSP"][phot.astropy_table_index(atlas3d_sample, 
         "objstr_01", objname)][0]))
+
+def read_Krajnovic_Table_D1(
+        URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
+             "Krajnovic2011_Atlas3D_Paper2_TableD1.txt")):
+    '''Reads the table from Kajnovich 2011
+
+    In particular, this table contains information about dust.'''
+    krajnovic_table = Table.read(
+        URL, format="ascii.commented_header", guess=False, header_start=-5, 
+        data_start=0)
+    return krajnovic_table
+
+def read_McDermid_Table_3(
+        URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
+             "McDermid2015_Atlas3D_Paper30_Table3.txt")):
+    '''Reads in the table from McDermid 2015
+
+    This table contains all of the early-type galaxies in the ATLAS3D sample,
+    as well as their properties as measured by the Re aperture.'''
+    mcdermid_raw_table = Table.read(
+        URL, format="ascii.basic", data_start=0, header_start=None, 
+        fill_values=("--", "0"))
+    mcdermid_table = Table(
+        mcdermid_raw_table[[
+            "col1", "col2", "col4", "col5", "col7", "col8", "col10", "col11",
+            "col13", "col14", "col16", "col17", "col19", "col20", "col22",
+            "col23"]], 
+        names=(
+            "Name", "Hbeta", "Hbeta_err", "Fe5015", "Fe5015_err", "Mgb",
+            "Mgb_err", "Fe5270", "Fe5270_err", "Age_SSP", "Age_SSP_err",
+            "[Z/H]_SSP", "[Z/H]_SSP_er", "[a/Fe]_SSP", "[a/Fe]_SSP_err",
+            "Quality"))
+    # The plus/minus symbols really ruin this command...
+    # mcdermid_table = Table.read(
+    #    URL, format="ascii.commented_header", guess=False, header_start=-4, 
+    #    data_start=0)
+    return mcdermid_table
+
+
+def get_dustless_galaxies(krajnovic_table=None):
+    '''Gets dustless galaxies in ATLAS3D. 
+
+    If the krajnovic table is provided, it will filter it. Otherwise, it will
+    return its own table.'''
+    if krajnovic_table is None:
+        krajnovic_table = read_Krajnovic_Table_D1()
+    dustless = phot.astropy_table_row(krajnovic_table, "dust", ["N"])
+    return dustless
+
+def filter_ATLAS3D_table_for_dustless_galaxies(atlas3d_table):
+    '''Picks out dustless galaxies from the atlas3d_table.
+
+    Takes the atlas3d table and uses the Krajnovic et al 2011 table D1 to pick
+    out the galaxies without signs of diffuse dust.'''
+    dustless_galaxies = get_dustless_galaxies()
+
+    filteredtable = phot.extract_subtable_from_column(
+        atlas3d_table, "objstr_01", dustless_galaxies["name"])
+    return filteredtable
+
+

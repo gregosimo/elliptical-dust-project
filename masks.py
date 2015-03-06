@@ -16,8 +16,9 @@ from mask_trimmer import MaskCMD
 #SEXTRACTOR_DIR = "/home/gregory/work/sextractor"
 SEXTRACTOR_DIR = "/home/regulus/simonian/year1/wise/sextractor"
 
-def build_masks(BASEDIR, WISETable, threshold=5, runbands=None,
-        outputbase="foreground", maskconfig=""):
+def build_masks(
+        BASEDIR, WISETable, threshold=5, runbands=None, outputbase="foreground", 
+        maskconfig="", ignore_error=False, overwrite=False):
     '''Builds masks for specified objects.
 
     The objects to be built should be specified in WISETable, which should be a
@@ -42,7 +43,8 @@ def build_masks(BASEDIR, WISETable, threshold=5, runbands=None,
     # the rest.
     for maskband in runbands:
         phot.allMasks(BASEDIR, WISETable, maskband, threshold=threshold, 
-                outputbase=outputbase)
+                      outputbase=outputbase, overwrite=overwrite,
+                      ignore_error=ignore_error)
 
 def run_sextractor(image, config, **options):
     '''Runs SExtractor on an image.
@@ -117,7 +119,7 @@ def sextractor_mask(image, config, **sexargs):
 
 def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50, 
         outputbase="foregroundmask", ellipsebase="ellipsepars", spreadpix=5,
-        maskconfig=""):
+        maskconfig="", overwrite=False):
     '''Creates a mask file for the object in WISErow.
 
     The general algorithm for the mask creation algorithm is to find bright
@@ -140,14 +142,16 @@ def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50,
     else:
         mask_elliptical_galaxy(galaxydir, maskband, objectcoords,
             threshold=threshold, maskfile=maskfile, ellipsebase=ellipsebase, 
-            spreadpix=5, maskconfig="")
+            spreadpix=5, maskconfig="", overwrite=overwrite)
 
-def mask_elliptical_galaxy(galaxydir, maskband, objectcoords, threshold=5,
+def mask_elliptical_galaxy(
+        galaxydir, maskband, objectcoords, threshold=5,
         maskfile="foregroundmask.fits", regionbase="ellipseregion",
         ellipsebase="ellipsepars", maskconfig="", segment="rawsegment.fits", 
         clearedsegment="segment_nogalaxy.fits",
         procsegment="foreground_unnormalized.fits",
-        prespreadfile="foreground_normalized.fits", spreadpix=25):
+        prespreadfile="foreground_normalized.fits", spreadpix=25,
+        overwrite=False):
     '''Creates a foreground mask for an elliptical galaxy.
 
     This function uses the ellipse output to find the location of the ellipse
@@ -155,8 +159,8 @@ def mask_elliptical_galaxy(galaxydir, maskband, objectcoords, threshold=5,
    map of just the foreground objects.
    '''
     image = phot.match_filter(galaxydir, maskband)
-    regionpath = phot.format_band_dependence(regionbase, maskband, "reg", 
-            galaxydir)
+    regionpath = phot.format_band_dependence(
+        regionbase, maskband, "reg", galaxydir)
     if not maskconfig:
         maskconfig = select_sextractor_config(SEXTRACTOR_DIR, maskband)
     masked_image = os.path.join(galaxydir, segment)
@@ -165,19 +169,21 @@ def mask_elliptical_galaxy(galaxydir, maskband, objectcoords, threshold=5,
     segment_needs_normalization = os.path.join(galaxydir, procsegment)
     normalized_segment = os.path.join(galaxydir, prespreadfile)
 
-    segmentation_mask(maskconfig, image, masked_image, segment_needs_normalization, 
-            objectcoords, threshold=threshold)
+    segmentation_mask(maskconfig, image, masked_image, 
+                      segment_needs_normalization, objectcoords, 
+                      threshold=threshold)
     # We'll interactively generate masks.
     print "Please remove object {0} in {1}.".format(os.path.basename(galaxydir), 
             maskband)
-    maskprog = MaskCMD(segment_needs_normalization, galaxy_removed, 
-            regionpath)
+    maskprog = MaskCMD(
+        segment_needs_normalization, galaxy_removed, regionpath)
     maskprog.cmdloop()
     normalize_segmentation_map(galaxy_removed, normalized_segment)
-    spreadmask(galaxydir, spreadpix, normalized_segment, outputfile=fullmask)
+    spreadmask(galaxydir, spreadpix, normalized_segment, outputfile=fullmask,
+               overwrite=overwrite)
 
-def spreadmask(workdir, pixels, maskimage, outputfile="foreground.fits", 
-        tempfolder="offsets", tempfilebase="foreground_shifted"):
+def spreadmask(workdir, pixels, maskimage, outputfile="foreground.fits",
+               overwrite=False):
     '''Masks a square around each original pixel
 
     This function takes each of the pixels in maskimage and then masks a box
@@ -187,7 +193,7 @@ def spreadmask(workdir, pixels, maskimage, outputfile="foreground.fits",
     mask_indices = np.transpose(np.nonzero(origmask))
     for coord in mask_indices:
         setedges(origmask, coord[0], coord[1], size=pixels, edgevalue=1)
-    hdulist.writeto(os.path.join(workdir, outputfile))
+    hdulist.writeto(os.path.join(workdir, outputfile), clobber=overwrite)
     hdulist.close()
     
 def setedges(fullarray, i, j, size=5, edgevalue=1):
