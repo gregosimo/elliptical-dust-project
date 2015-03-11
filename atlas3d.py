@@ -197,4 +197,11 @@ def filter_ATLAS3D_table_for_dustless_galaxies(atlas3d_table):
         atlas3d_table, "objstr_01", dustless_galaxies["name"])
     return filteredtable
 
+def filter_out_bad_targets(atlas3d_table):
+    '''Objects which cause errors for some reason or another.
+
+    I should find the root cause of these problems, but this will help pick
+    them out and skip them for now.
+    '''
+
 
