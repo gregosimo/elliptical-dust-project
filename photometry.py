@@ -830,7 +830,7 @@ def load_image(galaxydir, band, mask="", uncertainty=False, sky=False):
     except IOError:
         mask = np.ma.nomask
     image = np.ma.array(fits.getdata(imagepath), mask=mask)
-    image = mask_invalid_areas(image, band)
+    # image = mask_invalid_areas(image, band)
     return image
 
 def mask_invalid_areas(image, band):
@@ -1368,8 +1368,8 @@ def sky_annulus_histogram(galaxydir, band, fitsky_output_base="sky_level",
         band) + "between {0:.0f} and {1:.0f} pixels".format(rin, rout))
     return imageval
 
-def test_if_in_elliptical_shell_portion(x, y, xcenter, ycenter, ain, bin, scale,
-        pa, angle1, angle2):
+def test_if_in_elliptical_shell_portion(
+        x, y, xcenter, ycenter, ainner, binner, scale, pa, angle1, angle2):
     '''Tests if the point x,y lies within the portion of the elliptical shell.
 
     All of these arguments should be in terms of pixels, except for the angles
@@ -1380,29 +1380,31 @@ def test_if_in_elliptical_shell_portion(x, y, xcenter, ycenter, ain, bin, scale,
     The angles are measured from the centers of the ellipses, not the foci.'''
     xcen = x - xcenter
     ycen = y - ycenter
-    withininner = test_if_in_ellipse(x, y, xcenter, ycenter, ain, bin, pa)
-    withinouter = test_if_in_ellipse(x, y, xcenter, ycenter, ain*scale,
-            bin*scale, pa)
+    withininner = test_if_in_ellipse(x, y, xcenter, ycenter, ainner, binner, pa)
+    withinouter = test_if_in_ellipse(
+        x, y, xcenter, ycenter, ainner*scale, binner*scale, pa)
     # This moves the angle from being 0 at (1, 0) to being 0 at the P.A.
     # i.e. this angle is zero on the major axis.
     angles = np.arctan2(ycen, xcen) - pa * math.pi / 180 - math.pi / 2
     angles[np.where(angles < -math.pi)] += 2*math.pi
     inportion = np.logical_and(angle2 >= angles, angles > angle1)
-    return np.logical_and(np.logical_and(withinouter,
-        np.logical_not(withininner)), inportion)
+    return np.logical_and(
+        np.logical_and(withinouter, np.logical_not(withininner)), inportion)
 
-def mask_elliptical_shell_portion(image, xcenter, ycenter, ain, bin, scale, pa, 
-        angle1, angle2):
+def mask_elliptical_shell_portion(
+        image, xcenter, ycenter, ainner, binner, scale, pa, angle1, angle2):
     image_coords = np.indices(image.shape)
-    mask = np.logical_not(test_if_in_elliptical_shell_portion(image_coords[1], 
-            image_coords[0], xcenter-1, ycenter-1, ain, bin, scale, pa, angle1, 
-            angle2))
+    mask = np.logical_not(
+        test_if_in_elliptical_shell_portion(
+            image_coords[1], image_coords[0], xcenter-1, ycenter-1, ainner, 
+            binner, scale, pa, angle1, angle2))
     #plt.imshow(mask)
     plt.show()
     return mask
 
-def patch_background(image, xcenter, ycenter, ain, bin, scale, pa, angle1, 
-        angle2, bgmap=None):
+def patch_background(
+        image, xcenter, ycenter, ainner, binner, scale, pa, angle1, angle2, 
+        bgmap=None):
     '''Calculates the background and error in an elliptical segment
     
     Takes an image as a numpy array, and then finds the background at the
@@ -1414,8 +1416,8 @@ def patch_background(image, xcenter, ycenter, ain, bin, scale, pa, angle1,
     set to the background value. This may be useful in determining which areas
     are particularly deviant in background value.
     '''
-    ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter, ain,
-            bin, scale, pa, angle1, angle2)
+    ellipsewindow = mask_elliptical_shell_portion(
+        image, xcenter, ycenter, ainner, binner, scale, pa, angle1, angle2)
     segmentimage = np.ma.array(image, mask=ellipsewindow)
     background = np.ma.mean(segmentimage)
     std = segmentimage.std()
@@ -1444,15 +1446,18 @@ def calculate_sky_ellipses(ainit, binit, totalarea):
 
     return amid, bmid, aout, bout
 
-def backgroundmap(backgrounddata, fullimage, xcenter, ycenter, ainit, binit, pa,
-        area, numpatches):
+def backgroundmap(
+        backgrounddata, fullimage, xcenter, ycenter, ainit, binit, pa, area, 
+        numpatches):
     '''Creates a map of background values on the original image to determine
     where background variations occur.'''
 
-    amid, bmid, aout, bout = calculate_sky_ellipses(ainit, binit,
-            numpatches*area)
+    amid, bmid, aout, bout = calculate_sky_ellipses(
+        ainit, binit, numpatches*area)
 
-    image = np.ma.array(fullimage[ycenter-(aout+5):ycenter+(aout+5),
+    image = np.ma.array(
+        fullimage[
+            ycenter-(aout+5):ycenter+(aout+5), 
             xcenter-(aout+5):xcenter+(aout+5)], copy=True)
     image.fill(0)
     newxcenter = newycenter = aout+2.5
@@ -1462,23 +1467,26 @@ def backgroundmap(backgrounddata, fullimage, xcenter, ycenter, ainit, binit, pa,
     angles = np.linspace(-math.pi, math.pi, numsections+1)
     for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
         midscale = amid / ainit
-        ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter,
-            ain, bin, midscale, pa, angle1, angle2)
+        ellipsewindow = mask_elliptical_shell_portion(
+            image, newxcenter, newycenter, ainit, binit, midscale, pa, angle1, 
+            angle2)
         segmentimage = np.ma.array(image, mask=ellipsewindow)
         validpatch = np.ma.array(segmentimage.data, mask=~segmentimage.mask)
         image[~validpatch.mask] = background[i]
     for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
         outscale = aout / amid
-        ellipsewindow = mask_elliptical_shell_portion(image, xcenter, ycenter,
-            ain, bin, outscale, pa, angle1, angle2)
+        ellipsewindow = mask_elliptical_shell_portion(
+            image, newxcenter, newycenter, amid, bmid, outscale, pa, angle1, 
+            angle2)
         segmentimage = np.ma.array(image, mask=ellipsewindow)
         validpatch = np.ma.array(segmentimage.data, mask=~segmentimage.mask)
         image[~validpatch.mask] = background[i+numsections]
     return image
     
 
-def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
-        numpatches, backgroundmapfile=''):
+def background_from_patches(
+        fullimage, xcenter, ycenter, ainit, binit, pa, area, numpatches, 
+        backgroundmapfile=''):
     '''Calculates background from a series of elliptical patches.
 
     There needs to be an initial specification of an ellipse, which is given by
@@ -1493,19 +1501,21 @@ def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
     bgsample = np.ma.zeros(numpatches)
     stdsample = np.ma.zeros(numpatches)
 
-    amid, bmid, aout, bout = calculate_sky_ellipses(ainit, binit,
-            numpatches*area)
+    amid, bmid, aout, bout = calculate_sky_ellipses(
+        ainit, binit, numpatches*area)
 
     # In order to move the numbers in and out of this function conveniently,
     # we'll put them in the scales dictionary.
     scales = {"ainit": ainit, "binit": binit, "amid": amid, "bmid": bmid,
             "aout": aout, "bout": bout}
-    image = fullimage[ycenter-(aout+5):ycenter+(aout+5),
-            xcenter-(aout+5):xcenter+(aout+5)]
+    image = fullimage[
+        ycenter-(aout+5):ycenter+(aout+5), 
+        xcenter-(aout+5):xcenter+(aout+5)]
     if backgroundmapfile:
         fullbgimage = np.ma.array(fullimage, copy=True)
         fullbgimage.fill(0)
-        bgimage = fullbgimage[ycenter-(aout+5):ycenter+(aout+5),
+        bgimage = fullbgimage[
+            ycenter-(aout+5):ycenter+(aout+5), 
             xcenter-(aout+5):xcenter+(aout+5)]
     else:
         bgimage=None
@@ -1519,14 +1529,16 @@ def background_from_patches(fullimage, xcenter, ycenter, ainit, binit, pa, area,
         midscale = amid / ainit
         # Because we're using a view centered on the actual image, we'll set 
         # the center bits to 0.
-        bg, std = patch_background(image, newxcenter, newycenter, ainit, binit,
-                midscale, pa, angle1, angle2, bgmap=bgimage)
+        bg, std = patch_background(
+            image, newxcenter, newycenter, ainit, binit, midscale, pa, angle1, 
+            angle2, bgmap=bgimage)
         bgsample[i] = bg
         stdsample[i] = std
     for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
         outscale = aout / amid
-        bg, std = patch_background(image, newxcenter, newycenter, amid, bmid,
-                outscale, pa, angle1, angle2, bgmap=bgimage)
+        bg, std = patch_background(
+            image, newxcenter, newycenter, amid, bmid, outscale, pa, angle1, 
+            angle2, bgmap=bgimage)
         bgsample[i+numsections] = bg
         stdsample[i+numsections] = std
     if bgimage is not None:
@@ -1544,8 +1556,8 @@ def test_if_in_ellipse(x, y, xcenter, ycenter, a, b, pa):
     alpha = (pa+90) * math.pi / 180.0
     xcen = x - xcenter
     ycen = y - ycenter
-    return (xcen * math.cos(alpha) + ycen * math.sin(alpha))**2 / a**2 + (xcen *
-            math.sin(alpha) - ycen * math.cos(alpha))**2 / b**2 < 1
+    return ((xcen * math.cos(alpha) + ycen * math.sin(alpha))**2 / a**2 + 
+        (xcen * math.sin(alpha) - ycen * math.cos(alpha))**2 / b**2 < 1)
 
 def test_if_in_annulus(x, y, xcenter, ycenter, rin, rout):
     '''Tests if the point x,y lies within the described annulus.
@@ -1554,8 +1566,9 @@ def test_if_in_annulus(x, y, xcenter, ycenter, rin, rout):
     '''
     xcen = x - xcenter
     ycen = y - ycenter
-    return np.logical_and((xcen**2 + ycen**2 <= rout**2), (xcen**2 + ycen**2 >=
-        rin**2))
+    return np.logical_and(
+        (xcen**2 + ycen**2 <= rout**2), 
+        (xcen**2 + ycen**2 >= rin**2))
 
 def mask_ellipse(image, xcenter, ycenter, a, b, pa):
     '''Creates a mask on the image which is shaped like an ellipse.
@@ -1564,8 +1577,8 @@ def mask_ellipse(image, xcenter, ycenter, a, b, pa):
     pixels, not numpy indices. The conversion will take place in this function.
     '''
     image_coords = np.indices(image.shape)
-    mask = test_if_in_ellipse(image_coords[1], image_coords[0], xcenter-1,
-            ycenter-1, a, b, pa)
+    mask = test_if_in_ellipse(
+        image_coords[1], image_coords[0], xcenter-1, ycenter-1, a, b, pa)
     return mask
 
 def mask_circle(image, xcenter, ycenter, radius):
@@ -1583,8 +1596,8 @@ def mask_annulus(image, xcenter, ycenter, rin, rout):
     pixels, not numpy indices. The conversion will take place in this
     function.'''
     image_coords = np.indices(image.shape)
-    mask = test_if_in_annulus(image_coords[1], image_coords[0], xcenter-1,
-        ycenter-1, rin, rout)
+    mask = test_if_in_annulus(
+        image_coords[1], image_coords[0], xcenter-1, ycenter-1, rin, rout)
     return mask
 
 
@@ -1592,19 +1605,21 @@ def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion",
         parambase="ellipsepars", runbands=bands, ignore_error=False):
     '''Runs through all objects and make DS9 regions.
     '''
-    runOnImages(BASEDIR, WISEtable, writeregion, outputbase=outputbase, 
-            parambase=parambase, runbands=runbands, ignore_error=ignore_error)
+    runOnImages(
+        BASEDIR, WISEtable, writeregion, outputbase=outputbase, 
+        parambase=parambase, runbands=runbands, ignore_error=ignore_error)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
         skyAperture=True, skyimage=False, skyprefix="sky_level",
-        aperturefile="ellipse_aperture"):
+        aperturefile="ellipse_aperture", ignore_error=False):
     '''Runs through all objects and creates cutouts in their folder.
     '''
     current_backend = matplotlib.get_backend()
     matplotlib.use("Agg")
-    runOnImages(BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands,
-            skyAperture=skyAperture, skyimage=skyimage, skyprefix=skyprefix,
-            aperturefile=aperturefile)
+    runOnImages(
+        BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands, 
+        skyAperture=skyAperture, skyimage=skyimage, skyprefix=skyprefix, 
+        aperturefile=aperturefile, ignore_error=ignore_error)
     matplotlib.use(current_backend)
 
 def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
@@ -1630,9 +1645,12 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
             galaxydir))
         maskhdu = maskhdulist[0]
         # Since maskhdu is binary 0/1, this should yield the desired outcome.
-        imagehdu.data *= maskhdu.data
+        imagehdu.data = np.ma.MaskedArray(
+            imagehdu.data, mask=maskhdu.data).filled(np.nan)
         gc = aplpy.FITSFigure(imagehdu)
         gc.show_grayscale()
+        gc.set_nan_color("b")
+        gc.refresh()
 
         px = getPixelScale(band)
         # Make the ellipse indicating the aperture:

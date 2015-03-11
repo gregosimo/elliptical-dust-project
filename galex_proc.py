@@ -155,7 +155,7 @@ def extract_GALEX_folder(tarfolder, extractedfolder):
 
 
 def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath, 
-        tempfolder="images"):
+        tempfolder="images", sidelength=1000):
     """Processes a tarfile downloaded from GALEX using sortTable.
     
     BASEDIR is the directory where we want the image folders to be.
@@ -175,13 +175,13 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
         # Added this because Gil de Paz tables have the underscore replaced by a
         # hypen for reasons I have no idea about.
         fuvtile = entry["FUV_Tile"].replace("-", "_")
-        FUVstring = os.path.join(tempfolder, 
-                folder_matchstring(fuvtile), 
-                "*-fd-*.fits.gz".format(tile=fuvtile))
+        FUVstring = os.path.join(
+            tempfolder, folder_matchstring(fuvtile), 
+            "*-fd-*.fits.gz".format(tile=fuvtile))
         nuvtile = entry["NUV_Tile"].replace("-", "_")
-        NUVstring = os.path.join(tempfolder, 
-                folder_matchstring(nuvtile), 
-                "*-nd-*.fits.gz".format(tile=nuvtile))
+        NUVstring = os.path.join(
+            tempfolder, folder_matchstring(nuvtile), 
+            "*-nd-*.fits.gz".format(tile=nuvtile))
         galexFUVfiles = glob.glob(FUVstring) 
         galexNUVfiles = glob.glob(NUVstring)
         if not galexFUVfiles:
@@ -200,11 +200,13 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
                 try:
                     try:
                         extract_image_with_coordinates(
-                            extractedimage, ra, dec, 600, 600, galaxydir)
+                            extractedimage, ra, dec, sidelength, sidelength, 
+                            galaxydir)
                     except iraf.IrafError:
                         os.mkdir(galaxydir)
                         extract_image_with_coordinates(
-                            extractedimage, ra, dec, 600, 600, galaxydir)
+                            extractedimage, ra, dec, sidelength, sidelength, 
+                            galaxydir)
                 # If an IOError is thrown, that means there was something
                 # strange that occurred with the extraction and I'd like to
                 # look into it.
