@@ -949,8 +949,8 @@ def measure_sky_from_patches(galaxydir, band, area=4000, numpatches=90,
     illustrating the locations of the patches along with the value in each patch
     at {backgroundmapbase}.{band}.fits.
     '''
-    ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(ellipsebase, band, "tab"))
+    ellipsepars = STSDAS_to_Astropy_Table(
+        galaxydir, format_band_dependence(ellipsebase, band, "tab"))
     backgroundmapfile = format_band_dependence(backgroundmapbase, band, "fits",
             galaxydir)
     imagename = match_filter(galaxydir, band, fullpath=False)
@@ -1104,8 +1104,6 @@ def mask_elliptical_shell_portion(
         test_if_in_elliptical_shell_portion(
             image_coords[1], image_coords[0], xcenter-1, ycenter-1, ainner, 
             binner, scale, pa, angle1, angle2))
-    #plt.imshow(mask)
-    plt.show()
     return mask
 
 def patch_background(
