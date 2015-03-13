@@ -1398,8 +1398,6 @@ def mask_elliptical_shell_portion(
         test_if_in_elliptical_shell_portion(
             image_coords[1], image_coords[0], xcenter-1, ycenter-1, ainner, 
             binner, scale, pa, angle1, angle2))
-    #plt.imshow(mask)
-    plt.show()
     return mask
 
 def patch_background(
