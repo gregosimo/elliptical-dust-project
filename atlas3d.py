@@ -1,9 +1,11 @@
+import os
 
 from astropy.table import Table
 import matplotlib.pyplot as plt
 import numpy as np
 
 import photometry as phot
+import WISE_conversions as conv
 
 # Maybe I want to subclass figure later on. But now... meh.
 class SED(object):
@@ -109,7 +111,7 @@ def plot_Conroy_SED(ATLAS3DBASE, atlas3d_sample_row):
     TWOMASS_ZP, 0)
 
     # This is normalized to H-band
-    fsps = Table.read(os.path.join(ATLAS3dBASE, "fsps-egals.txt"), format="ascii", 
+    fsps = Table.read(os.path.join(ATLAS3DBASE, "fsps-egals.txt"), format="ascii", 
                       names=["Wave", "F(0.2Gyr)", "F(2Gyr)", "F(5Gyr)", "F(10Gyr)"])
     fsps_02 = fsps["F(0.2Gyr)"] * TWOMASS_flux[1] / fsps["F(0.2Gyr)"][802]
     fsps_2 = fsps["F(2Gyr)"] * TWOMASS_flux[1] / fsps["F(2Gyr)"][802]
@@ -123,7 +125,7 @@ def plot_Conroy_SED(ATLAS3DBASE, atlas3d_sample_row):
     plt.plot(fsps["Wave"], fsps_frequencies * fsps_10, 'c-', label="10 Gyr")
 
     plt.errorbar(GALEX_wavelengths, GALEX_flux * GALEX_frequencies, 
-        GALEX_flux_err, fmt='o')
+        GALEX_flux_err, fmt='ro')
     plt.errorbar(WISE_wavelengths, WISE_flux * WISE_frequencies, WISE_flux_err, 
         fmt='ro')
     plt.errorbar(TWOMASS_wavelengths, TWOMASS_flux * TWOMASS_frequencies, 
@@ -133,10 +135,9 @@ def plot_Conroy_SED(ATLAS3DBASE, atlas3d_sample_row):
     plt.legend()
     plt.xlabel("Wavelength (um)")
     plt.ylabel("vFv (Jansky Hz)")
-    objname = atlas3d_sample["objstr_01"][i]
+    objname = atlas3d_sample_row["objstr_01"]
     plt.title("SED for {0}; SSP Age: {1} Gyr".format(objname, 
-        atlas3d_table["Age_SSP"][phot.astropy_table_index(atlas3d_sample, 
-        "objstr_01", objname)][0]))
+        atlas3d_sample_row["Age_SSP"]))
 
 def read_Krajnovic_Table_D1(
         URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
@@ -203,5 +204,10 @@ def filter_out_bad_targets(atlas3d_table):
     I should find the root cause of these problems, but this will help pick
     them out and skip them for now.
     '''
+    newtable = atlas3d_table.copy()
+    ###########################################################################
+    # Insert exclusion rules here #
 
+    ###########################################################################
+    return newtable
 
