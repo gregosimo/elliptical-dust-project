@@ -895,8 +895,13 @@ def extract_subtable_from_column(table, column, selections):
     those found in selections.
     '''
     indices = []
-    for object in selections:
-        indices.append(astropy_table_index(table, column, object)[0][0])
+    for selection in selections:
+        try:
+            foundindex = astropy_table_index(table, column, selection)[0][0]
+        except IndexError:
+            # If it's not found, then skip to the next row!
+            continue
+        indices.append(foundindex)
     return table[indices]
 
 def filterTable(BASEDIR, fulltable, isTrue, copy=True):

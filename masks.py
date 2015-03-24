@@ -18,7 +18,7 @@ SEXTRACTOR_DIR = "/home/regulus/simonian/year1/wise/sextractor"
 
 def build_masks(
         BASEDIR, WISETable, threshold=5, runbands=None, outputbase="foreground", 
-        maskconfig="", ignore_error=False, overwrite=False):
+        maskconfig="", ignore_exception=False, overwrite=False):
     '''Builds masks for specified objects.
 
     The objects to be built should be specified in WISETable, which should be a
@@ -44,7 +44,7 @@ def build_masks(
     for maskband in runbands:
         phot.allMasks(BASEDIR, WISETable, maskband, threshold=threshold, 
                       outputbase=outputbase, overwrite=overwrite,
-                      ignore_error=ignore_error)
+                      ignore_exception=ignore_exception)
 
 def run_sextractor(image, config, **options):
     '''Runs SExtractor on an image.
