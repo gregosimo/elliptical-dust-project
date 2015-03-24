@@ -113,7 +113,7 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
                     DNflux=DNflux, ZPunc=ZPuncertainty, colorIndex=colorIndex)
         else:
             if brightness is "AB":
-                photvalue = conv.DNflux1ABmag(band, DNflux)
+                photvalue = conv.DNflux2ABmag(band, DNflux)
             else:
                 photvalue = conv.DNflux2Vegamag(band, DNflux)
             err = conv.DN_err_to_mag_err(galaxydir, band, objectError,
@@ -555,14 +555,14 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
     The function must be able to accept the BASEDIR as well as an
     Astropy row. The function can also accept keyword arguments via
     kwargs.'''
-    ignore_error = kwargs["ignore_error"]
-    del(kwargs["ignore_error"])
+    ignore_exception = kwargs["ignore_exception"]
+    del(kwargs["ignore_exception"])
     for row in fulltable:
         galaxydir = change_to_galaxy_dir(BASEDIR, row["objstr_01"])
         try:
             func(BASEDIR, row, **kwargs)
         except (Exception, iraf.IrafError) as e:
-            if ignore_error:
+            if ignore_exception:
                 print e
             else:
                 raise
@@ -714,35 +714,35 @@ def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
 ##############################################################################
 
 def allMasks(BASEDIR, fulltable, maskband, threshold=5,
-        outputbase="foreground", maskconfig="", ignore_error=False,
+        outputbase="foreground", maskconfig="", ignore_exception=False,
              overwrite=False):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
             maskband=maskband, outputbase=outputbase, maskconfig=maskconfig,
-            ignore_error=ignore_error, overwrite=overwrite)
+            ignore_exception=ignore_exception, overwrite=overwrite)
 
 def allApertureTables(BASEDIR, fulltable, runbands=bands,
-        outputbase="ellipsepars", ignore_error=False):
+        outputbase="ellipsepars", ignore_exception=False):
     '''Goes through BASEDIR and generates all the aperture tables.
 
     The full WISE table will be necessary.'''
     runOnImages(BASEDIR, fulltable, genApertureTable, runbands=runbands,
-            outputbase=outputbase, ignore_error=ignore_error)
+            outputbase=outputbase, ignore_exception=ignore_exception)
 
 def allUncertaintyTables(BASEDIR, fulltable, baseuncertainty="uncertainty", 
         ellipsebase="ellipsepars", skybase="sky_level", skymethod="adaptive",
-        runbands=bands, ignore_error=False):
+        runbands=bands, ignore_exception=False):
     '''Goes through BASEDIR and generates all uncertainty tables.'''
     runOnImages(BASEDIR, fulltable, genImageUncertainty,
             baseuncertainty=baseuncertainty, ellipsebase=ellipsebase,
             skybase=skybase, skymethod=skymethod, runbands=runbands,
-            ignore_error=ignore_error)
+            ignore_exception=ignore_exception)
 
 def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky", 
         baseskyfile="sky_level", skygens="adaptive", ellipsebase="ellipsepars",
         maskbase="foreground", alt_mask="foreground_alt.fits", skyratio=2.5,
-        clip=False, ignore_error=False):
+        clip=False, ignore_exception=False):
     '''Goes through BASEDIR and generates all sky tables.
 
     This function also allows for single-object corrections to be made.
@@ -750,11 +750,11 @@ def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky",
     runOnImages(BASEDIR, fulltable, genSkyValues, runbands=runbands,
             coordbase=coordbase, baseskyfile=baseskyfile, skygens=skygens,
             ellipsebase=ellipsebase, skyratio=skyratio, clip=clip,
-            ignore_error=ignore_error, maskbase=maskbase)
+            ignore_exception=ignore_exception, maskbase=maskbase)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
         maskbase="foreground", baseoutput="ellipse_aperture",
-        baseparamname="ellipsepars", ignore_error=False):
+        baseparamname="ellipsepars", ignore_exception=False):
     '''Goes through BASEDIR and generates all object tables.
 
     This function also allows for single-object corrections to be made.
@@ -762,12 +762,12 @@ def allEllipseTables(BASEDIR, fulltable, runbands=bands,
     runOnImages(BASEDIR, fulltable, genEllipsetables,
             baseparamname=baseparamname, runbands=runbands,
             maskbase=maskbase, baseoutput=baseoutput,
-            ignore_error=ignore_error)
+            ignore_exception=ignore_exception)
 
-def allSkyParams(BASEDIR, fulltable, runbands=bands, ignore_error=False):
+def allSkyParams(BASEDIR, fulltable, runbands=bands, ignore_exception=False):
     '''Goes through BASEDIR and generates all sky parameter files.'''
     runOnImages(BASEDIR, fulltable, genSkyParam, runbands=runbands,
-            ignore_error=ignore_error)
+            ignore_exception=ignore_exception)
 
 def run_imfunc(infile, outfile, func):
     '''Runs imfunc on the given image.
@@ -1321,24 +1321,25 @@ def getPSFFWHM(band, pixel=False):
     return chosenwidth
 
 def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion", 
-        parambase="ellipsepars", runbands=bands, ignore_error=False):
+        parambase="ellipsepars", runbands=bands, ignore_exception=False):
     '''Runs through all objects and make DS9 regions.
     '''
     runOnImages(
         BASEDIR, WISEtable, writeregion, outputbase=outputbase, 
-        parambase=parambase, runbands=runbands, ignore_error=ignore_error)
+        parambase=parambase, runbands=runbands, ignore_exception=ignore_exception)
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
         skyAperture=True, skyimage=False, skyprefix="sky_level",
-        aperturefile="ellipse_aperture", ignore_error=False):
+        aperturefile="ellipse_aperture", ignore_exception=False):
     '''Runs through all objects and creates cutouts in their folder.
     '''
     current_backend = matplotlib.get_backend()
     matplotlib.use("Agg")
+    reload(aplpy)
     runOnImages(
         BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands, 
         skyAperture=skyAperture, skyimage=skyimage, skyprefix=skyprefix, 
-        aperturefile=aperturefile, ignore_error=ignore_error)
+        aperturefile=aperturefile, ignore_exception=ignore_exception)
     matplotlib.use(current_backend)
 
 def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
@@ -1392,6 +1393,7 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
                     object_name_to_dir(WISErow["objstr_01"]),
                     band, "png", galaxydir)
         gc.save(filename)
+        gc.close()
         plt.close("all")
 
 def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive"):
@@ -1566,10 +1568,11 @@ def download_WISE_images(BASEDIR, objstr, ra, dec):
 # This can be fixed pretty easily by making runbands a mandatory argument, and
 # then constructing Columns while iterating. I'm pretty sure those can be added 
 # to a Table more easily than Rows.
-def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
-        ellipseoutput="ellipse_aperture", skybase="sky_level",
+def aperturePhotometryTable(
+        BASEDIR, objectnames, runbands=bands, ellipseoutput="ellipse_aperture", skybase="sky_level",
         skymethod="adaptive", uncertaintybase="uncertainty", ZPuncertainty=True,
-        brightness="AB", apertureCorrection=True, colorIndices=None):
+        brightness="AB", apertureCorrection=True, colorIndices=None, 
+        ignore_exception=False):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
@@ -1577,11 +1580,11 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     '''
     fulltable = Table([objectnames], names=["objstr_01"])
     for band in runbands:
-        bandmags, magerrs = photometryOnBand(BASEDIR, objectnames, band, 
-                ellipseoutput, skybase, skymethod, uncertaintybase,
-                ZPuncertainty=ZPuncertainty, brightness=brightness, errors=True,
-                apertureCorrection=apertureCorrection,
-                colorIndices=colorIndices)
+        bandmags, magerrs = photometryOnBand(
+            BASEDIR, objectnames, band, ellipseoutput, skybase, skymethod, 
+            uncertaintybase, ZPuncertainty=ZPuncertainty, brightness=brightness, 
+            errors=True, apertureCorrection=apertureCorrection, 
+            colorIndices=colorIndices, ignore_exception=ignore_exception)
 
         # How to keep the column name within our standard. Though I suppose we
         # could just change the standard. Look into that. See if the current
@@ -1602,11 +1605,111 @@ def aperturePhotometryTable(BASEDIR, objectnames, runbands=bands,
     
     return fulltable
 
+def aperture_photometry_table(
+        BASEDIR, objectnames, runbands=bands, ellipseoutput="ellipse_aperture", 
+        skybase="sky_level", skymethod="adaptive", 
+        uncertaintybase="uncertainty", ZPuncertainty=True, brightness="AB", 
+        apertureCorrection=True, colorIndices=None, ignore_exception=False):
+    '''Creates a table with generated aperture photometry.
+
+    The magnitudes will be located in columns labeled "w?apmag". All magnitudes
+    will be given in the AB system.
+    '''
+    # How to keep the column name within our standard. Though I suppose we
+    # could just change the standard. Look into that. See if the current
+    # standard is hard-coded somewhere, or if that's just what I've been
+    # doing to stay consistent with the WISE values.
+    # We want w1apmag and NUVapmag.
+    #
+    # This section is about setting up the table outline with a dictionary.
+    photcolumns = {"objstr_01": []}
+    photkeys = [name_photometry_column(band) for band in runbands]
+    errkeys = [name_photometry_column(band, error=True) for band in runbands]
+    for photkey, photerr in zip(photkeys, errkeys):
+        photcolumns[photkey] = []
+        photcolumns[photerr] = []
+
+    if colorIndices is None:
+        colorIndices = [-2] * len(objectnames)
+    if len(colorIndices) is not len(objectnames):
+        raise ValueError("Need same number of color indices and objects.")
+
+    for galname, colorIndex in zip(objectnames, colorIndices):
+        measurements = []
+        for band in runbands:
+            try:
+                measurements.append(galaxy_photometry(
+                    BASEDIR, galname, band, ellipseoutput, skybase, skymethod, 
+                    uncertaintybase=uncertaintybase, ZPuncertainty=ZPuncertainty, brightness=brightness, 
+                    apertureCorrection=apertureCorrection, 
+                    colorIndex=colorIndex))
+            except ValueError as e:
+                if ignore_exception:
+                    print ("Likely encountered negative flux for "
+                    "{0}. Masking".format(galname))
+                    # This -99 value will only be used internally to this
+                    # function to specify where we need to mask the array.
+                    # Outside users of the API will not need to bother
+                    # themselves with this.
+                    measurements.append((-99.0, -99.0))
+                else:
+                    raise
+            
+        for (photkey, errkey, measurement) in zip(photkeys, errkeys,
+                                                  measurements):
+            phot, err = measurement
+            photcolumns[photkey].append(phot)
+            photcolumns[errkey].append(err)
+
+        photcolumns["objstr_01"].append(galname)
+    
+    photometry_table = Table(photcolumns, masked=True)
+    # Once we make the table, we need to mask out the columns correctly. The
+    # best way to do this for an astropy table is to iterate through the data
+    # columns and set the mask equal to the where the values are negative.
+    # Even though I set negative flux measurements to be -99.0, any negative
+    # values for the flux or for magnitudes should be alarming.
+    for (photkey, errkey) in zip(photkeys, errkeys):
+        photcol = photometry_table[photkey]
+        errcol = photometry_table[errkey]
+
+        photcol.mask = photcol < 0
+        errcol.mask = errcol < 0
+
+    return photometry_table
+
+
+
+
+
+
+
+            
+def name_photometry_column(band, error=False):
+    '''Generates the names of the columns in the photometry table.
+
+    Currently the only two names relevant to the photometry table are
+    "{band}apmag" and "{band}aperr". Which of those two are chosen is toggled
+    by the error keyword.
+    '''
+    if not error:
+        template = "{0}apmag"
+    else:
+        template = "{0}aperr" 
+
+    if band in IRBANDS:
+        colname = template.format(band.lower())
+    else:
+        colname = template.format(band) 
+
+    return colname
+
+
 def photometryOnBand(BASEDIR, objectnames, band,
         baseobjectfile="ellipse_aperture", skybase="sky_level",
         skymethod="adaptive", uncertaintybase="uncertainty", ZPuncertainty=True,
         brightness="AB", errors=False, apertureCorrection=True, 
-        colorIndices=None):
+        colorIndices=None, ignore_exception=False):
     '''Performs photometry on an array of objects in a given band.
     
     If flux is given as true, the flux of the object will be given in Janskys
@@ -1617,20 +1720,24 @@ def photometryOnBand(BASEDIR, objectnames, band,
     position, and the error in the second position.'''
     # photOutput can either be a list, or a list of 2-tuples if error was
     # specified.
-    if colorIndices is not None:
-        if len(colorIndices) is not len(objectnames):
-            raise ValueError("Need same number of color indices and objects.")
-        photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-            skybase, skymethod, uncertaintybase=uncertaintybase,
-            ZPuncertainty=ZPuncertainty, brightness=brightness, errors=errors,
-            apertureCorrection=apertureCorrection, colorIndex=colorIndex) for 
-            galname, colorIndex in zip(objectnames, colorIndices)]
-    else:
-        photOutput = [galaxy_photometry(BASEDIR, galname, band, baseobjectfile, 
-            skybase, skymethod, uncertaintybase=uncertaintybase,
-            ZPuncertainty=ZPuncertainty, brightness=brightness, errors=errors,
-            apertureCorrection=apertureCorrection, colorIndex=-2) for galname 
-            in objectnames]
+    photOutput = []
+    if colorIndices is None:
+        colorIndices = [-2] * len(objectnames)
+    if len(colorIndices) is not len(objectnames):
+        raise ValueError("Need same number of color indices and objects.")
+    for galname, colorIndex in zip(objectnames, colorIndices):
+        try:
+            photOutput.append(galaxy_photometry(
+                BASEDIR, galname, band, baseobjectfile, skybase, skymethod, 
+                uncertaintybase=uncertaintybase, ZPuncertainty=ZPuncertainty, 
+                brightness=brightness, errors=errors, 
+                apertureCorrection=apertureCorrection, colorIndex=colorIndex))
+        except Exception as e:
+            if not ignore_exception:
+                if type(e) is ValueError:
+                    print "Likely got negative flux for {0}".format(galname)
+                else:
+                    print "Could not get photometry for {0}".format(galname)
     if errors:
         magsAndErrs = zip(*photOutput)
         return np.array(magsAndErrs[0]), np.array(magsAndErrs[1])

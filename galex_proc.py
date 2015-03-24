@@ -156,7 +156,7 @@ def extract_GALEX_folder(tarfolder, extractedfolder):
 
 
 def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath, 
-        tempfolder="images", sidelength=1000):
+        tempfolder="images", sidelength=1000, replacement_path=""):
     """Processes a tarfile downloaded from GALEX using sortTable.
     
     BASEDIR is the directory where we want the image folders to be.
@@ -167,7 +167,11 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
 
     Sorttablepath is the path to the sorttable file. The sorttable file should
     be in the form of:
-    NGCXXXX,NUV_TILE_NAME_NUMBER,FUV_TILE_NAME_NUMBER"""
+    NGCXXXX,RA,DEC,NUV_TILE_NAME_NUMBER,FUV_TILE_NAME_NUMBER.
+    
+    The replacement_path should lead to a table in the same form as sorttable,
+    except with post-hoc additions which will be incorporated in the final
+    steps. """
     # We'll go through the images and sort them into the correct directories in
     # BASEDIR.
     sortTable = Table.read(sortTablepath, format="ascii.csv", guess=False)
