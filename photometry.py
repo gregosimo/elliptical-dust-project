@@ -777,9 +777,11 @@ def filterTableforExistingObjects(BASEDIR, fulltable):
     '''Creates another table that only has the objects with images.'''
     return filterTable(BASEDIR, fulltable, objectHasImage)
 
-def filterTableforCompleteBands(BASEDIR, fulltable, copy=True):
+def filterTableforCompleteBands(
+        BASEDIR, fulltable, copy=True, completebands=bands):
     '''Returns a table that only has objects with complete observations'''
-    return filterTable(BASEDIR, fulltable, complete_for_bands, copy=copy)
+    return filterTable(BASEDIR, fulltable, complete_for_bands, copy=True,
+                       completebands=completebands)
 
 def match_filter(directory, filter, fullpath=True, uncertainty=False, 
         sky=False):
@@ -900,15 +902,20 @@ def extract_subtable_from_column(table, column, selections):
             foundindex = astropy_table_index(table, column, selection)[0][0]
         except IndexError:
             # If it's not found, then skip to the next row!
-            continue
-        indices.append(foundindex)
+            pass
+        else:
+            indices.append(foundindex)
     return table[indices]
 
-def filterTable(BASEDIR, fulltable, isTrue, copy=True):
+def filterTable(BASEDIR, fulltable, isTrue, **kwargs):
     '''Filters a table based on a boolean method isTrue.'''
+    try:
+        copy = kwargs.pop("copy")
+    except KeyError:
+        copy=True
     filteredTable = Table(fulltable, copy=copy, masked=False)
     for i, object in enumerate(fulltable["objstr_01"]):
-        if not isTrue(BASEDIR, object):
+        if not isTrue(BASEDIR, object, **kwargs):
             filteredTable.remove_row(np.argwhere(filteredTable["objstr_01"] ==
                     object)[0][0])
     return filteredTable
@@ -1915,7 +1922,7 @@ def aperture_photometry_table(
 
     if colorIndices is None:
         colorIndices = [-2] * len(objectnames)
-    if len(colorIndices) is not len(objectnames):
+    if len(colorIndices) != len(objectnames):
         raise ValueError("Need same number of color indices and objects.")
 
     for galname, colorIndex in zip(objectnames, colorIndices):
