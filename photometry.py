@@ -6,9 +6,11 @@ import glob
 
 from pyraf import iraf
 from astropy import wcs
+from astropy import units as u
+from astropy.coordinates import SkyCoord
 from astropy.io import fits
-from astropy.table import Table, Column
 from astropy.stats import sigma_clip
+from astropy.table import Table, Column
 from astroquery.ned import Ned
 import numpy as np
 import aplpy
@@ -400,7 +402,7 @@ def change_to_galaxy_dir(BASEDIR, objectname):
     Given the name of an object, it will return the full path to the
     directory containing all of the data concerning that object.
     '''
-    return os.path.join(BASEDIR, object_name_to_dir(objectname))
+    return os.path.join(BASEDIR, object_name_to_dir(objectname), "")
 
 def format_band_dependence(basename, band, extension="tab", pathto=''):
     '''Generates a table file which is dependent on a band name.
@@ -422,7 +424,7 @@ def filterTableforCompleteBands(
         BASEDIR, fulltable, copy=True, completebands=bands):
     '''Returns a table that only has objects with complete observations'''
     return filterTable(BASEDIR, fulltable, complete_for_bands, copy=True,
-                       completebands=completebands)
+                       checkbands=completebands)
 
 def match_filter(directory, filter, fullpath=True, uncertainty=False, 
         sky=False):
@@ -1543,9 +1545,12 @@ def extractEllipseParamsfromWISE(objectdir, WISErow, band):
 
 def getpixelcoords(imagepath, ra, dec):
     '''Gets the coordinates of the RA and Dec from an image.'''
+    # We are using SkyCoords to ensure that the coordinates will be passed to
+    # WCS in decimal form.
+    coords = SkyCoord(ra=ra, dec=dec)
     hdulist = fits.open(imagepath)
     w = wcs.WCS(hdulist[0].header)
-    coord = np.array([[ra, dec]])
+    coord = np.array([[coords.ra.degree, coords.dec.degree]])
     x, y = w.wcs_world2pix(coord, 1)[0]
     return x, y
 
