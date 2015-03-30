@@ -17,8 +17,9 @@ from mask_trimmer import MaskCMD
 SEXTRACTOR_DIR = "/home/regulus/simonian/year1/wise/sextractor"
 
 def build_masks(
-        BASEDIR, WISETable, threshold=5, runbands=None, outputbase="foreground", 
-        maskconfig="", ignore_exception=False, overwrite=False):
+        BASEDIR, WISETable, threshold=0, runbands=None, outputbase="foreground", 
+        maskconfig="", ignore_exception=False, overwrite=False,
+        regionbase="ellipseregion"):
     '''Builds masks for specified objects.
 
     The objects to be built should be specified in WISETable, which should be a
@@ -29,9 +30,9 @@ def build_masks(
     FUV if it uses a different file than NUV, otherwise copying it.
 
     Optional parameters are the threshold, which will override the value in the
-    configuration file, the name of the output, as well as the config file. If
-    the config file is left blank, an appropriate config file located in
-    SEXTRACTOR_DIR will be used instead.
+    configuration file if it is nonzero, the name of the output, as well as the 
+    config file. If the config file is left blank, an appropriate config file 
+    located in SEXTRACTOR_DIR will be used instead.
 
     The resulting masks will written to $BASEDIR/{outputbase}.{maskband}.fits.
     '''
@@ -44,7 +45,7 @@ def build_masks(
     for maskband in runbands:
         phot.allMasks(BASEDIR, WISETable, maskband, threshold=threshold, 
                       outputbase=outputbase, overwrite=overwrite,
-                      ignore_exception=ignore_exception)
+                      ignore_exception=ignore_exception, regionbase=regionbase)
 
 def run_sextractor(image, config, **options):
     '''Runs SExtractor on an image.
@@ -59,8 +60,8 @@ def run_sextractor(image, config, **options):
     # If I can't get rid of the threshold parameter, then I need to just delete
     # a nonsensical parameter.
     try:
-        if options["threshold"] == 0:
-            del(options["threshold"])
+        if options["DETECT_THRESH"] == 0:
+            del(options["DETECT_THRESH"])
     except KeyError:
         pass
     for key, value in options.iteritems():
@@ -118,8 +119,9 @@ def sextractor_mask(image, config, **sexargs):
     run_sextractor(image, config, **sexargs)
 
 def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50, 
-        outputbase="foregroundmask", ellipsebase="ellipsepars", spreadpix=5,
-        maskconfig="", overwrite=False):
+        outputbase="foregroundmask", ellipsebase="ellipsepars",
+        regionbase="ellipseregions", spreadpix=5, maskconfig="", 
+        overwrite=False):
     '''Creates a mask file for the object in WISErow.
 
     The general algorithm for the mask creation algorithm is to find bright
@@ -137,12 +139,13 @@ def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50,
     elif maskband == "FUV" and (phot.match_filter(galaxydir, 
         "FUV").replace("-fd-", "-nd-") == phot.match_filter(galaxydir, "NUV")):
         shutil.copy(phot.format_band_dependence(outputbase, "NUV", "fits",
-            galaxydir), phot.change_to_galaxy_dir(galaxydir, maskfile))
+            galaxydir), os.path.join(galaxydir, maskfile))
         print "Copying NUV mask to FUV for {0}".format(WISErow["objstr_01"])
     else:
         mask_elliptical_galaxy(galaxydir, maskband, objectcoords,
             threshold=threshold, maskfile=maskfile, ellipsebase=ellipsebase, 
-            spreadpix=5, maskconfig="", overwrite=overwrite)
+            spreadpix=5, maskconfig="", overwrite=overwrite,
+            regionbase=regionbase)
 
 def mask_elliptical_galaxy(
         galaxydir, maskband, objectcoords, threshold=5,
@@ -173,8 +176,8 @@ def mask_elliptical_galaxy(
                       segment_needs_normalization, objectcoords, 
                       threshold=threshold)
     # We'll interactively generate masks.
-    print "Please remove object {0} in {1}.".format(os.path.basename(galaxydir), 
-            maskband)
+    print ("Please remove object {0} in "
+        "{1}.".format(phot.extract_name_from_galaxy_dir(galaxydir), maskband))
     maskprog = MaskCMD(
         segment_needs_normalization, galaxy_removed, regionpath)
     maskprog.cmdloop()
@@ -490,10 +493,12 @@ def run_imcalc(image, output, command, overwrite=True, newformat="old"):
     else:
         imagestring = image
     try:
+        # NOTE: If you get NaN problems, check the command first!
         iraf.imcalc.setParam("pixtype", newformat)
         iraf.imcalc(imagestring, output, command)
     except iraf.IrafError as e:
-        restore_file(output)
+        if overwrite:
+            restore_file(output)
         raise e
 
 def run_imshift(image, output, xshift, yshift):

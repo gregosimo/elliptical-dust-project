@@ -261,57 +261,13 @@ def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery,
     fitsheader = fits.getheader(original)
     xsize = int(fitsheader["NAXIS2"])
     ysize = int(fitsheader["NAXIS1"])
-    lowerx = fix_to_within_bounds(int(lowerx), xsize, 0)+1
-    upperx = fix_to_within_bounds(int(upperx), xsize, 0)+1
-    lowery = fix_to_within_bounds(int(lowery), ysize, 0)+1
-    uppery = fix_to_within_bounds(int(uppery), ysize, 0)+1
+    lowerx = phot.fix_to_within_bounds(int(lowerx), xsize, 0)+1
+    upperx = phot.fix_to_within_bounds(int(upperx), xsize, 0)+1
+    lowery = phot.fix_to_within_bounds(int(lowery), ysize, 0)+1
+    uppery = phot.fix_to_within_bounds(int(uppery), ysize, 0)+1
     subimage = "{0}[{1}:{2},{3}:{4}]".format(
         original, lowerx, upperx, lowery, uppery)
     run_imcopy(subimage, destination)
-
-def fix_to_within_bounds(val, valmax, valmin=0):
-    '''Fixes bounds such that val lies between valmin and valmax.
-
-    "Between" takes on the traditional Python definition of inclusive for min
-    and exclusive for max. If val is outside of those bounds, it is reset to be
-    one of the edge values.'''
-    if val < valmin:
-        val = valmin
-    elif val >= valmax:
-        val = valmax-1
-    return val
-
-def run_imcopy(original, destination):
-    '''A raw layer on top of imcopy.
-
-    Imcopy has a lot of flexibility, such as with copying multiple images, or
-    copying sections of an image, or pattern-matching. However, utilizing these
-    features shouldn't be done by working directly with this file, but rather by
-    having layers on top of it which are more pythonic.
-
-    For simple image copying, this function should be simple enough.
-    '''
-    if os.path.isfile(destination):
-        os.remove(destination)
-    elif os.path.isdir(destination):
-        extension = ".fits"
-        basefile = os.path.basename(original)
-        filename = basefile[:basefile.index(extension)+len(extension)]
-        destination_path = os.path.join(destination, filename)
-        # In the corner case where the directory exists, but we haven't put a
-        # file in there yet, this will prevent failures to remove from causing
-        # major problems.
-        # If this doesn't work, simply do a os.path.isfile(destination_path)
-        # before removing.
-        try:
-            os.remove(destination_path)
-        except OSError:
-            pass
-
-
-    iraf.images()
-    iraf.imutil()
-    iraf.imcopy(original, destination)
 
 def folder_matchstring(filetile):
     '''Creates an approprite matchstring for a folder from a file tile.

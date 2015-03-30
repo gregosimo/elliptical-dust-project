@@ -133,12 +133,13 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
             
         return photvalue
 
-def build_pipeline(BASEDIR, WISETable, maskthresh=0, inputband=MASKBANDS,
-        maskoutput="foreground.fits", ellipsepars="ellipsepars",
-        maskconfig="", ellipseoutput="ellipse_aperture", skycoord="fitsky", 
-        skybase="sky_level", skygens="adaptive", skyratio=1.5, 
-        uncertaintybase="uncertainty", skipmask=False,
-        alt_mask="foreground_alt.fits", runbands=bands, clip_background=False):
+def build_pipeline(
+        BASEDIR, WISETable, maskthresh=0, maskbase="foreground", maskconfig="", 
+        skipmask=False, overwritemask=False, ellipsepars="ellipsepars", 
+        ellipseoutput="ellipse_aperture", regionbase="ellipseregions", 
+        skycoord="fitsky", clip_background=False, skybase="sky_level", 
+        skygens="adaptive", skyratio=1.5, uncertaintybase="uncertainty", 
+        runbands=bands, ignore_exceptions=False):
     '''Basically runs all the commands necessary to build the ellipse aperture
     and sky measurement pipeline. It consists of running:
     allApertureTables
@@ -156,35 +157,41 @@ def build_pipeline(BASEDIR, WISETable, maskthresh=0, inputband=MASKBANDS,
     keyword.
     ''' 
     print "Making Aperture Tables..."
-    allApertureTables(BASEDIR, WISETable, runbands=runbands,
-            outputbase=ellipsepars)
-    if maskthresh == 0:
-        maskoutput = ""
-        skipmask = True
+    allApertureTables(BASEDIR, WISETable, runbands=runbands, 
+                      outputbase=ellipsepars,
+                      ignore_exception=ignore_exceptions)
+    print "Generating Regions..."
+    generateRegions(BASEDIR, WISETable, outputbase=regionbase,
+                    parambase=ellipsepars, runbands=runbands,
+                    ignore_exception=ignore_exceptions)
     if not skipmask:
         print "Making Masks..."
-        for band in maskbands:
-            masks.build_masks(BASEDIR, WISETable, band, threshold=maskthresh,
-                    output=maskoutput, maskconfig=maskconfig)
+        masks.build_masks(BASEDIR, WISETable, threshold=maskthresh,
+                          runbands=runbands, outputbase=maskbase, 
+                          maskconfig=maskconfig, overwrite=overwritemask,
+                          ignore_exception=ignore_exceptions,
+                          regionbase=regionbase)
     print "Making Ellipse Tables..."
-    allEllipseTables(BASEDIR, WISETable, runbands=runbands, mask=maskoutput,
-            baseoutput=ellipseoutput, baseparamname=ellipsepars,
-            alt_mask=alt_mask)
+    allEllipseTables(BASEDIR, WISETable, runbands=runbands, maskbase=maskbase, 
+                     baseoutput=ellipseoutput, baseparamname=ellipsepars,
+                     ignore_exception=ignore_exceptions)
     print "Making Sky Tables..."
     allSkyValues(BASEDIR, WISETable, runbands=runbands, coordbase=skycoord, 
-            baseskyfile=skybase, skygens=skygens, ellipsebase=ellipsepars,
-            mask=maskoutput, alt_mask=alt_mask, skyratio=skyratio,
-            clip=clip_background)
+                 baseskyfile=skybase, skygens=skygens, ellipsebase=ellipsepars, 
+                 maskbase=maskbase, skyratio=skyratio, clip=clip_background,
+                 ignore_exception=ignore_exceptions)
     print "Making Uncertainty Tables..."
-    allUncertaintyTables(BASEDIR, WISETable, runbands=runbands,
-            ellipsebase=ellipsepars, baseuncertainty=uncertaintybase,
-            skybase=skybase, skymethod=skygens)
+    allUncertaintyTables(BASEDIR, WISETable, runbands=runbands, 
+                         ellipsebase=ellipsepars, 
+                         baseuncertainty=uncertaintybase, skybase=skybase, 
+                         skymethod=skygens, ignore_exception=ignore_exceptions)
     write_pipeline_file("{0}.par".format(ellipsepars), 
-            mask_threshold=maskthresh, mask_band=inputband, 
-            mask_output=maskoutput, ellipse_parameters=ellipsepars, 
-            mask_config_base=maskconfig, aperture_file=ellipseoutput, 
-            sky_coordinates=skycoord, sky_base=skybase, 
-            uncertainty_base=uncertaintybase, bands_written=runbands)
+                        mask_threshold=maskthresh, mask_output=maskoutput, 
+                        ellipse_parameters=ellipsepars, 
+                        mask_config_base=maskconfig, 
+                        aperture_file=ellipseoutput, sky_coordinates=skycoord, 
+                        sky_base=skybase, uncertainty_base=uncertaintybase, 
+                        bands_written=runbands)
 
 
 def fullphotometry(BASEDIR, WISE_Table):
@@ -763,6 +770,24 @@ def change_to_galaxy_dir(BASEDIR, objectname):
     '''
     return os.path.join(BASEDIR, object_name_to_dir(objectname), "")
 
+def split_galaxy_dir(galaxydir):
+    '''Splits a galaxydir into the basename and galaxy name.
+
+    A galaxydir should be given in the form of "$BASEDIR/NGCXXXX/". This
+    function will split the galaxydir into a tuple of "$BASEDIR" and "NGCXXXX". 
+    It essentially functions as the inverse of change_to_galaxy_dir.
+    '''
+    return os.path.split(os.path.dirname(galaxydir))
+    
+
+def extract_name_from_galaxy_dir(galaxydir):
+    '''Takes a galaxydir and extracts the name of the galaxy from it.
+
+    A galaxydir should be given in the form of "$BASEDIR/NGCXXXX/". This
+    function will prune off the "NGCXXXX" portion of the galaxydir. 
+    '''
+    return os.path.basename(os.path.dirname(galaxydir))
+
 def format_band_dependence(basename, band, extension="tab", pathto=''):
     '''Generates a table file which is dependent on a band name.
 
@@ -1088,12 +1113,13 @@ def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
 
 def allMasks(BASEDIR, fulltable, maskband, threshold=5,
         outputbase="foreground", maskconfig="", ignore_exception=False,
-             overwrite=False):
+         overwrite=False, regionbase="ellipseregion"):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
             maskband=maskband, outputbase=outputbase, maskconfig=maskconfig,
-            ignore_exception=ignore_exception, overwrite=overwrite)
+            ignore_exception=ignore_exception, overwrite=overwrite,
+            regionbase=regionbase)
 
 def allApertureTables(BASEDIR, fulltable, runbands=bands,
         outputbase="ellipsepars", ignore_exception=False):
@@ -1388,7 +1414,7 @@ def test_if_in_elliptical_shell_portion(
 
     All of these arguments should be in terms of pixels, except for the angles
     and scale.  The angles should be given in units of degrees. Angle1 and 
-    Angle2 should also be in the range of -pi to pi. A scale of 1 would make
+    Angle2 should also be in the range of -180 to 180. A scale of 1 would make
     the outer ellipse identical to the inner ellipse.
     
     The angles are measured from the centers of the ellipses, not the foci.'''
@@ -1399,8 +1425,8 @@ def test_if_in_elliptical_shell_portion(
         x, y, xcenter, ycenter, ainner*scale, binner*scale, pa)
     # This moves the angle from being 0 at (1, 0) to being 0 at the P.A.
     # i.e. this angle is zero on the major axis.
-    angles = np.arctan2(ycen, xcen) - pa * math.pi / 180 - math.pi / 2
-    angles[np.where(angles < -math.pi)] += 2*math.pi
+    angles = np.arctan2(ycen, xcen) * 180 / math.pi - pa - 90
+    angles[np.where(angles < -180)] += 2*math.pi
     inportion = np.logical_and(angle2 >= angles, angles > angle1)
     return np.logical_and(
         np.logical_and(withinouter, np.logical_not(withininner)), inportion)
@@ -1535,8 +1561,9 @@ def background_from_patches(
     newxcenter = newycenter = aout+5
 
     numsections = numpatches / 2
+    print fullimage.shape
 
-    angles = np.linspace(-math.pi, math.pi, numsections+1)
+    angles = np.linspace(-180, 180, numsections+1)
     for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
         midscale = amid / ainit
         # Because we're using a view centered on the actual image, we'll set 
@@ -1826,11 +1853,16 @@ def getpixelcoords(imagepath, ra, dec):
     '''Gets the coordinates of the RA and Dec from an image.'''
     # We are using SkyCoords to ensure that the coordinates will be passed to
     # WCS in decimal form.
-    coords = SkyCoord(ra=ra, dec=dec)
     hdulist = fits.open(imagepath)
     w = wcs.WCS(hdulist[0].header)
-    coord = np.array([[coords.ra.degree, coords.dec.degree]])
-    x, y = w.wcs_world2pix(coord, 1)[0]
+    coord = np.array([[ra, dec]])
+    try:
+        x, y = w.wcs_world2pix(coord, 1)[0]
+    except TypeError:
+        coords = SkyCoord(ra=ra, dec=dec)
+        coord = np.array([[coords.ra.degree, coords.dec.degree]])
+        x, y = w.wcs_world2pix(coord, 1)[0]
+
     return x, y
 
 def STSDAS_to_Astropy_Table(workdir, filename, outputfile=None):
@@ -2532,6 +2564,96 @@ def getPixelScale(band):
     bands = {"W1": 1.37, "W2": 1.37, "W3": 1.37, "W4": 1.37, "NUV": 1.5, 
              "FUV": 1.5}
     return bands[band]
+
+
+def extract_from_image_with_height_width(original, centerx, centery, height,
+        width, destination):
+    '''Copies a part of an image to a destination file.
+
+    The part will have the center given by centerx, centery, and will have a
+    given height and width'''
+    lowerx = centerx - width
+    upperx = centerx + width
+    lowery = centery - width
+    uppery = centery + width
+
+    extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery,
+            destination)
+
+def copy_subimage_from_file(
+        original, lowerx, upperx, lowery, uppery, destination):
+    '''Extracts a subimage from a file to another file.
+
+    The original should be the path to the FITS file. And the bounds should be
+    the bounds in the image. The file will be written to destination.
+    '''
+    hdulist = fits.open(original)
+    full_image = hdulist[0].data
+    extracted_image = extract_from_image_with_bounds(
+        full_image, lowerx, upperx, lowery, uppery)
+    hdulist[0].data = extracted_image
+    hdulist.writeto(destination)
+
+def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery):
+    '''Copies a part of an image to a destination file.
+
+    The original image plus bounds in pixels will be written to the destination.
+    The destination will be clobbered.
+    '''
+    xsize, ysize = original.shape
+    lowerx = phot.fix_to_within_bounds(int(lowerx), xsize, 0)
+    upperx = phot.fix_to_within_bounds(int(upperx), xsize, 0)
+    lowery = phot.fix_to_within_bounds(int(lowery), ysize, 0)
+    uppery = phot.fix_to_within_bounds(int(uppery), ysize, 0)
+
+    subimage = original[lowerx:upperx,lowery:uppery]
+    subimage = "{0}[{1}:{2},{3}:{4}]".format(
+        original, lowery, uppery, lowerx, upperx)
+    run_imcopy(subimage, destination)
+
+def fix_to_within_bounds(val, valmax, valmin=0):
+    '''Fixes bounds such that val lies between valmin and valmax.
+
+    "Between" takes on the traditional Python definition of inclusive for min
+    and exclusive for max. If val is outside of those bounds, it is reset to be
+    one of the edge values.'''
+    if val < valmin:
+        val = valmin
+    elif val >= valmax:
+        val = valmax-1
+    return val
+
+def run_imcopy(original, destination):
+    '''A raw layer on top of imcopy.
+
+    Imcopy has a lot of flexibility, such as with copying multiple images, or
+    copying sections of an image, or pattern-matching. However, utilizing these
+    features shouldn't be done by working directly with this file, but rather by
+    having layers on top of it which are more pythonic.
+
+    For simple image copying, this function should be simple enough.
+    '''
+    if os.path.isfile(destination):
+        os.remove(destination)
+    elif os.path.isdir(destination):
+        extension = ".fits"
+        basefile = os.path.basename(original)
+        filename = basefile[:basefile.index(extension)+len(extension)]
+        destination_path = os.path.join(destination, filename)
+        # In the corner case where the directory exists, but we haven't put a
+        # file in there yet, this will prevent failures to remove from causing
+        # major problems.
+        # If this doesn't work, simply do a os.path.isfile(destination_path)
+        # before removing.
+        try:
+            os.remove(destination_path)
+        except OSError:
+            pass
+
+
+    iraf.images()
+    iraf.imutil()
+    iraf.imcopy(original, destination)
 
 def Gil_de_Paz_Table_1_to_WISE_table(GdP_Table1):
     gdp1 = GdP_Table1
