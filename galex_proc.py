@@ -221,6 +221,7 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
                     print
                 # Although, it seems like there just might have been issues on
                 # the GALEX portion, not this portion.
+
                 
 def extract_image_with_coordinates(original, centerra, centerdec, arcsecwidth,
         arcsecheight, destination, band="NUV"):

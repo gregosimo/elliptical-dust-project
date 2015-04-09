@@ -17,9 +17,10 @@ from mask_trimmer import MaskCMD
 SEXTRACTOR_DIR = "/home/regulus/simonian/year1/wise/sextractor"
 
 def build_masks(
-        BASEDIR, WISETable, threshold=0, runbands=None, outputbase="foreground", 
-        maskconfig="", ignore_exception=False, overwrite=False,
-        regionbase="ellipseregion"):
+        BASEDIR, WISETable, threshold=0, runbands=None,
+        foregroundbase="foreground", pixelmaskbase="bad_pixels", 
+        outputbase="mask", maskconfig="", ignore_exception=False, 
+        overwrite=False, regionbase="ellipseregion"):
     '''Builds masks for specified objects.
 
     The objects to be built should be specified in WISETable, which should be a
@@ -73,6 +74,28 @@ def run_sextractor(image, config, **options):
         print "Could not run ''{0}''".format(' '.join(command))
         raise ValueError("Fatal Error in SExtractor.")
 
+def all_foregrounds_to_mask(BASEDIR, WISEtable, runbands=phot.UVBANDS):
+    '''Runs convert_foreground_to_mask on all entries in the WISEtable'''
+
+    phot.runOnImages(BASEDIR, WISEtable, convert_foreground_to_mask, 
+        runbands=runbands)
+
+def convert_foreground_to_mask(BASEDIR, WISErow, runbands=phot.UVBANDS):
+    '''Converts SEXtractor foreground masks into full invalid pixel masks.
+
+    This is meant for legacy data sets where the invalid pixel masks need to be
+    generated from foregound masks without automatically running the pipeline
+    again.
+    '''
+    galaxydir = phot.change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
+    for band in runbands:
+        bad_pixels = phot.format_band_dependence("badpixels", band, "fits", galaxydir)
+        maskfile = phot.format_band_dependence("mask", band, "fits", galaxydir)
+        invert_image(phot.match_filter(galaxydir, band, sky=True), bad_pixels)
+        foregroundfile = phot.format_band_dependence("foreground", band, "fits", galaxydir)
+        join_masks(foregroundfile, bad_pixels, maskfile)
+
+
 def sextractor_background(image, config, **sexargs):
     '''Creates a background for an image.
 
@@ -118,19 +141,26 @@ def sextractor_mask(image, config, **sexargs):
     sexargs["CHECKIMAGE_TYPE"] = "SEGMENTATION"
     run_sextractor(image, config, **sexargs)
 
-def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50, 
-        outputbase="foregroundmask", ellipsebase="ellipsepars",
+def mask_algorithm(
+        BASEDIR, WISErow, maskband="W1", threshold=50, 
+        foregroundbase="foreground", pixelmaskbase="bad_pixels", 
+        outputbase="mask", ellipsebase="ellipsepars", 
         regionbase="ellipseregions", spreadpix=5, maskconfig="", 
         overwrite=False):
     '''Creates a mask file for the object in WISErow.
 
     The general algorithm for the mask creation algorithm is to find bright
     stars outside of a radius given by r_high. It then finds stars outside of a
-    radius given by the isophotal aperture times lowfrac.
+    radius given by the isophotal aperture times lowfrac. 
+    
+    This algorithm also handles GALEX images where only the central inner
+    circle is considered a valid observation. 
     '''
     galaxydir = phot.change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     objectcoords = phot.getpixelcoords(phot.match_filter(galaxydir, maskband),
             WISErow["ra"], WISErow["dec"])
+    foregroundfile = phot.format_band_dependence(
+        foregroundbase, maskband, "fits")
     maskfile = phot.format_band_dependence(outputbase, maskband, "fits")
     # Add regionbase.
     if maskband in phot.IRBANDS and maskband is not "W1":
@@ -142,10 +172,26 @@ def mask_algorithm(BASEDIR, WISErow, maskband="W1", threshold=50,
             galaxydir), os.path.join(galaxydir, maskfile))
         print "Copying NUV mask to FUV for {0}".format(WISErow["objstr_01"])
     else:
-        mask_elliptical_galaxy(galaxydir, maskband, objectcoords,
-            threshold=threshold, maskfile=maskfile, ellipsebase=ellipsebase, 
-            spreadpix=5, maskconfig="", overwrite=overwrite,
-            regionbase=regionbase)
+        # When done, add foregroundbase to other functions and change
+        # outputbase to mask.
+        mask_elliptical_galaxy(galaxydir, maskband, objectcoords, 
+                               threshold=threshold, maskfile=foregroundfile, 
+                               ellipsebase=ellipsebase, spreadpix=5, 
+                               maskconfig="", overwrite=overwrite, 
+                               regionbase=regionbase)
+
+        # I'd like to add this to the GALEX pipeline rather than putting it
+        # here. So instead of using the sky background value, we have a
+        # specific image which contains invalid pixels. However, that sounds
+        # like a lot of work. I could do it to another branch and then if I
+        # have to redo the pipeline, merge it and go! In that case, I won't
+        # make the inverted mask configurable... since it would just be a lot
+        # of useless changing around.
+        bad_pixels = phot.format_band_dependence(
+            pixelmaskbase, maskband, "fits", galaxydir)
+        invert_image(phot.match_filter(galaxydir, maskband, sky=True),
+                     bad_pixels)
+        join_masks(foregroundfile, bad_pixels, maskfile)
 
 def mask_elliptical_galaxy(
         galaxydir, maskband, objectcoords, threshold=5,
@@ -308,6 +354,17 @@ def normalize_segmentation_map(image, output):
     0.'''
     command = "if im1 then 1.0 else 0.0"
     run_imcalc(image, output, command, newformat="real")
+
+def invert_image(image, output):
+    '''Takes an image and inverts the pixels so that positive values become 0
+    and 0s become 1s.'''
+    command = "!im1"
+    run_imcalc(image, output, command, newformat="real")
+
+def join_masks(mask1, mask2, output):
+    '''Joins two masks together using logical or operations.'''
+    command = "im1 || im2"
+    run_imcalc([mask1, mask2], output, command)
 
 def clip_image(image, output, threshold):
     '''Sets all pixels lower than the given threshold to zero.'''

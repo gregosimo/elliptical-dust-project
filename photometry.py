@@ -134,7 +134,8 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
         return photvalue
 
 def build_pipeline(
-        BASEDIR, WISETable, maskthresh=0, maskbase="foreground", maskconfig="", 
+        BASEDIR, WISETable, maskthresh=0, foregroundbase="foreground",
+        pixelmaskbase="bad_pixels", maskbase="mask", maskconfig="", 
         skipmask=False, overwritemask=False, ellipsepars="ellipsepars", 
         ellipseoutput="ellipse_aperture", regionbase="ellipseregions", 
         skycoord="fitsky", clip_background=False, skybase="sky_level", 
@@ -167,7 +168,8 @@ def build_pipeline(
     if not skipmask:
         print "Making Masks..."
         masks.build_masks(BASEDIR, WISETable, threshold=maskthresh,
-                          runbands=runbands, outputbase=maskbase, 
+                          runbands=runbands, foregroundbase=foregroundbase,
+                          pixelmaskbase=foregroundbase, outputbase=maskbase, 
                           maskconfig=maskconfig, overwrite=overwritemask,
                           ignore_exception=ignore_exceptions,
                           regionbase=regionbase)
@@ -810,7 +812,7 @@ def filterTableforCompleteBands(
     return filterTable(BASEDIR, fulltable, complete_for_bands, copy=True,
                        checkbands=completebands)
 
-def match_filter(directory, filter, fullpath=True, uncertainty=False, 
+def match_filter(directory, band, fullpath=True, uncertainty=False, 
         sky=False):
     '''Finds the image which corresponds to the filter.
 
@@ -827,7 +829,7 @@ def match_filter(directory, filter, fullpath=True, uncertainty=False,
     sky background image (whether or not that exists).'''
     filtermap = {"W1": "w1-int", "W2": "w2-int", "W3": "w3-int", "W4": "w4-int",
             "FUV": "fd-int", "NUV": "nd-int"}
-    filterstring = filtermap[filter]
+    filterstring = filtermap[band]
     if uncertainty:
         filterstring = filterstring.replace("int", "unc")
     elif sky:
@@ -953,8 +955,10 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
     The function must be able to accept the BASEDIR as well as an
     Astropy row. The function can also accept keyword arguments via
     kwargs.'''
-    ignore_exception = kwargs["ignore_exception"]
-    del(kwargs["ignore_exception"])
+    try:
+        ignore_exception = kwargs.pop("ignore_exception")
+    except KeyError:
+        ignore_exception = False
     for row in fulltable:
         galaxydir = change_to_galaxy_dir(BASEDIR, row["objstr_01"])
         try:
@@ -1111,9 +1115,10 @@ def isObjectContaminated(BASEDIR, objname, contfile="Nearby_Stars.txt"):
 # Pipeline Functions #
 ##############################################################################
 
-def allMasks(BASEDIR, fulltable, maskband, threshold=5,
-        outputbase="foreground", maskconfig="", ignore_exception=False,
-         overwrite=False, regionbase="ellipseregion"):
+def allMasks(
+        BASEDIR, fulltable, maskband, threshold=5, foregroundbase="foreground",
+        pixelmaskbase="bad_pixels", outputbase="mask", maskconfig="", 
+        ignore_exception=False, overwrite=False, regionbase="ellipseregion"):
     '''Goes through BASEDIR and generates all of the foreground masks.'''
 
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
@@ -1234,6 +1239,9 @@ def source_uncertainty_from_image(galaxydir, band, image,
 
     skybackground = read_background(galaxydir, band, skybase=skybase,
             skymethod=skymethod)
+    if np.isnan(skybackground):
+        galname = extract_name_from_galaxy_dir(galaxydir)
+        raise ValueError("Sky background value is nan for {0}".format(galname))
 
     header = fits.getheader(image)
     exposuretime = header["EXPTIME"]
