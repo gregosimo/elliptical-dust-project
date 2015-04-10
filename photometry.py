@@ -221,7 +221,7 @@ def aperture_correction_factor(band):
 # Background Routines #
 ##############################################################################
 
-def annulus_sky_estimation(galaxydir, band, baseskyfile="sky_level"):
+def sky_from_fitsky_file(galaxydir, band, baseskyfile="sky_level"):
     '''Returns the estimated background for a particular galaxy. 
 
     This function utilizes the fitsky routine from IRAF.apphot to determine the
@@ -237,7 +237,7 @@ def annulus_sky_estimation(galaxydir, band, baseskyfile="sky_level"):
     skylevel = skydata["MSKY"][0]
     return skylevel
 
-def patch_sky_estimation(galaxydir, band, baseskyfile="sky_level"):
+def sky_from_patch_file(galaxydir, band, baseskyfile="sky_level"):
     '''Returns the estimated background for a particular galaxy.
 
     This function uses the routine calculated from patches on elliptical annuli
@@ -270,13 +270,18 @@ def read_background(galaxydir, band, skybase="sky_level",
         skymethod = adaptive_background[band]
 
     if skymethod.lower() == "aperture":
-        background = sky_file_estimation(galaxydir, band,
+        background = sky_from_ellipse_table(galaxydir, band,
                 baseellipsefile=skybase)
     elif skymethod.lower() == "annulus":
-        background = annulus_sky_estimation(galaxydir, band,
+        background = sky_from_fitsky_file(galaxydir, band,
                 baseskyfile=skybase)
     elif skymethod.lower() == "patch":
-        background = patch_sky_estimation(galaxydir, band, baseskyfile=skybase)
+        background = sky_from_patch_file(galaxydir, band, baseskyfile=skybase)
+
+    # Background values should *not* be NaN.
+    if np.isnan(skybackground):
+        galname = extract_name_from_galaxy_dir(galaxydir)
+        raise ValueError("Sky background value is nan for {0}".format(galname))
     return background
 
 
@@ -295,7 +300,7 @@ def readSkyTable(galaxydir, band, area, baseellipsefile="sky_aperture"):
         return float(ellipsetable[0]["TFLUX_E"])
 
 
-def sky_file_estimation(galaxydir, band, baseellipsefile="sky_level"):
+def sky_from_ellipse_table(galaxydir, band, baseellipsefile="sky_level"):
     '''Returns the estimated background for a galax in GALEX bands.
 
     The background for UV bands is estimated by looking for files whose
@@ -1239,9 +1244,6 @@ def source_uncertainty_from_image(galaxydir, band, image,
 
     skybackground = read_background(galaxydir, band, skybase=skybase,
             skymethod=skymethod)
-    if np.isnan(skybackground):
-        galname = extract_name_from_galaxy_dir(galaxydir)
-        raise ValueError("Sky background value is nan for {0}".format(galname))
 
     header = fits.getheader(image)
     exposuretime = header["EXPTIME"]
@@ -1554,9 +1556,9 @@ def background_from_patches(
     # we'll put them in the scales dictionary.
     scales = {"ainit": ainit, "binit": binit, "amid": amid, "bmid": bmid,
             "aout": aout, "bout": bout}
-    image = fullimage[
-        ycenter-(aout+5):ycenter+(aout+5), 
-        xcenter-(aout+5):xcenter+(aout+5)]
+
+    image = extract_from_image_with_bounds(
+        fullimage, xcenter, ycenter, aout, aout)
     if backgroundmapfile:
         fullbgimage = np.ma.array(fullimage, copy=True)
         fullbgimage.fill(0)
@@ -2580,10 +2582,6 @@ def extract_from_image_with_height_width(original, centerx, centery, height,
 
     The part will have the center given by centerx, centery, and will have a
     given height and width'''
-    lowerx = centerx - width
-    upperx = centerx + width
-    lowery = centery - width
-    uppery = centery + width
 
     extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery,
             destination)
@@ -2602,11 +2600,22 @@ def copy_subimage_from_file(
     hdulist[0].data = extracted_image
     hdulist.writeto(destination)
 
-def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery):
-    '''Copies a part of an image to a destination file.
+def extract_from_image_with_height_width(
+        original, centerx, centery, height, width):
+    '''Copies a part of an image using a center and a height and width.
 
-    The original image plus bounds in pixels will be written to the destination.
-    The destination will be clobbered.
+    A cutout of the original image centered at the given x and y coordinates,
+    and with given height and width will be returned. If the coordinates given
+    will not fit entirely in the original image, the returned image will be the
+    subset of the image which does lie within the original image.
+    '''
+
+def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery):
+    '''Copies a part of an image with given bounds.
+
+    A cutout of the original image with the given bounds will be returned. If
+    the given bounds are seen to lie outside of the image, then they will be
+    corrected to lie on the boundary of the image.
     '''
     xsize, ysize = original.shape
     lowerx = phot.fix_to_within_bounds(int(lowerx), xsize, 0)
@@ -2615,9 +2624,19 @@ def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery):
     uppery = phot.fix_to_within_bounds(int(uppery), ysize, 0)
 
     subimage = original[lowerx:upperx,lowery:uppery]
-    subimage = "{0}[{1}:{2},{3}:{4}]".format(
-        original, lowery, uppery, lowerx, upperx)
-    run_imcopy(subimage, destination)
+    return subimage
+
+def height_width_to_coordinates(centerx, centery, height, width):
+    '''Converts a height and a width to boundary limits.
+
+    The results will be returned as lowerx, upperx, lowery, uppery.'''
+    lowerx = centerx - width
+    upperx = centerx + width
+    lowery = centery - height
+    uppery = centery + height
+
+    return lowerx, upperx, lowery, uppery
+
 
 def fix_to_within_bounds(val, valmax, valmin=0):
     '''Fixes bounds such that val lies between valmin and valmax.
