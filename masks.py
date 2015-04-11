@@ -160,8 +160,9 @@ def mask_algorithm(
     objectcoords = phot.getpixelcoords(phot.match_filter(galaxydir, maskband),
             WISErow["ra"], WISErow["dec"])
     foregroundfile = phot.format_band_dependence(
-        foregroundbase, maskband, "fits")
-    maskfile = phot.format_band_dependence(outputbase, maskband, "fits")
+        foregroundbase, maskband, "fits", galaxydir)
+    maskfile = phot.format_band_dependence(
+        outputbase, maskband, "fits", galaxydir)
     # Add regionbase.
     if maskband in phot.IRBANDS and maskband is not "W1":
         shutil.copy(phot.format_band_dependence(outputbase, "W1", "fits",

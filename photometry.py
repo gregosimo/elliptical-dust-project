@@ -188,7 +188,7 @@ def build_pipeline(
                          baseuncertainty=uncertaintybase, skybase=skybase, 
                          skymethod=skygens, ignore_exception=ignore_exceptions)
     write_pipeline_file("{0}.par".format(ellipsepars), 
-                        mask_threshold=maskthresh, mask_output=maskoutput, 
+                        mask_threshold=maskthresh, mask_output=maskbase, 
                         ellipse_parameters=ellipsepars, 
                         mask_config_base=maskconfig, 
                         aperture_file=ellipseoutput, sky_coordinates=skycoord, 
@@ -279,7 +279,7 @@ def read_background(galaxydir, band, skybase="sky_level",
         background = sky_from_patch_file(galaxydir, band, baseskyfile=skybase)
 
     # Background values should *not* be NaN.
-    if np.isnan(skybackground):
+    if np.isnan(background):
         galname = extract_name_from_galaxy_dir(galaxydir)
         raise ValueError("Sky background value is nan for {0}".format(galname))
     return background
@@ -1433,13 +1433,13 @@ def test_if_in_elliptical_shell_portion(
     withininner = test_if_in_ellipse(x, y, xcenter, ycenter, ainner, binner, pa)
     withinouter = test_if_in_ellipse(
         x, y, xcenter, ycenter, ainner*scale, binner*scale, pa)
+    inshell = np.logical_and(np.logical_not(withininner), withinouter)
     # This moves the angle from being 0 at (1, 0) to being 0 at the P.A.
     # i.e. this angle is zero on the major axis.
-    angles = np.arctan2(ycen, xcen) * 180 / math.pi - pa - 90
-    angles[np.where(angles < -180)] += 2*math.pi
-    inportion = np.logical_and(angle2 >= angles, angles > angle1)
-    return np.logical_and(
-        np.logical_and(withinouter, np.logical_not(withininner)), inportion)
+    angles = np.arctan2(ycen, xcen)*180 / math.pi 
+    # Read this as angle1 <= angles < angle2
+    inportion = np.logical_and(angle1 <= angles, angles < angle2)
+    return np.logical_and(inshell, inportion)
 
 def mask_elliptical_shell_portion(
         image, xcenter, ycenter, ainner, binner, scale, pa, angle1, angle2):
@@ -1494,44 +1494,6 @@ def calculate_sky_ellipses(ainit, binit, totalarea):
 
     return amid, bmid, aout, bout
 
-def backgroundmap(
-        backgrounddata, fullimage, xcenter, ycenter, ainit, binit, pa, area, 
-        numpatches):
-    '''Creates a map of background values on the original image to determine
-    where background variations occur.'''
-
-    amid, bmid, aout, bout = calculate_sky_ellipses(
-        ainit, binit, numpatches*area)
-
-    image = np.ma.array(
-        fullimage[
-            ycenter-(aout+5):ycenter+(aout+5), 
-            xcenter-(aout+5):xcenter+(aout+5)], copy=True)
-    image.fill(0)
-    newxcenter = newycenter = aout+2.5
-
-    numsections = numpatches / 2
-
-    angles = np.linspace(-math.pi, math.pi, numsections+1)
-    for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
-        midscale = amid / ainit
-        ellipsewindow = mask_elliptical_shell_portion(
-            image, newxcenter, newycenter, ainit, binit, midscale, pa, angle1, 
-            angle2)
-        segmentimage = np.ma.array(image, mask=ellipsewindow)
-        validpatch = np.ma.array(segmentimage.data, mask=~segmentimage.mask)
-        image[~validpatch.mask] = background[i]
-    for (i, (angle1, angle2)) in enumerate(zip(angles[:-1], angles[1:])):
-        outscale = aout / amid
-        ellipsewindow = mask_elliptical_shell_portion(
-            image, newxcenter, newycenter, amid, bmid, outscale, pa, angle1, 
-            angle2)
-        segmentimage = np.ma.array(image, mask=ellipsewindow)
-        validpatch = np.ma.array(segmentimage.data, mask=~segmentimage.mask)
-        image[~validpatch.mask] = background[i+numsections]
-    return image
-    
-
 def background_from_patches(
         fullimage, xcenter, ycenter, ainit, binit, pa, area, numpatches, 
         backgroundmapfile=''):
@@ -1557,14 +1519,13 @@ def background_from_patches(
     scales = {"ainit": ainit, "binit": binit, "amid": amid, "bmid": bmid,
             "aout": aout, "bout": bout}
 
-    image = extract_from_image_with_bounds(
+    image = extract_from_image_with_height_width(
         fullimage, xcenter, ycenter, aout, aout)
     if backgroundmapfile:
         fullbgimage = np.ma.array(fullimage, copy=True)
         fullbgimage.fill(0)
-        bgimage = fullbgimage[
-            ycenter-(aout+5):ycenter+(aout+5), 
-            xcenter-(aout+5):xcenter+(aout+5)]
+        bgimage = extract_from_image_with_height_width(
+            fullbgimage, xcenter, ycenter, aout, aout)
     else:
         bgimage=None
 
@@ -2576,18 +2537,21 @@ def getPixelScale(band):
     return bands[band]
 
 
-def extract_from_image_with_height_width(original, centerx, centery, height,
-        width, destination):
+def copy_subimage_from_file_with_height_width(
+        original, centerx, centery, height, width, destination, overwrite=True):
     '''Copies a part of an image to a destination file.
 
     The part will have the center given by centerx, centery, and will have a
     given height and width'''
 
-    extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery,
-            destination)
+    lx, ux, ly, uy = height_width_to_coordinates(
+        centerx, centery, height, width)
+
+    copy_subimage_from_file(original, lx, ux, ly, uy, destination,
+                            overwrite=overwrite)
 
 def copy_subimage_from_file(
-        original, lowerx, upperx, lowery, uppery, destination):
+        original, lowerx, upperx, lowery, uppery, destination, overwrite=True):
     '''Extracts a subimage from a file to another file.
 
     The original should be the path to the FITS file. And the bounds should be
@@ -2598,7 +2562,7 @@ def copy_subimage_from_file(
     extracted_image = extract_from_image_with_bounds(
         full_image, lowerx, upperx, lowery, uppery)
     hdulist[0].data = extracted_image
-    hdulist.writeto(destination)
+    hdulist.writeto(destination, clobber=overwrite)
 
 def extract_from_image_with_height_width(
         original, centerx, centery, height, width):
@@ -2608,7 +2572,15 @@ def extract_from_image_with_height_width(
     and with given height and width will be returned. If the coordinates given
     will not fit entirely in the original image, the returned image will be the
     subset of the image which does lie within the original image.
+
+    Height and width along with the center should be given in image
+    coordinates, not numpy coordinates.
     '''
+    lx, ux, ly, uy = height_width_to_coordinates(
+        centerx, centery, height, width)
+
+    subimage = extract_from_image_with_bounds(original, lx, ux, ly, uy)
+    return subimage
 
 def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery):
     '''Copies a part of an image with given bounds.
@@ -2616,14 +2588,17 @@ def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery):
     A cutout of the original image with the given bounds will be returned. If
     the given bounds are seen to lie outside of the image, then they will be
     corrected to lie on the boundary of the image.
+
+    Coordinates should be given in image coordinates, not numpy coordinates.
+    This would mean transposing x and y.
     '''
     xsize, ysize = original.shape
-    lowerx = phot.fix_to_within_bounds(int(lowerx), xsize, 0)
-    upperx = phot.fix_to_within_bounds(int(upperx), xsize, 0)
-    lowery = phot.fix_to_within_bounds(int(lowery), ysize, 0)
-    uppery = phot.fix_to_within_bounds(int(uppery), ysize, 0)
+    lowerx = fix_to_within_bounds(int(lowerx), xsize, 0)
+    upperx = fix_to_within_bounds(int(upperx), xsize, 0)
+    lowery = fix_to_within_bounds(int(lowery), ysize, 0)
+    uppery = fix_to_within_bounds(int(uppery), ysize, 0)
 
-    subimage = original[lowerx:upperx,lowery:uppery]
+    subimage = original[lowery:uppery,lowerx:upperx]
     return subimage
 
 def height_width_to_coordinates(centerx, centery, height, width):
