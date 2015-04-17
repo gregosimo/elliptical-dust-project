@@ -304,13 +304,13 @@ def download_images(galaxydir, survey, coadddic, ra, dec, size, uncertainty=True
         query_params = {"center": "{0},{1}".format(ra, dec), "size":
                 "{0}arcsec".format(size)}
         image_query = get_url(imagebase, urllib.urlencode(query_params))
-        download_image(galaxydir, image_query, "w{0}".format(i))
+        download_image(galaxydir, image_query)
         if uncertainty:
             uncert_url = imagebase.replace("int", "unc")
             uncert_query = get_url(uncert_url, urllib.urlencode(query_params))
-            download_image(galaxydir, uncert_query, "w{0}".format(i))
+            download_image(galaxydir, uncert_query)
                 
-def download_image(galaxydir, image_query, band):
+def download_image(galaxydir, image_query):
     '''Downloads an image into galaxydir.
 
     The image_query argument can be any valid HTTP request which resolves into an
@@ -330,6 +330,26 @@ def download_image(galaxydir, image_query, band):
     # Once the image is downloaded, we want to uncompress it, and then
     # delete the compressed file.
     subprocess.call(["gunzip", "--force", compressed_path])
+
+def download_image_test(galaxydir, image_query, filename="", overwrite=True):
+    '''Downloads an image into galaxydir.
+
+    The image query is downloaded into galaxydir.'''
+    if not filename:
+        filename = os.path.basename(image_query).split("?")[0]
+    downloadedfile = os.path.join(galaxydir, filename)
+    if downloadedfile.endswith(".gz"):
+        downloadedfile = downloadedfile[:-3]
+    if overwrite or not os.path.isfile(downloadedfile):
+        r = requests.get(image_query)
+        if r.status_code == requests.codes.ok:
+            with open(downloadedfile, 'wb') as fd:
+                for chunk in r.iter_content(1024):
+                    fd.write(chunk)
+        else:
+            r.raise_for_status()
+    else:
+        print "File exists: {0}".format(downloadedfile)
 
 def check_galaxy_images_version(galaxydir):
     '''Checks if the WISE images are from the latest catalog.
