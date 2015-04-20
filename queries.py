@@ -4,6 +4,7 @@ import urlparse
 import subprocess
 import os
 import os.path
+import errno
 import gzip
 
 import requests
@@ -330,6 +331,7 @@ def download_image(galaxydir, image_query):
     # Once the image is downloaded, we want to uncompress it, and then
     # delete the compressed file.
     subprocess.call(["gunzip", "--force", compressed_path])
+    return compressed_path[:-3]
 
 def download_image_test(galaxydir, image_query, filename="", overwrite=True):
     '''Downloads an image into galaxydir.
@@ -343,13 +345,32 @@ def download_image_test(galaxydir, image_query, filename="", overwrite=True):
     if overwrite or not os.path.isfile(downloadedfile):
         r = requests.get(image_query)
         if r.status_code == requests.codes.ok:
-            with open(downloadedfile, 'wb') as fd:
+            with safe_open_w(downloadedfile) as fd:
                 for chunk in r.iter_content(1024):
                     fd.write(chunk)
         else:
             r.raise_for_status()
     else:
         print "File exists: {0}".format(downloadedfile)
+
+# These are helper functions to deal with downloading images safely.
+def mkdir_p(path):
+    '''Effective runs as 'mkdir -p' on the command-line.
+
+    If a path doesn't exist, it creates it recursively. If it does exist, then
+    it simply returns'''
+    try:
+        os.makedirs(path)
+    except OSError as exc:
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else: raise
+
+def safe_open_w(path):
+    '''Open "path" for writing, creating any parent directories as needed.
+    '''
+    mkdir_p(os.path.dirname(path))
+    return open(path, 'w')
 
 def check_galaxy_images_version(galaxydir):
     '''Checks if the WISE images are from the latest catalog.

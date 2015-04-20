@@ -1,10 +1,12 @@
 import os
 
 from astroquery.ned import Ned
+from requests.exceptions import ContentDecodingError
 
 import queries
+import photometry as phot
 
-gil_de_paz_bibcode = "2007ApJS..173..185G "
+gil_de_paz_bibcode = "2007ApJS..173..185G"
 
 def filter_by_bibcode(urllist, bibcode):
     '''Takes a list of URLs and returns those containing the bibcode.'''
@@ -19,7 +21,20 @@ def download_NED_GALEX_images(BASEDIR, objlist):
     for name in objlist:
         galaxydir = phot.change_to_galaxy_dir(BASEDIR, name)
         fullurllist = Ned.get_image_list(name)
-        gdpurls = filter_by_bibcode(gil_de_paz_bibcode)
+
+        gdpurls = filter_by_bibcode(fullurllist, gil_de_paz_bibcode)
 
         for url in gdpurls:
-            queries.download_image_test(galaxydir, url)
+            #if "NUV" in url:
+            #    filename = "{0}-nd-int.fits".format(name)
+            #elif "FUV" in url:
+            #    filename = "{0}-fd-int.fits".format(name)
+            #try:
+            #    queries.download_image(galaxydir, url, filename=filename)
+            # For some reason, there are no content headers when downloading
+            # file name, and it poops out when it tries to read the header.
+            # However, the file still downloads, so we'll just keep powering
+            # on!
+            #except ContentDecodingError:
+            #    pass
+            queries.download_image(galaxydir, url)
