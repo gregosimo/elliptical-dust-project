@@ -770,7 +770,7 @@ def allMasks(
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
             maskband=maskband, outputbase=outputbase, maskconfig=maskconfig,
             ignore_exception=ignore_exception, overwrite=overwrite,
-            regionbase=regionbase)
+            regionbase=regionbase, pixelmaskbase=pixelmaskbase)
 
 def allApertureTables(BASEDIR, fulltable, runbands=bands,
         outputbase="ellipsepars", ignore_exception=False):
@@ -803,7 +803,7 @@ def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky",
             ignore_exception=ignore_exception, maskbase=maskbase)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
-        maskbase="foreground", baseoutput="ellipse_aperture",
+        maskbase="mask", baseoutput="ellipse_aperture",
         baseparamname="ellipsepars", ignore_exception=False):
     '''Goes through BASEDIR and generates all object tables.
 
@@ -916,7 +916,7 @@ def source_uncertainty_from_uncertainty_file(galaxydir, band, uncfile,
     run_ellipse(varfile, ellipse_file, output)
 
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
-        baseoutput="ellipse_aperture", maskbase="foreground", runbands=bands):
+        baseoutput="ellipse_aperture", maskbase="mask", runbands=bands):
     '''Generates a table on the object for each band.
     
     It uses parameters provided in ellipsepars, and outputs the table into
@@ -1015,18 +1015,60 @@ def measure_sky_from_patches(galaxydir, band, area=4000, numpatches=90,
     if clip:
         patchbackgrounds = sigma_clip(patchbackgrounds, 3, 5)
         patchstandards = np.ma.array(patchstandards, mask=patchbackgrounds.mask)
-    tableoutline = {"name": [imagename], "X0": [xcenter], "Y0": [ycenter], 
-            "A0": [scales["ainit"]], "B0": [scales["binit"]], "A1":
-            [scales["amid"]], "B1": [scales["bmid"]], "A2": [scales["aout"]],
-            "B2": [scales["bout"]], "PA": [pa],
-            "background": [patchbackgrounds.mean()], "error": 
-            [patchbackgrounds.std()], "dispersion": [patchstandards.mean()],
-            "patches": [np.ma.count(patchbackgrounds)], "clipped":[clip]} 
+    skyfile = format_band_dependence(baseskyfile, band, "txt", galaxydir)
+    write_background_from_patches(
+        skyfile, imagename, xcenter, ycenter, scales["ainit"], scales["binit"], 
+        scales["amid"], scales["bmid"], scales["aout"], scales["bout"], pa, 
+        patchbackgrounds.mean(), patchbackgrounds.std(), patchstandards.mean(), 
+        np.ma.count(patchbackgrounds), clip)
+
+def write_background_from_patches(
+        filename, imagename, x0, y0, a0, b0, a1, b1, a2, b2, pa, background, 
+        error, dispersion, patches, clipped):
+    '''Writes the file representing a background value written from patches.
+    
+    The first argument is the name of the file, with full path.
+    
+    It's then followed by:
+    x0: x-coordinate of the center of the patch ellipse
+    y0: y-coordinate of the center of the patch ellipse
+    a0: Inner semimajor axis of the patch ellipse
+    b0: Inner semiminor axis of the patch ellipse
+    a1: Middle semimajor axis of the patch ellipse
+    b1: Middle semiminor axis of the patch ellipse
+    a2: Outer semimajor axis of the patch ellipse
+    b2: Outer semiminor axis of the patch ellipse
+    background: The mean background value of all of the patches
+    error: The standard deviation of the patch means
+    dispersion: The mean of the patch standard deviations
+    patches: The number of patches used
+    clippsed: Whether sigma-clipping was used on these patches.
+    '''
+    tableoutline = {
+        "name": [imagename], "X0": [x0], "Y0": [y0], "A0": [a0], "B0": [b0], 
+        "A1": [a1], "B1": [b1], "A2": [a2], "B2": [b2], "PA": [pa], 
+        "background": [background], "error": [error], "dispersion": 
+        [dispersion], "patches": [patches], "clipped":[clipped]} 
     backgroundtable = Table(tableoutline, names=["name", "X0", "Y0", 
             "A0", "B0", "A1", "B1", "A2", "B2", "PA", "background", "error", 
             "dispersion", "patches", "clipped"])
-    backgroundtable.write(format_band_dependence(baseskyfile, band, "txt",
-        galaxydir), format="ascii.basic")
+    backgroundtable.write(filename, format="ascii.basic")
+
+def spoof_background_patch(filepath, skyvalue, dispersion, error):
+    '''Makes a background which appears to come from patches, but is really
+    just set by the values given above.'''
+    write_background_from_patches(filepath, "dummy.fits", 1, 1, 1, 1, 2, 2, 3,
+                                  3, 0, skyvalue, error, dispersion, 90,
+                                  False)
+
+def spoof_background_patches(BASEDIR, objects, skyvalues, dispersions, errors,
+                             filename):
+    '''Spoofs backgrounds for a list of objects.'''
+    for galname, skyval, skydisp, skyerr in zip(objects, skyvalues,
+                                                dispersions, errors):
+        galaxydir = change_to_galaxy_dir(BASEDIR, galname)
+        filepath = os.path.join(galaxydir, filename)
+        spoof_background_patch(filepath, skyval, skydisp, skyerr)
 
 
 def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",

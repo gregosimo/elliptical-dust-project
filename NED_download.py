@@ -25,10 +25,12 @@ def download_NED_GALEX_images(BASEDIR, objlist):
         gdpurls = filter_by_bibcode(fullurllist, gil_de_paz_bibcode)
 
         for url in gdpurls:
-            #if "NUV" in url:
-            #    filename = "{0}-nd-int.fits".format(name)
-            #elif "FUV" in url:
-            #    filename = "{0}-fd-int.fits".format(name)
+            if "NUV" in url:
+                filename = "{0}-nd-int.fits".format(
+                    phot.object_name_to_dir(name))
+            elif "FUV" in url:
+                filename = "{0}-fd-int.fits".format(
+                    phot.object_name_to_dir(name))
             #try:
             #    queries.download_image(galaxydir, url, filename=filename)
             # For some reason, there are no content headers when downloading
@@ -37,4 +39,4 @@ def download_NED_GALEX_images(BASEDIR, objlist):
             # on!
             #except ContentDecodingError:
             #    pass
-            queries.download_image(galaxydir, url)
+            queries.download_image(galaxydir, url, filename=filename)

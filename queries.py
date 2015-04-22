@@ -4,6 +4,7 @@ import urlparse
 import subprocess
 import os
 import os.path
+import shutil
 import errno
 import gzip
 
@@ -304,7 +305,7 @@ def download_images(galaxydir, survey, coadddic, ra, dec, size, uncertainty=True
             uncert_query = get_url(uncert_url, urllib.urlencode(query_params))
             download_image(galaxydir, uncert_query)
                 
-def download_image(galaxydir, image_query):
+def download_image(galaxydir, image_query, filename="", overwrite=True):
     '''Downloads an image into galaxydir.
 
     The image_query argument can be any valid HTTP request which resolves into an
@@ -312,6 +313,14 @@ def download_image(galaxydir, image_query):
     '''
     downloaded_filename = os.path.basename(image_query).split("?")[0]
     compressed_path = os.path.join(galaxydir, downloaded_filename)
+    decompressed_path = compressed_path[:-3]
+    if filename is "":
+        final_filepath = decompressed_path
+    else:
+        final_filepath = os.path.join(galaxydir, filename)
+    # Skip overwriting if the file exists.
+    if not overwrite and os.path.isfile(final_filepath):
+        return final_filepath
     # The -P sets the prefix for the downloaded files. So we want them to be
     # located in galaxydir.
     # The better way of doing this will be to use --content-disposition to name
@@ -320,11 +329,29 @@ def download_image(galaxydir, image_query):
     # 1.15, we'll see if that is still a problem.
     wget_command = ["wget", "--directory-prefix={0}".format(galaxydir), 
             "--content-disposition", image_query]
+    print_command(wget_command)
     subprocess.call(wget_command)
     # Once the image is downloaded, we want to uncompress it, and then
     # delete the compressed file.
-    subprocess.call(["gunzip", "--force", compressed_path])
-    return compressed_path[:-3]
+    gunzip_command = ["gunzip", "--force", compressed_path]
+    print_command(gunzip_command)
+    # If the file ends in .gz, but isn't really compressed, then gunzip will
+    # return an error code of 1. In that case, we'll just rename the image and
+    # see what happens!
+    gunzip_status = subprocess.call(gunzip_command)
+    if gunzip_status == 1:
+        shutil.copy(compressed_path, decompressed_path)
+    if filename is not "":
+        shutil.move(decompressed_path, final_filepath)
+    return final_filepath
+
+def print_command(subprocess_list):
+    '''Takes a list which goes to subprocess and outputs the command as run.
+
+    This will allow commands to be reproduced fairly straightforwardly without
+    stepping through the debugger.
+    '''
+    print "Running: {0}".format(' '.join(subprocess_list))
 
 def download_image_test(galaxydir, image_query, filename="", overwrite=True):
     '''Downloads an image into galaxydir.
