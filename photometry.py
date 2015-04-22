@@ -1129,7 +1129,7 @@ def allMasks(
     runOnImages(BASEDIR, fulltable, masks.mask_algorithm, threshold=threshold,
             maskband=maskband, outputbase=outputbase, maskconfig=maskconfig,
             ignore_exception=ignore_exception, overwrite=overwrite,
-            regionbase=regionbase)
+            regionbase=regionbase, pixelmaskbase=pixelmaskbase)
 
 def allApertureTables(BASEDIR, fulltable, runbands=bands,
         outputbase="ellipsepars", ignore_exception=False):
@@ -1159,7 +1159,7 @@ def allSkyValues(BASEDIR, fulltable, runbands=bands, coordbase="fitsky",
             ellipsebase=ellipsebase, forceAnnulus=forceAnnulus)
 
 def allEllipseTables(BASEDIR, fulltable, runbands=bands, 
-        maskbase="foreground", baseoutput="ellipse_aperture",
+        maskbase="mask", baseoutput="ellipse_aperture",
         baseparamname="ellipsepars", ignore_exception=False):
     '''Goes through BASEDIR and generates all object tables.
 
@@ -1272,7 +1272,7 @@ def source_uncertainty_from_uncertainty_file(galaxydir, band, uncfile,
     run_ellipse(varfile, ellipse_file, output)
 
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
-        baseoutput="ellipse_aperture", maskbase="foreground", runbands=bands):
+        baseoutput="ellipse_aperture", maskbase="mask", runbands=bands):
     '''Generates a table on the object for each band.
     
     It uses parameters provided in ellipsepars, and outputs the table into
