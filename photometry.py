@@ -18,10 +18,10 @@ import matplotlib
 import matplotlib.pyplot as plt
 import scipy.stats.mstats
 
+import masks
 import queries as query
 import synthetic_photometry as synphot
 import WISE_conversions as conv
-import masks
 
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
@@ -1621,7 +1621,8 @@ def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion",
 
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
         skyAperture=True, skyimage=False, skyprefix="sky_level",
-        aperturefile="ellipse_aperture", ignore_exception=False):
+        aperturefile="ellipse_aperture", ignore_exception=False,
+        maskbase="mask"):
     '''Runs through all objects and creates cutouts in their folder.
     '''
     current_backend = matplotlib.get_backend()
@@ -1630,12 +1631,13 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS,
     runOnImages(
         BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands, 
         skyAperture=skyAperture, skyimage=skyimage, skyprefix=skyprefix, 
-        aperturefile=aperturefile, ignore_exception=ignore_exception)
+        aperturefile=aperturefile, ignore_exception=ignore_exception,
+        maskbase=maskbase)
     matplotlib.use(current_backend)
 
 def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
-        skymethod="adaptive", maskbase="foreground"):
+        skymethod="adaptive", maskbase="mask"):
     '''Creates a set of four cutouts with the aperture and sky ellipses
 
     A cutout for each band will be created that contains the aperture
