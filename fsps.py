@@ -79,3 +79,4 @@ def plot_model_vs_data(modelx, modely, datax, datay, datayerr, dataxerr=None,
 def color_age_plot(modelcolor, modelage, datacolor, dataage, title="Color-Age "
                    "plot", xlabel="Age (Gyr)", ylabel="Color",
                    datalabel="Data", modellabel="Model"):
+    pass
