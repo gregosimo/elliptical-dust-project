@@ -1,5 +1,6 @@
 
 
+import matplotlib.pyplot as plt
 from astropy.table import Table
 
 def read_mags(magfile):
@@ -11,6 +12,7 @@ def read_mags(magfile):
     '''
     magtable = Table.read(magfile, format="ascii.no_header")
     rename_mag_table(magtable)
+    return filter_mag_table(magtable)
 
 def rename_mag_table(magtable):
     '''Renames the columns from a just-read magnitude table.
@@ -33,6 +35,19 @@ def rename_mag_table(magtable):
             newcolname = "filter{0:d}".format(colnum-4)
         magtable.rename_column(column_name, newcolname)
 
+def filter_mag_table(magtable):
+    '''Filters the entries from the magnitude table that we want.
+
+    These entries will namely be age, W1, W2, W3, W4, NUV, and FUV.
+    '''
+
+    newtable = Table([10**magtable["log(age)"], magtable["filter83"],
+                      magtable["filter84"], magtable["filter85"],
+                      magtable["filter86"], magtable["filter62"],
+                      magtable["filter63"]], names=("Age", "W1", "W2", "W3",
+                                                    "W4", "FUV", "NUV"))
+    return newtable
+
 
 def strip_colnumber(col):
     '''Strips the column number from a default column name.
@@ -42,3 +57,25 @@ def strip_colnumber(col):
     integer.
     '''
     return int(col[3:])
+
+def plot_model_vs_data(modelx, modely, datax, datay, datayerr, dataxerr=None,
+                       title="Title", xlabel="X axis", ylabel="Y axis",
+                       datalabel="Data", modellabel="Model"):
+    '''Makes a basic model v. data plot.
+
+    The model values should be given, and they will be plotted as a continuous
+    curve. The data points will be given with errors. X errors are allowed.
+
+    The title, xlabel, ylabel, as well as labels for the data and model are
+    also permitted.
+    '''
+    plt.plot(modelx, modely, label=modellabel)
+    plt.errorbar(datax, datay, datayerr, dataxerr, label=datalabel)
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.legend()
+
+def color_age_plot(modelcolor, modelage, datacolor, dataage, title="Color-Age "
+                   "plot", xlabel="Age (Gyr)", ylabel="Color",
+                   datalabel="Data", modellabel="Model"):

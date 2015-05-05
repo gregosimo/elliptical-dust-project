@@ -3,6 +3,7 @@
 import os
 import math
 import glob
+import warnings
 
 from pyraf import iraf
 from astropy import wcs
@@ -64,8 +65,8 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     method for determining sky values should be specified in skymethod; it can
     be "adaptive", "annulus", or "skyfile".
     '''
-    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(baseobjectfile, band, "tab"))
+    ellipsetable = STSDAS_to_Astropy_Table(
+        format_band_dependence(baseobjectfile, band, "tab", galaxydir))
     DNflux = ellipsetable[0]["TFLUX_E"]
     aperture_area = ellipsetable[0]["NPIX_E"]
     # Right now we will only support sky backgrounds done through the 
@@ -290,12 +291,31 @@ def readSkyTable(galaxydir, band, area, baseellipsefile="sky_aperture"):
     standard aperture size, it is easier to simply read the values from
     a pre-generated STSDAS table. This function is just for reading.
     '''
-    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(baseellipsefile, band, "tab"))
+    ellipsetable = STSDAS_to_Astropy_Table(
+        format_band_dependence(baseellipsefile, band, "tab", galaxydir))
     if band in IRBANDS:
         return float(ellipsetable[0]["INTENS"]) * area
     else:
         return float(ellipsetable[0]["TFLUX_E"])
+
+def get_sky_pixels(galaxydir, band, skybase="sky_level", method="adaptive"):
+    '''Extracts the number of pixels used to determine the sky value.
+
+    This function is meant to retrieve the sky pixels based on the method used
+    to determine the background.
+    '''
+    if method.lower() == "adaptive":
+        method = adaptive_background[band]
+    if method.lower() == "patch":
+        skyParams=Table.read(os.path.join(galaxydir,
+            format_band_dependence(skybase, band, "txt")), format="ascii.basic")
+        pixels = skyParams["patches"][0]
+    elif method.lower() == "annulus":
+        skyParams = Table.read(os.path.join(galaxydir,
+            format_band_dependence(skybase, band, "txt")),
+            format="ascii.daophot")
+        pixels = skyParams["NSKY"][0]
+    return pixels
 
 
 def sky_from_ellipse_table(galaxydir, band, baseellipsefile="sky_level"):
@@ -303,8 +323,8 @@ def sky_from_ellipse_table(galaxydir, band, baseellipsefile="sky_level"):
 
     The background for UV bands is estimated by looking for files whose
     names contain the string given in skymarker.'''
-    ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(baseellipsefile, band, "tab"))
+    ellipsetable = STSDAS_to_Astropy_Table(
+        format_band_dependence(baseellipsefile, band, "tab", galaxydir))
     return ellipsetable[0]["TFLUX_E"] / ellipsetable[0]["NPIX_E"]
 
 
@@ -340,10 +360,10 @@ def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
     explanatory Supplement:
     http://wise2.ipac.caltech.edu/docs/release/allsky/expsup/sec2_3f.html
     '''
-    ellipseParams = STSDAS_to_Astropy_Table(galaxydir, 
-            format_band_dependence(ellipsebase, band, "tab"))[0]
-    imageUncertainty = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(uncertainty_base, band, "tab"))[0]
+    ellipseParams = STSDAS_to_Astropy_Table(
+        format_band_dependence(ellipsebase, band, "tab", galaxydir))[0]
+    imageUncertainty = STSDAS_to_Astropy_Table(
+        format_band_dependence(uncertainty_base, band, "tab", galaxydir))[0]
 
     fapcor = aperture_correction_factor(band)
     NA = ellipseParams["NPIX_E"]
@@ -383,25 +403,6 @@ def get_sky_error(galaxydir, band, skybase="sky_level", method="adaptive"):
         error = skyParams["STDEV"][0]
     return error
     
-def get_sky_pixels(galaxydir, band, skybase="sky_level", method="adaptive"):
-    '''Extracts the number of pixels used to determine the sky value.
-
-    This function is meant to retrieve the sky pixels based on the method used
-    to determine the background.
-    '''
-    if method.lower() == "adaptive":
-        method = adaptive_background[band]
-    if method.lower() == "patch":
-        skyParams=Table.read(os.path.join(galaxydir,
-            format_band_dependence(skybase, band, "txt")), format="ascii.basic")
-        pixels = skyParams["patches"][0]
-    elif method.lower() == "annulus":
-        skyParams = Table.read(os.path.join(galaxydir,
-            format_band_dependence(skybase, band, "txt")),
-            format="ascii.daophot")
-        pixels = skyParams["NSKY"][0]
-    return pixels
-
 ##############################################################################
 # Path Routines #
 ##############################################################################
@@ -442,7 +443,8 @@ def format_band_dependence(basename, band, extension="tab", pathto=''):
     The returned filename will have a format of 
     "/pathto/{basename}.{band}.{extension}".
     '''
-    return os.path.join(pathto, "{0}.{1}.{2}".format(basename, band, extension))
+    return os.path.join(pathto, "{0}.{1}.{2}".format(basename, band, 
+                                                     extension))
     
 def objectHasImage(BASEDIR, objname):
     '''Checks if an object has a folder containing its images.'''
@@ -510,7 +512,9 @@ def load_image(galaxydir, band, mask="", uncertainty=False, sky=False):
     # image = mask_invalid_areas(image, band)
     return image
 
-def mask_invalid_areas(image, band):
+# Convert this into the bad aperture detection function. In order to do that
+# we'll need to:
+def detect_aperture_out_of_bounds(image, ):
     '''Masks out parts of the image which weren't exposed to the sky.
 
     In particular, the GALEX image only has a circular region which contains sky
@@ -518,9 +522,9 @@ def mask_invalid_areas(image, band):
     for objects that are close to the edge. In order to get around this, those
     parts will just be masked out.
     '''
+    xcenter, ycenter = (1913, 1941)
+    radius = 1451
     if band in UVBANDS:
-        xcenter, ycenter = (1913, 1941)
-        radius = 1451
         return np.ma.array(image, mask=np.logical_not(mask_circle(image,
             xcenter, ycenter, radius)))
 
@@ -710,6 +714,8 @@ def run_ellipse(image, ellipsepars, output, mask=""):
     iraf.ellipse.setParam("interactive", False)
     iraf.ellipse(image, output)
 
+    
+
 ##############################################################################
 # Region routines #
 #############################################################################
@@ -723,8 +729,8 @@ def writeregion(BASEDIR, WISErow, parambase="ellipsepars",
     don't feel like it.'''
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     for band in runbands:
-        ellipsetable = STSDAS_to_Astropy_Table(galaxydir,
-                format_band_dependence(parambase, band, "tab"))[0]
+        ellipsetable = STSDAS_to_Astropy_Table(
+            format_band_dependence(parambase, band, "tab", galaxydir))[0]
         xcoord, ycoord = ellipsetable["X0"], ellipsetable["Y0"]
         semimajor = ellipsetable["SMA"]
         semiminor = semimajor * (1 - ellipsetable["ELLIP"])
@@ -1000,7 +1006,7 @@ def measure_sky_from_patches(galaxydir, band, area=4000, numpatches=90,
     at {backgroundmapbase}.{band}.fits.
     '''
     ellipsepars = STSDAS_to_Astropy_Table(
-        galaxydir, format_band_dependence(ellipsebase, band, "tab"))
+        format_band_dependence(ellipsebase, band, "tab", galaxydir))
     backgroundmapfile = format_band_dependence(backgroundmapbase, band, "fits",
             galaxydir)
     imagename = match_filter(galaxydir, band, fullpath=False)
@@ -1087,8 +1093,8 @@ def measure_sky_from_annulus(galaxydir, band, coordbase="fitsky",
     coordpath = format_band_dependence(coordbase, band, "coo", galaxydir)
     skypath = format_band_dependence(baseskyfile, band, "txt", galaxydir)
     image = match_filter(galaxydir, band)
-    ellipsepars = STSDAS_to_Astropy_Table(galaxydir,
-            format_band_dependence(ellipsebase, band, "tab"))
+    ellipsepars = STSDAS_to_Astropy_Table(
+        format_band_dependence(ellipsebase, band, "tab", galaxydir))
 
     # The centroid algorithm doesn't converge for GALEX images because there are
     # too few counts.
@@ -1131,8 +1137,9 @@ def sky_file_background(galaxydir, band, ellipse_output_base="sky_level"):
     robust against outliers as well as local to the object. The output base
     should be the output of the ellipse routine to determine the sky level.
     '''
-    ellipse_output = format_band_dependence(ellipse_output_base, band, "tab")
-    skylevel = STSDAS_to_Astropy_Table(galaxydir, ellipse_output)
+    ellipse_output = format_band_dependence(ellipse_output_base, band, "tab",
+                                            galaxydir)
+    skylevel = STSDAS_to_Astropy_Table(ellipse_output)
         
     image = match_filter(galaxydir, band, sky=True)
     imageval = fits.getdata(image, view=np.ma.MaskedArray)
@@ -1412,8 +1419,8 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         # get it directly from the STSDAS tables. The latter seems to 
         # be more direct, since those are actually used for photometry
         # and sky.
-        aperturepars = STSDAS_to_Astropy_Table(galaxydir, 
-                format_band_dependence(aperturefile, band, "tab"))
+        aperturepars = STSDAS_to_Astropy_Table(
+            format_band_dependence(aperturefile, band, "tab", galaxydir))
         # This is to show masked values in the cutout.
         imagehdulist = fits.open(match_filter(galaxydir, band, sky=skyimage))
         imagehdu = imagehdulist[0]
@@ -1601,23 +1608,24 @@ def getpixelcoords(imagepath, ra, dec):
 
     return x, y
 
-def STSDAS_to_Astropy_Table(workdir, filename, outputfile=None):
+def STSDAS_to_Astropy_Table(filepath, outputpath=None):
     '''Converts data in STSDAS table to an Astropy table.
 
     All that's needed is a filename. If an output file is desired, then 
     it can be specified as well.'''
+    workdir = os.path.dirname(filepath)
     colfile = os.path.join(workdir, "magcolumns.txt")
     datfile = os.path.join(workdir, "magdata.txt")
     iraf.tables()
     iraf.tables.ttools()
     iraf.tdump.setParam("cdfile", colfile)
     iraf.tdump.setParam("datafile", datfile)
-    iraf.tdump(os.path.join(workdir, filename))
+    iraf.tdump(filepath)
     columns = Table.read(colfile, format="ascii.no_header")
     data = Table.read(datfile, format="ascii")
     fulldata = Table(data, names=columns['col1'])
-    if outputfile:
-        fulldata.write(outputfile)
+    if outputpath:
+        fulldata.write(outputpath)
     return fulldata
 
 def download_WISE_images(BASEDIR, objstr, ra, dec):
@@ -1641,7 +1649,12 @@ def aperturePhotometryTable(
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
     will be given in the AB system.
+
+    THIS FUNCTION IS DEPRECATED!!!
     '''
+    warnings.warn("aperturePhotometryTable is deprecated. Use "
+                  "aperture_photometry_table instead.",
+                  warnings.DeprecationWarning)
     fulltable = Table([objectnames], names=["objstr_01"])
     for band in runbands:
         bandmags, magerrs = photometryOnBand(
@@ -1797,7 +1810,7 @@ def photometryOnBand(BASEDIR, objectnames, band,
                 brightness=brightness, errors=errors, 
                 apertureCorrection=apertureCorrection, colorIndex=colorIndex))
         except Exception as e:
-            if not ignore_exception:
+            if ignore_exception:
                 if type(e) is ValueError:
                     print "Likely got negative flux for {0}".format(galname)
                 else:
