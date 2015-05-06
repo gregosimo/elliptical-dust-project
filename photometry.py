@@ -72,6 +72,8 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     # Right now we will only support sky backgrounds done through the 
     # pipeline.
     background = read_background(galaxydir, band, useskybase, skymethod)
+    if np.ma.is_masked(background):
+        raise ValueError("Background not found!")
     if apertureCorrection:
         fapcor = aperture_correction_factor(band)
     else:
@@ -113,14 +115,14 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
         if brightness is "flux":
             photvalue = conv.DN_flux_to_Jy(band, DNflux, colorIndex)
             err = conv.DN_err_to_Jansky_err(galaxydir, band, objectError,
-                    DNflux=DNflux, ZPunc=ZPuncertainty, colorIndex=colorIndex)
+                    DNflux, ZPunc=ZPuncertainty, colorIndex=colorIndex)
         else:
             if brightness is "AB":
                 photvalue = conv.DNflux2ABmag(band, DNflux)
             else:
                 photvalue = conv.DNflux2Vegamag(band, DNflux)
             err = conv.DN_err_to_mag_err(galaxydir, band, objectError,
-                    DNflux=DNflux, ZPunc=ZPuncertainty)
+                    DNflux, ZPunc=ZPuncertainty)
         return (photvalue, err)
     else:
         if brightness is "flux":
