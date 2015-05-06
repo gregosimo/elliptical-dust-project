@@ -14,18 +14,15 @@ def DN_flux_to_Jy(band, objectflux, colorIndex=-2):
     '''
     return objectflux * DN_to_Jy_conversion_factor(band, colorIndex)
 
-def DN_err_to_Jansky_err(galaxydir, band, DNerr, 
+def DN_err_to_Jansky_err(galaxydir, band, DNerr, DNflux,
         baseobjectfile="ellipse_aperture", mask="", useskybase="sky_level", 
-        DNflux=0, colorIndex=-2, ZPunc=True):
+        colorIndex=-2, ZPunc=True):
     '''Converts an error in Data Numbers to an error in Janskys.
 
     If DNflux is given, this function will use it as the value for the object's
     flux in data numbers. If it isn't, then it will calculate it on its own.
     '''
 
-    if not DNflux:
-        DNflux = phot.calc_DNflux(galaxydir, band, baseobjectfile, mask, 
-                useskybase)
     zpfluxlevel = get_zero_point_flux_level(band, colorIndex)
     if ZPunc:
         zpfluxunc =  get_zero_point_flux_uncertainty(band)
@@ -46,18 +43,15 @@ def DNflux2Vegamag(band, flux):
     '''
     return flux2mag(flux, 1, get_zero_point_magnitude_level(band))
 
-def DN_err_to_mag_err(galaxydir, band, DNerr, baseobjectfile="ellipse_aperture",
-        mask="", useskybase="sky_level", skymethod="adaptive",
-        apertureCorrection=False, DNflux=0, ZPunc=True):
+def DN_err_to_mag_err(galaxydir, band, DNerr, DNflux, 
+                      baseobjectfile="ellipse_aperture", mask="", 
+                      useskybase="sky_level", skymethod="adaptive", 
+                      apertureCorrection=False, ZPunc=True):
     '''Converts an error in Data Number to an error in magnitudes.
 
     If DNflux is given, this function will use it as the value for the object's
     flux in data numbers. If it isn't, then it will calculate it on its own.
     '''
-
-    if not DNflux:
-        DNflux = phot.calc_DNflux(galaxydir, band, baseobjectfile, useskybase,
-                skymethod=skymethod, apertureCorrection=apertureCorrection)
 
     zplevel = get_zero_point_magnitude_level(band)
     if ZPunc:
@@ -146,9 +140,12 @@ def WISE_mag_err_to_Jansky_err(band, mag, magerr):
 def Vega2ABmag(band, vegamag):
     '''Converts Vega magnitudes to AB magnitudes.
 
-    Conversions to AB magnitudes given by the WISE Explanatory
-    Supplement. Section IV.4.h.3.'''
-    offsets = {"W1": 2.699, "W2": 3.339, "W3": 5.174, "W4": 6.620}
+    WISE Conversions to AB magnitudes given by the WISE Explanatory
+    Supplement. Section IV.4.h.3.
+    
+    2MASS conversions are from Blanton et al (2007) AJ 133 734. (Thanks Paul!)'''
+    offsets = {"W1": 2.699, "W2": 3.339, "W3": 5.174, "W4": 6.620, "J": 0.91,
+               "H": 1.39, "Ks": 1.85}
     return vegamag + offsets[band]
 
 def DNflux2ABmag(band, flux):
