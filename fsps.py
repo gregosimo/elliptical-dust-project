@@ -43,10 +43,8 @@ def filter_mag_table(magtable):
     These entries will namely be age, W1, W2, W3, W4, NUV, and FUV.
     '''
 
-    newtable = Table([10**magtable["log(age)"], 
-                      conv.Vega2ABmag("J", magtable["filter10"]), 
-                      conv.Vega2ABmag("H", magtable["filter11"]), 
-                      conv.Vega2ABmag("Ks", magtable["filter12"]), 
+    newtable = Table([10**magtable["log(age)"], magtable["filter10"],
+                      magtable["filter11"], magtable["filter12"], 
                       magtable["filter83"], magtable["filter84"], 
                       magtable["filter85"], magtable["filter86"], 
                       magtable["filter62"], magtable["filter63"]], 
