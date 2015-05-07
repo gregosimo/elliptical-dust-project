@@ -1719,7 +1719,8 @@ def aperture_photometry_table(
             try:
                 measurements.append(galaxy_photometry(
                     BASEDIR, galname, band, ellipseoutput, skybase, skymethod, 
-                    uncertaintybase=uncertaintybase, ZPuncertainty=ZPuncertainty, brightness=brightness, 
+                    uncertaintybase=uncertaintybase, 
+                    ZPuncertainty=ZPuncertainty, brightness=brightness, 
                     apertureCorrection=apertureCorrection, 
                     colorIndex=colorIndex))
             except ValueError as e:

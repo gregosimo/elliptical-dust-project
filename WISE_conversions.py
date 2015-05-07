@@ -240,3 +240,29 @@ def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=WISE_bands):
         Mag_Table["{0}_err".format(band)] = Jansky_err_to_WISE_mag_err(band,
                 Flux_Table[band], Flux_Table["{0}_err".format(band)])
     return Mag_Table
+
+###############################################################################
+# Extinction #
+###############################################################################
+
+def NUV_extinction(EB_V, Rv=3.1):
+    '''Calculates the extinction in NUV.
+
+    This function currently uses the compact expression from Gil de Paz 2007.
+    This seems too simple so take it with a grain of salt.'''
+    A_NUV = 8.0 * EB_V
+    return A_NUV
+
+def FUV_extinction(EB_V, Rv=3.1):
+    '''Calculates the extinction in FUV.
+
+    This function currently uses the compact expression from Gil de Paz 2007.
+    This seems too simple so take it with a grain of salt.'''
+    A_FUV = 7.9 * EB_V
+    return A_FUV
+
+def extinct_magnitude(band, truemag, EB_V, Rv=3.1):
+    '''Extincts a given magnitude using a reddening law.
+
+    The extinction coefficients should be given b NUV_extinction and
+    FUV_extinction.
