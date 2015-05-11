@@ -216,7 +216,7 @@ def mask_algorithm(
                                maskconfig="", overwrite=overwrite, 
                                regionbase=regionbase)
 
-        if pixelmaskbase:
+        if maskband not in phot.IRBANDS and pixelmaskbase:
             # I'd like to add this to the GALEX pipeline rather than putting it
             # here. So instead of using the sky background value, we have a
             # specific image which contains invalid pixels. However, that sounds
@@ -281,7 +281,11 @@ def spreadmask(workdir, pixels, maskimage, outputfile="foreground.fits",
     mask_indices = np.transpose(np.nonzero(origmask))
     for coord in mask_indices:
         setedges(origmask, coord[0], coord[1], size=pixels, edgevalue=1)
-    hdulist.writeto(os.path.join(workdir, outputfile), clobber=overwrite)
+    try:
+        hdulist.writeto(os.path.join(workdir, outputfile), clobber=overwrite)
+    except IOError:
+        print "{0} already exists and overwrite disabled. Skipping.".format(
+            outputfile)
     hdulist.close()
     
 def setedges(fullarray, i, j, size=5, edgevalue=1):
@@ -374,19 +378,6 @@ def remove_galaxy_from_mask(imagepath, newimagepath, coord):
         os.remove(newimagepath)
         newhdu.writeto(newimagepath)
     
-
-
-def remove_segment(image, number):
-    '''Takes a FITS image and removes the region corresponding to the segment.
-
-    The image should be a ndarray corresponding to the raw FITS image. The
-    number should be the segmentation number we wish to remove from the image.
-    It will be replaced with 0.
-    '''
-    segindices = np.where(image == number)
-    image_copy = image.copy()
-    image_copy[segindices] = 0
-    return image_copy
 
 def normalize_segmentation_map(image, output):
     '''Takes a segmentation map and sets all of the pixels to be either 1 or

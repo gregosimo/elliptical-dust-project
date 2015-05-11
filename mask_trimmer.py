@@ -5,8 +5,7 @@ import cmd
 
 from astropy.io import fits
 from ds9 import ds9
-
-import masks
+import numpy as np
 
 # I should probably have a more object-oriented method of loading up this CMD
 # instance, such as passing it inputmask and outputmask, but I'm taking a
@@ -26,7 +25,7 @@ class MaskCMD(cmd.Cmd):
 
     def do_cut(self, num):
         '''Removes the segment with the specified number.'''
-        self.hdulist[0].data = masks.remove_segment(self.hdulist[0].data, 
+        self.hdulist[0].data = remove_segment(self.hdulist[0].data, 
                 int(num))
         self.load_image()
 
@@ -54,6 +53,18 @@ def parseregion(regionstring):
     # I'm assuming there's only ellipses right now. I can make changes (or use
     # pyregion), when things get more complicated.
     coord, shape = regionstring.split("\n")
+
+def remove_segment(image, number):
+    '''Takes a FITS image and removes the region corresponding to the segment.
+
+    The image should be a ndarray corresponding to the raw FITS image. The
+    number should be the segmentation number we wish to remove from the image.
+    It will be replaced with 0.
+    '''
+    segindices = np.where(image == number)
+    image_copy = image.copy()
+    image_copy[segindices] = 0
+    return image_copy
         
 def close_fits(header, filename):
     header.writeto(filename, clobber=True)
