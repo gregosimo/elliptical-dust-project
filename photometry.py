@@ -11,7 +11,7 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.stats import sigma_clip
-from astropy.table import Table, Column
+from astropy.table import Table, Column, join
 from astroquery.ned import Ned
 import numpy as np
 import aplpy
@@ -1688,11 +1688,15 @@ def aperture_photometry_table(
         BASEDIR, objectnames, runbands=bands, ellipseoutput="ellipse_aperture", 
         skybase="sky_level", skymethod="adaptive", 
         uncertaintybase="uncertainty", ZPuncertainty=True, brightness="AB", 
-        apertureCorrection=True, colorIndices=None, ignore_exception=False):
+        apertureCorrection=True, colorIndices=None, ignore_exception=False,
+        deextinction=""):
     '''Creates a table with generated aperture photometry.
 
     The magnitudes will be located in columns labeled "w?apmag". All magnitudes
     will be given in the AB system.
+
+    De-extinction will be performed if a path to an E(B-V) file is provided in
+    the deextinction parameter.
     '''
     # How to keep the column name within our standard. Though I suppose we
     # could just change the standard. Look into that. See if the current
@@ -1717,6 +1721,8 @@ def aperture_photometry_table(
         measurements = []
         for band in runbands:
             try:
+                # We bundle the magnitude and error into a tuple located in the
+                # measurements list.
                 measurements.append(galaxy_photometry(
                     BASEDIR, galname, band, ellipseoutput, skybase, skymethod, 
                     uncertaintybase=uncertaintybase, 
@@ -1735,6 +1741,7 @@ def aperture_photometry_table(
                 else:
                     raise
             
+        # Add the measurements to photcolumns.
         for (photkey, errkey, measurement) in zip(photkeys, errkeys,
                                                   measurements):
             phot, err = measurement
@@ -1756,8 +1763,44 @@ def aperture_photometry_table(
         photcol.mask = photcol < 0
         errcol.mask = errcol < 0
 
+    # Now deal with extinction.
+    photometry_table = deextinct_data(photometry_table,
+                                      extinction=deextinction)
+
     return photometry_table
 
+
+def deextinct_data(photometry_table, extinction=""):
+    '''Uses the IRSA dust map to de-extinct data.
+
+    A photometry table with the usual photometric entries should be provided.
+    This will result in bands that end with "unextmag".
+
+    The extinction keyword should be the location of the IRSA extinction table.
+    The extinction table should be in the IPAC table format from the IRSA dust
+    extinction service.
+    '''
+
+    if extinction is not "":
+        extinction_table = conv.get_extinction_table(extinction)
+        extinction_table.rename_column("objname", "objstr_01")
+        extincted_table = join(photometry_table, extinction_table)
+        for band in UVBANDS:
+            # Get the names of the photometry columns.
+            ap_mag = name_photometry_column(band, error=False, category="ap")
+            ap_err = name_photometry_column(band, error=True, category="ap")
+            # Get the names of the unextincted columns
+            category = "unext"
+            unext_mag = name_photometry_column(band, error=False,
+                                             category=category)
+            unext_err = name_photometry_column(band, error=True,
+                                               category=category)
+            extincted_table[unext_mag] = conv.extinction_correction(
+                band, extincted_table[ap_mag], extincted_table["E_B_V_SandF"])
+            extincted_table[unext_err] = np.sqrt(
+                extincted_table[ap_err]**2 +
+                extincted_table["stdev_E_B_V_SandF"]**2)
+        return extincted_table
 
 
 
@@ -1765,22 +1808,34 @@ def aperture_photometry_table(
 
 
             
-def name_photometry_column(band, error=False):
-    '''Generates the names of the columns in the photometry table.
+def name_photometry_column(band, error=False, category="ap"):
+    '''Generates the names of photometry columns in the photometry table.
 
-    Currently the only two names relevant to the photometry table are
-    "{band}apmag" and "{band}aperr". Which of those two are chosen is toggled
-    by the error keyword.
+    Photometry columns are the columns which will be returned in the aperture
+    photometry table. Currently there will be two main categories: each with a
+    "mag" and "err" ending.
+
+    The "ap" category is for magnitudes straight from aperture photometry.
+    There may be slight instrumental corrections added on, such as aperture
+    corrections, but no significant astronomical processing has been added on.
+
+    The "unext" category is for magnitudes which have been corrected for
+    extinction. 
     '''
-    if not error:
-        template = "{0}apmag"
+    if error:
+        suffix = "err"
     else:
-        template = "{0}aperr" 
+        suffix = "mag"
+
+    if category not in ["ap", "unext"]:
+        raise ValueError("Can not understand photometry category")
 
     if band in IRBANDS:
-        colname = template.format(band.lower())
+        prefix = band.lower()
     else:
-        colname = template.format(band) 
+        prefix = band
+
+    colname = prefix + category + suffix
 
     return colname
 
