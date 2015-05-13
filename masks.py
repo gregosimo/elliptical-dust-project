@@ -201,7 +201,7 @@ def mask_algorithm(
     # Add regionbase.
     if maskband in phot.IRBANDS and maskband is not "W1":
         shutil.copy(phot.format_band_dependence(outputbase, "W1", "fits",
-            galaxydir), phot.change_to_galaxy_dir(galaxydir, maskfile))
+            galaxydir), maskfile)
     elif maskband == "FUV" and (phot.match_filter(galaxydir, 
         "FUV").replace("-fd-", "-nd-") == phot.match_filter(galaxydir, "NUV")):
         shutil.copy(phot.format_band_dependence(outputbase, "NUV", "fits",
@@ -378,7 +378,18 @@ def remove_galaxy_from_mask(imagepath, newimagepath, coord):
         os.remove(newimagepath)
         newhdu.writeto(newimagepath)
     
+def remove_segment(image, number):
+    '''Takes a FITS image and removes the region corresponding to the segment.
 
+    The image should be a ndarray corresponding to the raw FITS image. The
+    number should be the segmentation number we wish to remove from the image.
+    It will be replaced with 0.
+    '''
+    segindices = np.where(image == number)
+    image_copy = image.copy()
+    image_copy[segindices] = 0
+    return image_copy
+        
 def normalize_segmentation_map(image, output):
     '''Takes a segmentation map and sets all of the pixels to be either 1 or
     0.'''
