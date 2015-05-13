@@ -355,8 +355,9 @@ def segmentation_mask(config, image, masked_image, fullmask, coords,
     image with the galaxyy removed is saved in fullmask, which is the desirable
     product.
     '''
-    sextractor_mask(image, config, CHECKIMAGE_NAME=masked_image,
-            DETECT_THRESH=threshold)
+    sextractor_keywords = {"CHECKIMAGE_NAME": masked_image, "DETECT_THRESH":
+                           threshold}
+    sextractor_mask(image, config, **sextractor_keywords)
     remove_galaxy_from_mask(masked_image, fullmask, coords)
 
 def remove_galaxy_from_mask(imagepath, newimagepath, coord):

@@ -1855,6 +1855,7 @@ def doubleDifferencePlot(xfirst, xsecond, yfirst, ysecond, xfirsterr,
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
+    plt.grid()
 
 def plotSED(bands, mags, errs, modelx=[], modely=[], modellabels=[],
         title="SED", xlabel="Wavelength (nm)", ylabel="AB Mag"):
