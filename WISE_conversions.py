@@ -1,5 +1,6 @@
 import numpy as np
 from astropy.table import Table
+from scipy.interpolate import interp1d
 
 WISE_bands = ["W1", "W2", "W3", "W4"]
 GALEX_bands = ["NUV", "FUV"]
@@ -207,6 +208,15 @@ def get_zero_point_magnitude_uncertainty(band):
             "NUV": 0.03}
     return MAGZPUNC[band]
 
+fluxcorrection = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921, 
+    1.0000, 1.0142, 1.0347]),
+    "W2": np.array([1.0206, 1.0066, 0.9976, 0.9935, 0.9943, 1.0000, 1.0107,
+        1.0265]),
+    "W3": np.array([1.1344, 1.0088, 0.9393, 0.9169, 0.9373, 1.0000, 1.0181,
+        1.2687]),
+    "W4": np.array([1.0142, 1.0013, 0.9934, 0.9905, 0.9926, 1.0000, 1.0130,
+        1.0319])}
+
 def color_correction(band, index):
     '''Returns the color correction appropriate for a power law.
 
@@ -218,15 +228,46 @@ def color_correction(band, index):
     '''
     if band in GALEX_bands:
         return 1.0
-    fluxcorrection = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921, 
-        1.0000, 1.0142, 1.0347]),
-        "W2": np.array([1.0206, 1.0066, 0.9976, 0.9935, 0.9943, 1.0000, 1.0107,
-            1.0265]),
-        "W3": np.array([1.1344, 1.0088, 0.9393, 0.9169, 0.9373, 1.0000, 1.0181,
-            1.2687]),
-        "W4": np.array([1.0142, 1.0013, 0.9934, 0.9905, 0.9926, 1.0000, 1.0130,
-            1.0319])}
     return fluxcorrection[band][3-index]
+
+index_lookup = {"W1-W2": [-0.4040, -0.0538, 0.2939, 0.6393, 0.9828, 1.3246,
+                          1.6649, 2.0041],
+                "W2-W3": [-0.9624, -0.748, 0.8575, 1.8357, 2.8586, 3.9225,
+                          5.0223, 6.1524], 
+                "W3-W4": [-0.8684, 0.0519, 0.7200, 1.4458, 2.1272, 2.7680,
+                          3.3734, 3.9495]}
+
+def WISE_to_spectral_indices(w1, w2, w3, w4):
+    '''Takes WISE magnitudes and returns spectral indices.
+
+    Each of the bands should be given. The function will then compute an
+    appropriate index for each of the color combinations, and then return the
+    nearest index to the combined combination.
+
+    The way this is essentially done is to fit an interpolating spline to each
+    of the indices and color values, and then interpolate an index for each of
+    the colors. The average of the indices is then taken and rounded to the
+    nearest integer.
+    '''
+    w1w2_index = index_from_color("W1-W2", w1, w2)
+    w2w3_index = index_from_color("W2-W3", w2, w3)
+    w3w4_index = index_from_color("W3-W4", w3, w4)
+
+    mean_index = (w1w2_index + w2w3_index + w3w4_index) / 3.0
+    return np.around(mean_index)
+
+def index_from_color(color, mag1, mag2):
+    '''Calculates a spectral index from a given WISE color.
+
+    The index will be a floating point number calculated from an interpolated
+    spline.'''
+    yvals = np.arange(3, -5, -1)
+    xvals = index_lookup[color]
+    wise_color = mag1 - mag2
+    colorfunc = interp1d(xvals, yvals)
+    yinterpolated = colorfunc(wise_color)
+    return yinterpolated
+
 
 def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=WISE_bands):
     '''Takes a table and converts the flux measurements to magnitude
