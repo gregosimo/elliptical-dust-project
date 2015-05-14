@@ -526,6 +526,19 @@ def mask_circle(image, center, radius, outputfile):
     command = build_imcalc_circle(xcenter, ycenter, radius)
     run_imcalc(image, outputfile, command)
 
+def mask_circle(image, center, radius, image_indices=True):
+    '''Masks a circular region of the image
+
+    This function sets the mask flag of an image that lies within a given 
+    circle. The image should be a MaskedArray of some sort, center should be a
+    tuple of x and y values, and radius should be the radius. 
+    
+    The center coordinates should be given as numpy indices (i.e. starting 
+    from 0)
+    '''
+    xcenter, ycenter = center
+    phot.mask_elliptical_shell_portion(image, xcenter, ycenter, 0, 0, 
+
 def mask_ellipse(image, center, semimajor, semiminor, pa, outputfile):
     '''Masks an elliptical region of the image.
 
