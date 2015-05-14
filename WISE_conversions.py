@@ -1,5 +1,6 @@
 import numpy as np
 from astropy.table import Table
+from scipy.interpolate import interp1d
 
 import photometry as phot
 
@@ -208,6 +209,15 @@ def get_zero_point_magnitude_uncertainty(band):
             "NUV": 0.03}
     return MAGZPUNC[band]
 
+fluxcorrection = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921, 
+    1.0000, 1.0142, 1.0347]),
+    "W2": np.array([1.0206, 1.0066, 0.9976, 0.9935, 0.9943, 1.0000, 1.0107,
+        1.0265]),
+    "W3": np.array([1.1344, 1.0088, 0.9393, 0.9169, 0.9373, 1.0000, 1.0181,
+        1.2687]),
+    "W4": np.array([1.0142, 1.0013, 0.9934, 0.9905, 0.9926, 1.0000, 1.0130,
+        1.0319])}
+
 def color_correction(band, index):
     '''Returns the color correction appropriate for a power law.
 
@@ -219,14 +229,6 @@ def color_correction(band, index):
     '''
     if band in GALEX_bands:
         return 1.0
-    fluxcorrection = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921, 
-        1.0000, 1.0142, 1.0347]),
-        "W2": np.array([1.0206, 1.0066, 0.9976, 0.9935, 0.9943, 1.0000, 1.0107,
-            1.0265]),
-        "W3": np.array([1.1344, 1.0088, 0.9393, 0.9169, 0.9373, 1.0000, 1.0181,
-            1.2687]),
-        "W4": np.array([1.0142, 1.0013, 0.9934, 0.9905, 0.9926, 1.0000, 1.0130,
-            1.0319])}
     return fluxcorrection[band][3-index]
 
 def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=WISEbands):
