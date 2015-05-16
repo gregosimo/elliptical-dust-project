@@ -526,18 +526,42 @@ def mask_circle(image, center, radius, outputfile):
     command = build_imcalc_circle(xcenter, ycenter, radius)
     run_imcalc(image, outputfile, command)
 
-def mask_circle(image, center, radius, image_indices=True):
+def mask_point_source(band, image, center, fill_value):
+    '''Masks a point source on an image.
+
+    Takes a coordinate and masks a circle with size of the typical FWHM of the
+    PSF. The mask will be filled in with the fill_value.
+    '''
+    radius = phot.getPSFFWHM(band, pixel=True)
+    mask_circle(image, center, radius, fill_value)
+
+def mask_circle(image, center, radius, fill_value):
     '''Masks a circular region of the image
 
     This function sets the mask flag of an image that lies within a given 
     circle. The image should be a MaskedArray of some sort, center should be a
     tuple of x and y values, and radius should be the radius. 
     
-    The center coordinates should be given as numpy indices (i.e. starting 
-    from 0)
+    The center coordinates should be given as image indices (i.e. starting 
+    from 1)
     '''
     xcenter, ycenter = center
-    phot.mask_elliptical_shell_portion(image, xcenter, ycenter, 0, 0, 
+    image_coords = np.indices(image.shape)
+    circlemask = test_if_in_circle(
+            image_coords[1], image_coords[0], xcenter-1, ycenter-1, radius)
+    image[circlemask] = fill_value
+
+def test_if_in_circle(x, y, xcenter, ycenter, radius):
+    '''Tests if a point is in the given circle.
+
+    x and y are the x and y values of the point to be tested. It should be
+    given as the numpy index (starting at 0). xcenter and ycenter should also
+    be given as numpy indices, and indicate the central coordinate of the
+    circle. 
+    '''
+    xcen = x - xcenter
+    ycen = y - ycenter
+    return xcen**2 + ycen**2 <= radius**2
 
 def mask_ellipse(image, center, semimajor, semiminor, pa, outputfile):
     '''Masks an elliptical region of the image.
