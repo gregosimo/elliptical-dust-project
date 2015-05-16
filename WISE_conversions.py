@@ -281,3 +281,60 @@ def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=WISE_bands):
         Mag_Table["{0}_err".format(band)] = Jansky_err_to_WISE_mag_err(band,
                 Flux_Table[band], Flux_Table["{0}_err".format(band)])
     return Mag_Table
+
+###############################################################################
+# Extinction #
+###############################################################################
+
+def NUV_extinction(EB_V, Rv=3.1):
+    '''Calculates the extinction in NUV.
+
+    This function currently uses the compact expression from Gil de Paz 2007.
+    This seems too simple so take it with a grain of salt.'''
+    A_NUV = 8.0 * EB_V
+    return A_NUV
+
+def FUV_extinction(EB_V, Rv=3.1):
+    '''Calculates the extinction in FUV.
+
+    This function currently uses the compact expression from Gil de Paz 2007.
+    This seems too simple so take it with a grain of salt.'''
+    A_FUV = 7.9 * EB_V
+    return A_FUV
+
+def extinction_correction(band, truemag, EB_V, Rv=3.1, deredden=False):
+    '''Extincts a given magnitude using a reddening law.
+
+    This function assumes magnitudes are expressed in the AB system.
+    '''
+    # For non-UV bands, we'll set extinction to be 0. This may change in the
+    # future.
+    if band is "NUV":
+        A = NUV_extinction(EB_V, Rv)
+    elif band is "FUV":
+        A = FUV_extinction(EB_V, Rv)
+    else:
+        A = 0
+
+    if deredden:
+        extincted_mag = truemag - A
+    else:
+        extincted_mag = truemag + A
+
+    return extincted_mag
+
+def get_extinction_table(filepath):
+    '''Reads in an extinction table from the IRSA extinction service.
+
+    Note: The IRSA table must have been downloaded first. It can be queried
+    from
+    http://irsa.ipac.caltech.edu/applications/DUST/
+    '''
+    # In the future, this could query the IRSA server directly. But why bother?
+    extinction_table = Table.read(filepath, format="ascii.ipac",
+                                  include_names=("objname", "E_B_V_SandF",
+                                                 "mean_E_B_V_SandF",
+                                                 "stdev_E_B_V_SandF",
+                                                 "E_B_V_SFD", "mean_E_B_V_SFD",
+                                                 "stdev_E_B_V_SFD"))
+    return extinction_table
