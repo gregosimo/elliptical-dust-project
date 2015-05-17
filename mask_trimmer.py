@@ -19,6 +19,7 @@ class MaskCMD(cmd.Cmd):
         self.hdulist = fits.open(inputimage) 
         self.target = outputimage
         self.ds9 = ds9()
+        self.masknum = np.amax(self.hdulist[0].data)+1
         regionhandle = open(regionfile)
         self.region = ''.join(regionhandle.readlines())
         regionhandle.close()
@@ -30,6 +31,24 @@ class MaskCMD(cmd.Cmd):
         self.hdulist[0].data = masks.remove_segment(self.hdulist[0].data, 
                 int(num))
         self.load_image()
+
+    def do_c(self, num):
+        '''alias for do_cut'''
+        return self.do_cut(num)
+    
+    def do_mask(self, arg):
+        '''Masks a point source at the given coordinate'''
+
+        coords = arg.split()
+        center = int(coords[0]), int(coords[1])
+        masks.mask_point_source("W1", self.hdulist[0].data, center, 
+                                self.masknum)
+        self.masknum = self.masknum + 1
+        self.load_image()
+
+    def do_m(self, arg):
+        '''Alias for do_mask'''
+        return self.do_mask(arg)
 
     def load_image(self):
         '''Reloads the ds9 window.'''
