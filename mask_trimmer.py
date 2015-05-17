@@ -8,29 +8,36 @@ from ds9 import ds9
 import numpy as np
 
 import masks
+import photometry as phot
 
-# I should probably have a more object-oriented method of loading up this CMD
-# instance, such as passing it inputmask and outputmask, but I'm taking a
-# short-cut and will exploit the fact that they are global variables for now. If
-# somebody in the future looks at this, understand that this is REALLY bad, and
-# that I'm actually pretty ashamed of it.
 class MaskCMD(cmd.Cmd):
-    def __init__(self, inputimage, outputimage, regionfile):
-        self.hdulist = fits.open(inputimage) 
+    def __init__(self, inputimage, outputimage, origimage, regionfile):
+        # Set up the environment.
         self.target = outputimage
         self.ds9 = ds9()
-        self.masknum = np.amax(self.hdulist[0].data)+1
+        # Set up things needed to display the mask
+        self.maskhdulist = fits.open(inputimage) 
         regionhandle = open(regionfile)
         self.region = ''.join(regionhandle.readlines())
         regionhandle.close()
+        # Set up things needed to display the original image.
+        self.imagehdulist = fits.open(origimage)
+        # Set up quantities for masking routines
+        self.masknum = np.amax(self.maskhdulist[0].data)+1
         cmd.Cmd.__init__(self)
         self.load_image()
+        self.load_mask()
 
     def do_cut(self, num):
         '''Removes the segment with the specified number.'''
-        self.hdulist[0].data = masks.remove_segment(self.hdulist[0].data, 
-                int(num))
-        self.load_image()
+        try:
+            num = int(num)
+        except ValueError:
+            print "Could not parse number that was returned. Try again."
+            return
+        self.maskhdulist[0].data = masks.remove_segment(
+            self.maskhdulist[0].data, num)
+        return self.load_mask()
 
     def do_c(self, num):
         '''alias for do_cut'''
@@ -40,28 +47,60 @@ class MaskCMD(cmd.Cmd):
         '''Masks a point source at the given coordinate'''
 
         coords = arg.split()
-        center = int(coords[0]), int(coords[1])
-        masks.mask_point_source("W1", self.hdulist[0].data, center, 
+        try:
+            center = int(coords[0]), int(coords[1])
+        except IndexError:
+            print "Did not understand masking command. Try again."
+            return
+        masks.mask_point_source("W1", self.maskhdulist[0].data, center, 
                                 self.masknum)
         self.masknum = self.masknum + 1
-        self.load_image()
+        return self.load_mask()
+
+    def do_reload(self, arg):
+        '''Reloads the argument given.
+
+        If 'mask' is given, the mask is reloaded. If 'int' is given, the 
+        intensity image is reloaded.
+        '''
+        target = arg
+        if target.lower() is "mask":
+            return self.load_mask()
+        elif target.lower() is "int":
+            return self.load_image()
+        else:
+            print "Either type 'int' or 'mask' to reload."
 
     def do_m(self, arg):
         '''Alias for do_mask'''
         return self.do_mask(arg)
 
-    def load_image(self):
-        '''Reloads the ds9 window.'''
-        self.ds9.set_pyfits(self.hdulist)
+    def load_mask(self, frame=1):
+        '''Refreshes the view of the mask in the given frame.'''
+        self.ds9.set("frame {0:d}".format(frame))
+        self.ds9.set_pyfits(self.maskhdulist)
         self.ds9.set('regions', self.region)
+
+    def load_image(self, frame=2, maskframe=1):
+        '''Loads the image into frame 2.'''
+        self.ds9.set("frame {0:d}".format(frame))
+        self.ds9.set_pyfits(self.imagehdulist)
+        self.ds9.set("frame {0:d}".format(maskframe))
 
     def do_save(self, arg):
         '''Saves the image and quits.'''
-        close_fits(self.hdulist, self.target)
+        close_fits(self.maskhdulist, self.target)
         return True
 
     def default(self, arg):
-        self.do_cut(arg)
+        num = arg.count(" ")
+        if num == 0:
+            return self.do_cut(arg)
+        elif num == 1:
+            return self.do_mask(arg)
+        else:
+            print "Did not understand command that was given. Try again."
+            return
 
     def do_quit(self, arg):
         '''Quits without saving.'''

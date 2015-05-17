@@ -20,7 +20,7 @@ def build_masks(
         BASEDIR, WISETable, threshold=0, runbands=None,
         foregroundbase="foreground", pixelmaskbase="bad_pixels", 
         outputbase="mask", maskconfig="", ignore_exception=False, 
-        overwrite=False, regionbase="ellipseregion"):
+        overwrite=True, regionbase="ellipseregion"):
     '''Builds masks for specified objects.
 
     The objects to be built should be specified in WISETable, which should be a
@@ -264,7 +264,7 @@ def mask_elliptical_galaxy(
     print ("Please remove object {0} in "
         "{1}.".format(phot.extract_name_from_galaxy_dir(galaxydir), maskband))
     maskprog = MaskCMD(
-        segment_needs_normalization, galaxy_removed, regionpath)
+        segment_needs_normalization, galaxy_removed, image, regionpath)
     maskprog.cmdloop()
     normalize_segmentation_map(galaxy_removed, normalized_segment)
     spreadmask(galaxydir, spreadpix, normalized_segment, outputfile=fullmask,
