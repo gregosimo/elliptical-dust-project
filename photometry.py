@@ -1795,11 +1795,18 @@ def deextinct_data(photometry_table, extinction=""):
                                              category=category)
             unext_err = name_photometry_column(band, error=True,
                                                category=category)
-            extincted_table[unext_mag] = conv.extinction_correction(
-                band, extincted_table[ap_mag], extincted_table["E_B_V_SandF"])
-            extincted_table[unext_err] = np.sqrt(
-                extincted_table[ap_err]**2 +
-                extincted_table["stdev_E_B_V_SandF"]**2)
+            # Just in case both UVBANDS are not passed through at the same
+            # time. When I move de-exinction to galaxy_photometry, this will be
+            # a moot point!
+            try:
+                extincted_table[unext_mag] = conv.extinction_correction(
+                    band, extincted_table[ap_mag], 
+                    extincted_table["E_B_V_SandF"])
+                extincted_table[unext_err] = np.sqrt(
+                    extincted_table[ap_err]**2 +
+                    extincted_table["stdev_E_B_V_SandF"]**2)
+            except KeyError:
+                pass
         return extincted_table
 
 
