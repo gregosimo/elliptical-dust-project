@@ -1652,6 +1652,7 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
     A cutout for each band will be created that contains the aperture
     photometry ellipse as well as the ellipse which samples the sky.
     '''
+    print "Creating Cutout for {0}".format(WISErow["objstr_01"])
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     for band in runbands:
         # We can either get the photometry from the WISErow, or we can
