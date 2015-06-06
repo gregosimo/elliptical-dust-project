@@ -45,12 +45,12 @@
 
 
   !These are parameters for the delayed-tau model.
-  pset%sfh      = 1     !set SFH to "SSP"
+  pset%sfh      = 1     !set SFH to delayed-tau
   pset%tau      = 1.0   !Timescale for the suppression of star formation
-  !pset%const
+  pset%const    = 0.0
   pset%sf_start = 0.0   !When 
-  pset%tburst   = 11.0
-  pset%fburst   = 0.0
+  !pset%tburst   = 11.0  !When the additional burst of star formation occurs.
+  pset%fburst   = 0.1   ! CHANGE: Set some fraction of stars to form later.
 
   !define the parameter set.  These are the default values, specified 
   !in sps_vars.f90, but are explicitly included here for transparency
@@ -65,21 +65,22 @@
 
   !compute the CSP
   DO i=1,14
-    pset%tau = i
+    pset%tburst = i
     ! Input is the parameter set (pset)
     ! Outputs are the time-dependent mass, bolometric luminosity, and spectra.
     CALL SSP_GEN(pset,mass_ssp,lbol_ssp,spec_ssp)
     !compute mags and write out mags and spec for SSP
     ! Compute the composite stellar population given a star-formation history, and
     ! write out the magnitudes.
-    WRITE (file1, "(A17,I0.2)") "tau_change/early_t", i
+    ! NOTE: WHEN CHANGING THE FILENAME, CHANGE THE LENGTH OF THE FORMAT!!!
+    WRITE (file1, "(A21,I0.2)") "tburst_change/early_t", i
     CALL COMPSP(3,1,file1,mass_ssp,lbol_ssp,spec_ssp,pset,ocompsp)
   END DO
 
   ! Now make an SSP for comparison.
   pset%sfh  = 0 
   CALL SSP_GEN(pset,mass_ssp,lbol_ssp,spec_ssp)
-  file2 = "tau_change/ssp"
+  file2 = "tburst_change/ssp"
   CALL COMPSP(3,1,file2,mass_ssp,lbol_ssp,spec_ssp,pset,ocompsp)
 
  END PROGRAM EARLY_CSP
