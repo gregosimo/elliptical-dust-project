@@ -22,7 +22,7 @@ import scipy.stats.mstats
 import masks
 import queries as query
 import synthetic_photometry as synphot
-import WISE_conversions as conv
+import band_conversions as conv
 
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
