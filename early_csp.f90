@@ -46,7 +46,7 @@
 
   !These are parameters for the delayed-tau model.
   pset%sfh      = 1     !set SFH to delayed-tau
-  pset%tau      = 1.0   !Timescale for the suppression of star formation
+  pset%tau      = 0.1   !Timescale for the suppression of star formation
   pset%const    = 0.0
   pset%sf_start = 0.0   !When 
   !pset%tburst   = 11.0  !When the additional burst of star formation occurs.
@@ -73,7 +73,7 @@
     ! Compute the composite stellar population given a star-formation history, and
     ! write out the magnitudes.
     ! NOTE: WHEN CHANGING THE FILENAME, CHANGE THE LENGTH OF THE FORMAT!!!
-    WRITE (file1, "(A21,I0.2)") "tburst_change/early_t", i
+    WRITE (file1, "(A21,I0.2)") "tburst_change/low_tau", i
     CALL COMPSP(3,1,file1,mass_ssp,lbol_ssp,spec_ssp,pset,ocompsp)
   END DO
 
