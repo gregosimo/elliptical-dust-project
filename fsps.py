@@ -126,6 +126,10 @@ def tburst_plot(times, TBURST_DIR=TBURST_PATH, prefix="early_t",
     command to place it.'''
     for blueband, redband in bands:
         plt.figure()
+        filename = os.path.join(TBURST_DIR, "ssp.mags")
+        magtable = read_mags(filename)
+        plt.plot(magtable["Age"]/1e9, magtable[blueband] - magtable[redband],
+                 label="SSP")
         for i in times:
             filename = os.path.join(TBURST_DIR, 
                                     "{0}{1:02d}.mags".format(prefix, i))
