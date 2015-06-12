@@ -141,6 +141,20 @@ def DNflux2Vegamag(band, flux):
         raise ValueError("Cannot convert GALEX measurements to Vega.")
     return 
 
+def DNflux2ABmag(band, flux):
+    '''Returns a flux in the AB system.
+
+    This returns a flux that is given in the AB magnitude system. The AB
+    magnitude system returns both WISE and GALEX fluxes. This differs from the
+    Vega system, where UV fluxes cannot be converted.'''
+    # Since the natural zero-points are in different systems, this function
+    # will be broken up into cases.
+    mag = flux2mag(flux, 1, get_zero_point_magnitude_level(band))
+    if band in WISE_bands:
+        mag = Vega2ABmag(band, mag)
+    return mag
+
+
 def DN_err_to_mag_err(galaxydir, band, DNerr, DNflux, 
                       baseobjectfile="ellipse_aperture", mask="", 
                       useskybase="sky_level", skymethod="adaptive", 
@@ -202,6 +216,7 @@ def Jansky2Vegamag(band, flux, colorIndex=-2):
         mag = flux2mag(flux, get_zero_point_flux_level(band, colorIndex), 0)
     elif band in GALEX_bands:
         raise ValueError("Could not convert GALEX band to Vega system.")
+    return mag
 
 def Jansky2ABmag(band, flux, colorIndex=-2):
     '''Converts a flux in Janskys to an AB magnitude.'''
@@ -214,36 +229,31 @@ def Jansky2ABmag(band, flux, colorIndex=-2):
 
 def Jansky_err_to_mag_err(band, flux, fluxerr):
     '''Converts an error in Janskys to an error in magnitudes.'''
-    return fluxerr2magerr(flux, fluxerr, get_zero_point_flux_level(band),
+    err = fluxerr2magerr(flux, fluxerr, get_zero_point_flux_level(band),
             get_zero_point_flux_uncertainty(band), 0, 0)
-
+    return err
 
 def Vegamag2Jansky(band, mag, colorIndex=-2):
     '''Converts a Vega magnitude into Janskys.'''
-    return mag2flux(mag, 0, get_zero_point_flux_level(band))
+    if band in WISE_bands:
+        flux = mag2flux(mag, 0, get_zero_point_flux_level(band))
+    elif band in GALEX_bands:
+        raise ValueError("Could not convert GALEX band to Vega system.")
+    return flux
 
 def ABmag2Jansky(band, mag, colorIndex=-2):
     '''Converts an AB magnitude into Janskys.'''
-    return mag2flux(mag, 0, get_zero_point_flux_level(band))
+    if band in WISE_bands:
+        mag = AB2Vegamag(band, mag)
+    flux = mag2flux(mag, 0, get_zero_point_flux_level(band))
+    return flux
 
 def Mag_err_to_Jansky_err(band, mag, magerr):
     '''Converts an error in WISE magnitudes to an error in Janskys.'''
-    return magerr2fluxerr(mag, magerr, 0, 0, get_zero_point_flux(band),
-            get_zero_point_uncertainty(band))
+    err =  magerr2fluxerr(mag, magerr, 0, 0, get_zero_point_flux(band),
+                          get_zero_point_uncertainty(band))
+    return err
 
-
-def DNflux2ABmag(band, flux):
-    '''Returns a flux in the AB system.
-
-    This returns a flux that is given in the AB magnitude system. The AB
-    magnitude system returns both WISE and GALEX fluxes. This differs from the
-    Vega system, where UV fluxes cannot be converted.'''
-    # This is really poorly named. There should be a better way of doing things.
-    rawmag = DNflux2Vegamag(band, flux)
-    # WISE mags need to be corrected in order to be in the AB magnitude system.
-    if band in WISE_bands:
-        rawmag = Vega2ABmag(band, rawmag)
-    return rawmag
 
 
 ###############################################################################
@@ -278,7 +288,9 @@ def get_zero_point_magnitude_level(band):
     '''Returns the zero-point between DN and magnitudes.
     
     Since WISE is based on the Vega system, if the band is a WISE band, the
-    zero-point will be a Vega zero-point. '''
+    zero-point will be a Vega zero-point.
+    
+    GALEX is based on the AB system, so a GALEX zero-point will be in AB.'''
     if band in WISE_bands:
         zp = ZERO_POINT_VEGA_MAGS[band]
     elif band in GALEX_bands:
