@@ -55,12 +55,15 @@ def filter_mag_table(magtable):
 
     These entries will namely be age, W1, W2, W3, W4, NUV, and FUV.
     '''
-    newtable = Table([10**magtable["log(age)"], magtable["filter10"],
-                      magtable["filter11"], magtable["filter12"], 
-                      magtable["filter83"], magtable["filter84"], 
-                      magtable["filter85"], magtable["filter86"], 
-                      magtable["filter62"], magtable["filter63"]], 
-                     names=("Age", "J", "H", "Ks", "W1", "W2", "W3", "W4", 
+    newtable = Table([10**magtable["log(age)"], 10**magtable["log(SFR)"],
+                      magtable["filter10"], magtable["filter11"], 
+                      magtable["filter12"], magtable["filter83"], 
+                      magtable["filter84"], magtable["filter85"], 
+                      magtable["filter86"], magtable["filter62"], 
+                      magtable["filter63"]], 
+                     names=("Age", "SFR", 
+                            "J", "H", "Ks", 
+                            "W1", "W2", "W3", "W4", 
                             "FUV", "NUV"))
     return newtable
 
@@ -110,7 +113,7 @@ def color_age_plot(modelcolor, modelage, datacolor=None, dataage=None,
 
 def tburst_plot(times, TBURST_DIR=TBURST_PATH, prefix="early_t", 
                 title="Burst Evolution", label="{0} Gyr", loc="upper right",
-                SSPfile = "SSP.mags
+                SSPfile = "SSP.mags",
                 bands=[("W1", "W2"), ("W2", "W3"), ("W3", "W4")]):
     '''Makes a plot showing different values of tburst.
 
