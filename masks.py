@@ -20,7 +20,7 @@ def build_masks(
         BASEDIR, WISETable, threshold=0, runbands=None,
         foregroundbase="foreground", pixelmaskbase="bad_pixels", 
         outputbase="mask", maskconfig="", ignore_exception=False, 
-        overwrite=False, regionbase="ellipseregion"):
+        overwrite=True, regionbase="ellipseregion"):
     '''Builds masks for specified objects.
 
     The objects to be built should be specified in WISETable, which should be a
@@ -201,7 +201,7 @@ def mask_algorithm(
     # Add regionbase.
     if maskband in phot.IRBANDS and maskband is not "W1":
         shutil.copy(phot.format_band_dependence(outputbase, "W1", "fits",
-            galaxydir), phot.change_to_galaxy_dir(galaxydir, maskfile))
+            galaxydir), maskfile)
     elif maskband == "FUV" and (phot.match_filter(galaxydir, 
         "FUV").replace("-fd-", "-nd-") == phot.match_filter(galaxydir, "NUV")):
         shutil.copy(phot.format_band_dependence(outputbase, "NUV", "fits",
@@ -216,7 +216,7 @@ def mask_algorithm(
                                maskconfig="", overwrite=overwrite, 
                                regionbase=regionbase)
 
-        if pixelmaskbase:
+        if maskband not in phot.IRBANDS and pixelmaskbase:
             # I'd like to add this to the GALEX pipeline rather than putting it
             # here. So instead of using the sky background value, we have a
             # specific image which contains invalid pixels. However, that sounds
@@ -264,7 +264,7 @@ def mask_elliptical_galaxy(
     print ("Please remove object {0} in "
         "{1}.".format(phot.extract_name_from_galaxy_dir(galaxydir), maskband))
     maskprog = MaskCMD(
-        segment_needs_normalization, galaxy_removed, regionpath)
+        segment_needs_normalization, galaxy_removed, image, regionpath)
     maskprog.cmdloop()
     normalize_segmentation_map(galaxy_removed, normalized_segment)
     spreadmask(galaxydir, spreadpix, normalized_segment, outputfile=fullmask,
@@ -281,7 +281,11 @@ def spreadmask(workdir, pixels, maskimage, outputfile="foreground.fits",
     mask_indices = np.transpose(np.nonzero(origmask))
     for coord in mask_indices:
         setedges(origmask, coord[0], coord[1], size=pixels, edgevalue=1)
-    hdulist.writeto(os.path.join(workdir, outputfile), clobber=overwrite)
+    try:
+        hdulist.writeto(os.path.join(workdir, outputfile), clobber=overwrite)
+    except IOError:
+        print "{0} already exists and overwrite disabled. Skipping.".format(
+            outputfile)
     hdulist.close()
     
 def setedges(fullarray, i, j, size=5, edgevalue=1):
@@ -374,8 +378,6 @@ def remove_galaxy_from_mask(imagepath, newimagepath, coord):
         os.remove(newimagepath)
         newhdu.writeto(newimagepath)
     
-
-
 def remove_segment(image, number):
     '''Takes a FITS image and removes the region corresponding to the segment.
 
@@ -387,7 +389,7 @@ def remove_segment(image, number):
     image_copy = image.copy()
     image_copy[segindices] = 0
     return image_copy
-
+        
 def normalize_segmentation_map(image, output):
     '''Takes a segmentation map and sets all of the pixels to be either 1 or
     0.'''
@@ -523,6 +525,43 @@ def mask_circle(image, center, radius, outputfile):
     xcenter, ycenter = center
     command = build_imcalc_circle(xcenter, ycenter, radius)
     run_imcalc(image, outputfile, command)
+
+def mask_point_source(band, image, center, fill_value):
+    '''Masks a point source on an image.
+
+    Takes a coordinate and masks a circle with size of the typical FWHM of the
+    PSF. The mask will be filled in with the fill_value.
+    '''
+    radius = phot.getPSFFWHM(band, pixel=True)
+    mask_circle(image, center, radius, fill_value)
+
+def mask_circle(image, center, radius, fill_value):
+    '''Masks a circular region of the image
+
+    This function sets the mask flag of an image that lies within a given 
+    circle. The image should be a MaskedArray of some sort, center should be a
+    tuple of x and y values, and radius should be the radius. 
+    
+    The center coordinates should be given as image indices (i.e. starting 
+    from 1)
+    '''
+    xcenter, ycenter = center
+    image_coords = np.indices(image.shape)
+    circlemask = test_if_in_circle(
+            image_coords[1], image_coords[0], xcenter-1, ycenter-1, radius)
+    image[circlemask] = fill_value
+
+def test_if_in_circle(x, y, xcenter, ycenter, radius):
+    '''Tests if a point is in the given circle.
+
+    x and y are the x and y values of the point to be tested. It should be
+    given as the numpy index (starting at 0). xcenter and ycenter should also
+    be given as numpy indices, and indicate the central coordinate of the
+    circle. 
+    '''
+    xcen = x - xcenter
+    ycen = y - ycenter
+    return xcen**2 + ycen**2 <= radius**2
 
 def mask_ellipse(image, center, semimajor, semiminor, pa, outputfile):
     '''Masks an elliptical region of the image.

@@ -1,5 +1,6 @@
 import numpy as np
 from astropy.table import Table
+from scipy.interpolate import interp1d
 
 WISE_bands = ["W1", "W2", "W3", "W4"]
 TWOMASS_bands = ["J", "H", "Ks"]
@@ -309,6 +310,15 @@ def get_zero_point_magnitude_uncertainty(band):
         zpunc = ZERO_POINT_AB_MAG_UNC[band]
     return zpunc
 
+fluxcorrection = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921, 
+    1.0000, 1.0142, 1.0347]),
+    "W2": np.array([1.0206, 1.0066, 0.9976, 0.9935, 0.9943, 1.0000, 1.0107,
+        1.0265]),
+    "W3": np.array([1.1344, 1.0088, 0.9393, 0.9169, 0.9373, 1.0000, 1.0181,
+        1.2687]),
+    "W4": np.array([1.0142, 1.0013, 0.9934, 0.9905, 0.9926, 1.0000, 1.0130,
+        1.0319])}
+
 def color_correction(band, index):
     '''Returns the color correction appropriate for a power law.
 
@@ -322,6 +332,45 @@ def color_correction(band, index):
         return 1.0
     return fluxcorrection[band][3-index]
 
+index_lookup = {"W1-W2": [-0.4040, -0.0538, 0.2939, 0.6393, 0.9828, 1.3246,
+                          1.6649, 2.0041],
+                "W2-W3": [-0.9624, -0.748, 0.8575, 1.8357, 2.8586, 3.9225,
+                          5.0223, 6.1524], 
+                "W3-W4": [-0.8684, 0.0519, 0.7200, 1.4458, 2.1272, 2.7680,
+                          3.3734, 3.9495]}
+
+def WISE_to_spectral_indices(w1, w2, w3, w4):
+    '''Takes WISE magnitudes and returns spectral indices.
+
+    Each of the bands should be given. The function will then compute an
+    appropriate index for each of the color combinations, and then return the
+    nearest index to the combined combination.
+
+    The way this is essentially done is to fit an interpolating spline to each
+    of the indices and color values, and then interpolate an index for each of
+    the colors. The average of the indices is then taken and rounded to the
+    nearest integer.
+    '''
+    w1w2_index = index_from_color("W1-W2", w1, w2)
+    w2w3_index = index_from_color("W2-W3", w2, w3)
+    w3w4_index = index_from_color("W3-W4", w3, w4)
+
+    mean_index = (w1w2_index + w2w3_index + w3w4_index) / 3.0
+    return np.around(mean_index)
+
+def index_from_color(color, mag1, mag2):
+    '''Calculates a spectral index from a given WISE color.
+
+    The index will be a floating point number calculated from an interpolated
+    spline.'''
+    yvals = np.arange(3, -5, -1)
+    xvals = index_lookup[color]
+    wise_color = mag1 - mag2
+    colorfunc = interp1d(xvals, yvals)
+    yinterpolated = colorfunc(wise_color)
+    return yinterpolated
+
+
 def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=WISE_bands):
     '''Takes a table and converts the flux measurements to magnitude
     measurements.
@@ -334,3 +383,60 @@ def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=WISE_bands):
         Mag_Table["{0}_err".format(band)] = Jansky_err_to_WISE_mag_err(band,
                 Flux_Table[band], Flux_Table["{0}_err".format(band)])
     return Mag_Table
+
+###############################################################################
+# Extinction #
+###############################################################################
+
+def NUV_extinction(EB_V, Rv=3.1):
+    '''Calculates the extinction in NUV.
+
+    This function currently uses the compact expression from Gil de Paz 2007.
+    This seems too simple so take it with a grain of salt.'''
+    A_NUV = 8.0 * EB_V
+    return A_NUV
+
+def FUV_extinction(EB_V, Rv=3.1):
+    '''Calculates the extinction in FUV.
+
+    This function currently uses the compact expression from Gil de Paz 2007.
+    This seems too simple so take it with a grain of salt.'''
+    A_FUV = 7.9 * EB_V
+    return A_FUV
+
+def extinction_correction(band, truemag, EB_V, Rv=3.1, deredden=False):
+    '''Extincts a given magnitude using a reddening law.
+
+    This function assumes magnitudes are expressed in the AB system.
+    '''
+    # For non-UV bands, we'll set extinction to be 0. This may change in the
+    # future.
+    if band is "NUV":
+        A = NUV_extinction(EB_V, Rv)
+    elif band is "FUV":
+        A = FUV_extinction(EB_V, Rv)
+    else:
+        A = 0
+
+    if deredden:
+        extincted_mag = truemag - A
+    else:
+        extincted_mag = truemag + A
+
+    return extincted_mag
+
+def get_extinction_table(filepath):
+    '''Reads in an extinction table from the IRSA extinction service.
+
+    Note: The IRSA table must have been downloaded first. It can be queried
+    from
+    http://irsa.ipac.caltech.edu/applications/DUST/
+    '''
+    # In the future, this could query the IRSA server directly. But why bother?
+    extinction_table = Table.read(filepath, format="ascii.ipac",
+                                  include_names=("objname", "E_B_V_SandF",
+                                                 "mean_E_B_V_SandF",
+                                                 "stdev_E_B_V_SandF",
+                                                 "E_B_V_SFD", "mean_E_B_V_SFD",
+                                                 "stdev_E_B_V_SFD"))
+    return extinction_table
