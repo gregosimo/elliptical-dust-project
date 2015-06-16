@@ -13,7 +13,23 @@ RAMPAZZOBASE = os.path.join(BASEPATH, "Rampazzo_DB")
 JARRETTBASE = os.path.join(BASEPATH, "Jarrett_DB")
 
 def move_rampazzo():
-    rampazzodata = Table.read(os.path.join(RAMPAZZOBASE
+    # First read in Table 1
+    # Then Table 2
+    # Concatenate them.
+    # filter them for galaxies we have data for.
+    pass
+
+
+def read_Rampazzo_Table1(tablepath=os.path.join(BASEPATH,
+                                                "Rampazzo_Table1.csv")):
+    rampazzotable = Table.read(tablepath, format="ascii.csv", guess=False,
+                               data_start=3, names = ("Galaxy",
+                                                      "RSA morph. type", "T",
+                                                      "Terr", "D", "H0D",
+                                                      "T88 Group", "MK", "H0M",
+                                                      "re", "sigc"))
+
+                               and)
 
 if __name__ == "__main__":
 
@@ -22,4 +38,4 @@ if __name__ == "__main__":
     # Write ATLAS3D parameters and magnitudes to paper directory.
     # Write Jarrett fluxes (paper and calculated) to paper directory.
     # Move FSPS output to paper directory.
-    
+
