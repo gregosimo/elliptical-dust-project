@@ -1,6 +1,6 @@
 import os
 
-from astropy.table import Table
+from astropy.table import Table, vstack
 import numpy as np
 
 import photometry as phot
@@ -24,9 +24,10 @@ def move_rampazzo():
 def read_Rampazzo_Table1(tablepath=os.path.join(BASEPATH,
                                                 "Rampazzo_Table1.csv")):
     rampazzotable = Table.read(tablepath, format="ascii.csv", guess=False,
-                               data_start=2, delimiter=":", 
+                               data_start=2, delimiter=":", comment="\s*#",
                                names=("Galaxy", "RSA morph. type", "T", "Terr", 
-                                      "D", "T88 Group", "MK", "re", "sigc"))
+                                      "D", "T88 Group", "MK", "re", "sigc"),
+                               fill_values=[("", "0"), ('---', "0")])
     # First flag the entries which are starred.
     rampazzotable["H0D"] = np.char.endswith(rampazzotable["D"], '*')
     rampazzotable["H0MK"] = np.char.endswith(rampazzotable["MK"], '*')
@@ -51,9 +52,10 @@ def read_Rampazzo_Table1(tablepath=os.path.join(BASEPATH,
 def read_Rampazzo_Table2(tablepath=os.path.join(BASEPATH,
                                                 "Rampazzo_Table2.csv")):
     rampazzotable = Table.read(tablepath, format="ascii.csv", guess=False,
-                               data_start=2, delimiter=":", 
+                               data_start=2, delimiter=":", comment="\s*#",
                                names=("Galaxy", "RSA morph. type", "T", "Terr", 
-                                      "D", "T88 Group", "MK", "re", "sigc"))
+                                      "D", "T88 Group", "MK", "re", "sigc"),
+                               fill_values=[("", "0"), ('---', "0")])
     # First flag the entries which are starred.
     rampazzotable["H0D"] = np.char.endswith(rampazzotable["D"], '*')
     rampazzotable["H0MK"] = np.char.endswith(rampazzotable["MK"], '*')
@@ -75,6 +77,22 @@ def read_Rampazzo_Table2(tablepath=os.path.join(BASEPATH,
     
     return rampazzotable
 
+def rampazzo_sample_list(table1=os.path.join(BASEPATH, "Rampazzo_Table1.csv"), 
+                         table2=os.path.join(BASEPATH, "Rampazzo_Table2.csv"),
+                         destination=os.path.join(PAPERPATH, 
+                                                  "Rampazzo_sample.csv")):
+    '''Exports the current sample list to the destination.
+
+    This function builds up a sample list from the Rampazzo Tables and exports
+    them to the destination (by default the folder where the paper will be).
+    '''
+    table_1 = read_Rampazzo_Table1(table1)
+    table_2 = read_Rampazzo_Table2(table2)
+    fulltable = vstack([table_1, table_2])
+
+    sampletable = phot.filterTableforCompleteBands(RAMPAZZOBASE, fulltable)
+
+    sampletable.write(destination, format="ascii.csv", delimiter=":")
 
 
 if __name__ == "__main__":
