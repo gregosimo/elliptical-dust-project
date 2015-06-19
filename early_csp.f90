@@ -37,6 +37,8 @@
                             !see sps_vars.f90 for details of this var
   pset%zmet = 20            !define the metallicity (see the manual)
                             !20 = solar metallacity
+  add_agb_dust_model = 0    !Toggle the Villaume dust model. Good to determine
+                            !how much of the changes we see are caused by dust.
 
   ! Reads in all of the isochrones/libraries for a given metallicity. The
   ! metallicity should be specified as the argument. In order to read in all
