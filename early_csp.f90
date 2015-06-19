@@ -37,6 +37,8 @@
                             !see sps_vars.f90 for details of this var
   pset%zmet = 20            !define the metallicity (see the manual)
                             !20 = solar metallacity
+  add_agb_dust_model = 0    !Toggle the Villaume dust model. Good to determine
+                            !how much of the changes we see are caused by dust.
 
   ! Reads in all of the isochrones/libraries for a given metallicity. The
   ! metallicity should be specified as the argument. In order to read in all
@@ -73,7 +75,7 @@
     ! Compute the composite stellar population given a star-formation history, and
     ! write out the magnitudes.
     ! NOTE: WHEN CHANGING THE FILENAME, CHANGE THE LENGTH OF THE FORMAT!!!
-    WRITE (file1, "(A21,I0.2)") "tburst_change/early_t", i
+    WRITE (file1, "(A25,I0.2)") "tburst_change/noagbdust_t", i
     CALL COMPSP(3,1,file1,mass_ssp,lbol_ssp,spec_ssp,pset,ocompsp)
   END DO
 
