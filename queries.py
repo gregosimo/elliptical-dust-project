@@ -127,11 +127,15 @@ def batch_download_images(BASEDIR, objects, ras, decs, surveys, size=600,
     objecttable = Table({"objstr": objects, "ra": ras, "dec": decs})
     objecttable.write(catalogtablepath, format="ascii.ipac")
     objectcatalog = get_WISE_catalog_entries(catalogtablepath)
-    for object, ra, dec, survey in objectcatalog[["objstr_01", "ra", "dec",
+    for obj, ra, dec, survey in objectcatalog[["objstr_01", "ra", "dec",
             "cat"]]:
-        coaddID = query_metadata(ra, dec, survey)
-        query_image(BASEDIR, object, survey, coaddID, ra, dec, size=size,
+        try:
+            coaddID = query_metadata(ra, dec, survey)
+            query_image(BASEDIR, obj, survey, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
+        except URLError:
+            print "Skipped {0}.".format(obj)
+
 
 def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE, 
         catalog=CATALOG_NAMES["AllWISE"], radius=10, 
