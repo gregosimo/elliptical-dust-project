@@ -134,7 +134,13 @@ def batch_download_images(BASEDIR, objects, ras, decs, surveys, size=600,
             query_image(BASEDIR, obj, survey, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
         except URLError:
-            print "Skipped {0}.".format(obj)
+            print """
+            ###################################################################
+            ###################################################################
+            Skipping {0}.
+            ###################################################################
+            ###################################################################
+            """
 
 
 def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE, 
