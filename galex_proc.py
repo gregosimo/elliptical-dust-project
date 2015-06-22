@@ -114,7 +114,7 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
                 print "Did not have NUV exposure."
             if topfuv["fuv_exptime"] <= 0:
                 print "Did not have FUV exposure."
-            skipped_objects += topfuv["uploadID"]
+            skipped_objects.append(topfuv["uploadID"])
             
     for survey in surveys: 
         tab = surveytables[survey]
@@ -206,12 +206,14 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
                     try:
                         extract_image_with_coordinates(
                             extractedimage, ra, dec, sidelength, sidelength, 
-                            galaxydir)
-                    except iraf.IrafError:
+                            os.path.join(galaxydir,
+                                         os.path.basename(extractedimage)))
+                    except OSError:
                         os.mkdir(galaxydir)
                         extract_image_with_coordinates(
                             extractedimage, ra, dec, sidelength, sidelength, 
-                            galaxydir)
+                            os.path.join(galaxydir,
+                                         os.path.basename(extractedimage)))
                 # If an IOError is thrown, that means there was something
                 # strange that occurred with the extraction and I'd like to
                 # look into it.
@@ -228,15 +230,15 @@ def extract_image_with_coordinates(original, centerra, centerdec, arcsecwidth,
     '''Copies a part of an image to a destination file.
 
     The coordinates will be given in celestial coordinates. Note that the actual
-    computation is done on physical coordinates, so for particularl distortion
+    computation is done on physical coordinates, so for particularly distorted 
     portions of the image, weird geometries may occur.
     '''
     centerx, centery = phot.getpixelcoords(original, centerra, centerdec)
     width = arcsecwidth / phot.getPixelScale(band)
     height = arcsecheight / phot.getPixelScale(band)
 
-    extract_from_image_with_height_width(original, centerx, centery, height,
-            width, destination)
+    phot.copy_subimage_from_file_with_height_width(original, centerx, centery, 
+                                                   height, width, destination)
 
 def extract_from_image_with_height_width(original, centerx, centery, height,
         width, destination):
@@ -268,7 +270,7 @@ def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery,
     uppery = phot.fix_to_within_bounds(int(uppery), ysize, 0)+1
     subimage = "{0}[{1}:{2},{3}:{4}]".format(
         original, lowerx, upperx, lowery, uppery)
-    run_imcopy(subimage, destination)
+    phot.run_imcopy(subimage, destination)
 
 def folder_matchstring(filetile):
     '''Creates an approprite matchstring for a folder from a file tile.
