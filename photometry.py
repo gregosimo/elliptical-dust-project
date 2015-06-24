@@ -1809,7 +1809,8 @@ def deextinct_data(photometry_table, extinction=""):
             except KeyError:
                 pass
         return extincted_table
-
+    else:
+        return photometry_table
 
 
 
@@ -1968,14 +1969,16 @@ def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror,
     plt.ylabel(ylabel)
     plt.title(title)
 
-def ColorHistogramByClass(band1, band2, groups, xlabel, title, bins, xrange=(-4,
-    4)):
+def ColorHistogramByClass(band1, band2, groups, xlabel, title, bins, 
+                          colrange=(-4, 4)):
     '''Creates a histogam for colors for different classes.
     '''
     color = band1 - band2
     colorgroup = color.group_by(groups)
-    plt.hist(colorgroup.groups, bins, range=xrange, label=["Class {0}".format(i)
-        for i in range(5)], color=["black", "yellow", "green", "blue", "red"], histtype="bar")
+    plt.hist(colorgroup.groups, bins, range=colrange, 
+             label=["Class {0}".format(i) for i in range(5)], 
+             color=["black", "yellow", "green", "blue", "red"], 
+             histtype="stepfilled", stacked=True)
     plt.xlabel(xlabel)
     plt.ylabel("N")
     plt.title(title)
@@ -2044,6 +2047,123 @@ def generateCMDs(magtable):
     MIRplot(W2, N2color, MIRclass, "W2", "NUV-W2", title, loc="lower left")
     plt.figure()
     MIRplot(W3, N3color, MIRclass, "W3", "NUV-W3", title)
+
+def generate_adjacent_color_color(magtable):
+    '''Generates all colors using adjacent colors.
+
+    By adjacent colors, I mean closest bands, such as FUV-NUV, NUV-J, etc.
+    '''
+    MIRclass = magtable["MIR class"]
+    W1 = magtable["w1apmag"]
+    W2 = magtable["w2apmag"]
+    W3 = magtable["w3apmag"]
+    W4 = magtable["w4apmag"]
+    J = magtable["j_m_k20fe"]
+    H = magtable["h_m_k20fe"]
+    K = magtable["k_m_k20fe"]
+    #FUV = magtable["FUVapmags"]
+    #NUV = magtable["NUVapmags"]
+
+    #FNcolor = FUV - NUV
+    #NJcolor = NUV - J
+    JHcolor = J - H
+    HKcolor = H - K
+    KW1color = K - W1
+    W1W2color = W1 - W2
+    W2W3color = W2 - W3
+    W3W4color = W3 - W4
+
+    title = "MIR class correlations"
+#   plt.figure()
+#   MIRplot(FNcolor, NJcolor, MIRclass, "NUV-J", "FUV-NUV", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(FNcolor, JHcolor, MIRclass, "J-H", "FUV-NUV", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(FNcolor, HKcolor, MIRclass, "H-Ks", "FUV-NUV", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(FNcolor, KW1color, MIRclass, "Ks-W1", "FUV-NUV", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(FNcolor, W1W2color, MIRclass, "W1-W2", "FUV-NUV", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(FNcolor, W2W3color, MIRclass, "W2-W3", "FUV-NUV", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(FNcolor, W3W4color, MIRclass, "W3-W4", "FUV-NUV", title,
+#           loc="lower left")
+
+#   plt.figure()
+#   MIRplot(NJcolor, JHcolor, MIRclass, "J-H", "NUV-J", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(NJcolor, HKcolor, MIRclass, "H-Ks", "NUV-J", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(NJcolor, KW1color, MIRclass, "Ks-W1", "NUV-J", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(NJcolor, W1W2color, MIRclass, "W1-W2", "NUV-J", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(NJcolor, W2W3color, MIRclass, "W2-W3", "NUV-J", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(NJcolor, W3W4color, MIRclass, "W3-W4", "NUV-J", title,
+#           loc="lower left")
+
+    plt.figure()
+    MIRplot(HKcolor, JHcolor, MIRclass, "H-Ks", "J-H",  title,
+            loc="lower left")
+    plt.figure()
+    MIRplot(KW1color, JHcolor, MIRclass, "Ks-W1", "J-H", title,
+            loc="upper left")
+    plt.figure()
+    MIRplot(W1W2color, JHcolor, MIRclass, "W1-W2", "J-H", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(W2W3color, JHcolor, MIRclass, "W2-W3", "J-H", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(W3W4color, JHcolor, MIRclass, "W3-W4", "J-H", title,
+            loc="upper left")
+
+    plt.figure()
+    MIRplot(KW1color, HKcolor, MIRclass, "Ks-W1", "H-Ks", title,
+            loc="lower left")
+    plt.figure()
+    MIRplot(W1W2color, HKcolor, MIRclass, "W1-W2", "H-Ks", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(W2W3color, HKcolor, MIRclass, "W2-W3", "H-Ks", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(W3W4color, HKcolor, MIRclass, "W3-W4", "H-Ks", title,
+            loc="lower right")
+
+    plt.figure()
+    MIRplot(W1W2color, KW1color, MIRclass, "W1-W2", "Ks-W1", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(W2W3color, KW1color, MIRclass, "W2-W3", "Ks-W1", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(W3W4color, KW1color, MIRclass, "W3-W4", "Ks-W1", title,
+            loc="lower right")
+
+    plt.figure()
+    MIRplot(W2W3color, W1W2color, MIRclass, "W2-W3", "W1-W2", title,
+            loc="upper left")
+    plt.figure()
+    MIRplot(W3W4color, W1W2color, MIRclass, "W3-W4", "W1-W2", title,
+            loc="upper left")
+
+    plt.figure()
+    MIRplot(W3W4color, W2W3color, MIRclass, "W3-W4", "W2-W3", title,
+            loc="upper left")
 
 def generateColorColors2MASS(magtable):
     '''Generates permutations of Color-Color Diagrams.
