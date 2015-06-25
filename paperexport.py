@@ -87,6 +87,21 @@ def read_Rampazzo_TableA1(tablepath=os.path.join(BASEPATH,
                                       "12.7 um", "12.7 um err", "17 um", 
                                       "17 um err"),
                                fill_values=[("", "0"), ("-", "0")])
+    # If there are no detections, set the values to 0 when filled.
+    rampazzotable["6.22 um"].fill_value = 0.0
+    rampazzotable["7.7 um"].fill_value = 0.0
+    rampazzotable["8.6 um"].fill_value = 0.0
+    rampazzotable["11.3 um"].fill_value = 0.0
+    rampazzotable["12.7 um"].fill_value = 0.0
+    rampazzotable["17 um"].fill_value = 0.0
+    # For non-detections, I'm setting the upper limits to be the uncertainty on
+    # the weakest detection.
+    rampazzotable["6.22 um err"].fill_value = 4.4
+    rampazzotable["7.7 um err"].fill_value = 11.9
+    rampazzotable["8.6 um err"].fill_value = 1.1
+    rampazzotable["11.3 um err"].fill_value = 3.0
+    rampazzotable["12.7 um err"].fill_value = 1.5
+    rampazzotable["17 um err"].fill_value = 1.1
     return rampazzotable
 
 def rampazzo_sample_list(table1=os.path.join(BASEPATH, "Rampazzo_Table1.csv"), 
