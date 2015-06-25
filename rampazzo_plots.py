@@ -50,8 +50,15 @@ def MIRplot(x, y, groupkey, xlabel, ylabel, title, yerr=None, xerr=None,
         xerrgroup = xerr.group_by(groupkey)
 
     for MIRclass in xgroup.groups.keys:
-        plt.errorbar(xgroup.groups[MIRclass], ygroup.groups[MIRclass],
-                     yerrgroup.groups[MIRclass], xerrgroup.groups[MIRclass], 
+        # Adding errors to this is proving to be much more difficult than
+        # expected...
+#        try:
+#            plt.errorbar(xgroup.groups[MIRclass], ygroup.groups[MIRclass],
+#                         yerrgroup.groups[MIRclass], xerrgroup.groups[MIRclass], 
+#                         label="Class {0}".format(MIRclass), 
+#                         **MIR_Symbols[MIRclass])
+#        except UnboundLocalError:
+            plt.plot(xgroup.groups[MIRclass], ygroup.groups[MIRclass], 
                      label="Class {0}".format(MIRclass), 
                      **MIR_Symbols[MIRclass])
 
@@ -209,6 +216,51 @@ def generate_adjacent_color_color(magtable):
 
     plt.figure()
     MIRplot(W3W4color, W2W3color, MIRclass, "W3-W4", "W2-W3", title,
+            loc="upper left")
+
+def jk_color_vs_wise_colors(magtable):
+    '''Generates J-Ks vs wise colors.
+
+    Although J and Ks aren't adjacent bands, they are usually put together as a
+    representative color for the 2MASS infrared region. This function makes
+    plots with them instead of J-H and H-Ks separately.
+    '''
+    MIRclass = magtable["MIR class"]
+    W1 = magtable["w1apmag"]
+    W2 = magtable["w2apmag"]
+    W3 = magtable["w3apmag"]
+    W4 = magtable["w4apmag"]
+    J = magtable["j_m_k20fe"]
+    K = magtable["k_m_k20fe"]
+    #FUV = magtable["FUVapmags"]
+    #NUV = magtable["NUVapmags"]
+
+    #FNcolor = FUV - NUV
+    #NJcolor = NUV - J
+    JKcolor = J - K
+    KW1color = K - W1
+    W1W2color = W1 - W2
+    W2W3color = W2 - W3
+    W3W4color = W3 - W4
+
+    title = "MIR Class Correlations"
+#   plt.figure()
+#   MIRplot(JKcolor, FNcolor, MIRclass, "J-K", "FUV-NUV", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(JKcolor, NJcolor, MIRclass, "J-H", "NUV-J", title,
+#           loc="lower left")
+    plt.figure()
+    MIRplot(KW1color, JKcolor, MIRclass, "Ks-W1", "J-Ks", title,
+            loc="lower left")
+    plt.figure()
+    MIRplot(W1W2color, JKcolor, MIRclass, "W1-W2", "J-Ks", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(W2W3color, JKcolor, MIRclass, "W2-W3", "J-Ks", title,
+            loc="upper left")
+    plt.figure()
+    MIRplot(W3W4color, JKcolor, MIRclass, "W3-W4", "J-Ks", title,
             loc="upper left")
 
 def generateColorColors2MASS(magtable):
