@@ -22,7 +22,7 @@ import scipy.stats.mstats
 import masks
 import queries as query
 import synthetic_photometry as synphot
-import WISE_conversions as conv
+import band_conversions as conv
 
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
@@ -456,11 +456,17 @@ def filterTableforExistingObjects(BASEDIR, fulltable):
     '''Creates another table that only has the objects with images.'''
     return filterTable(BASEDIR, fulltable, objectHasImage)
 
-def filterTableforCompleteBands(
-        BASEDIR, fulltable, copy=True, completebands=bands):
+def filter_table_for_complete_bands(
+        BASEDIR, fulltable, copy=True, completebands=bands, galcol="objstr_01"):
     '''Returns a table that only has objects with complete observations'''
-    return filterTable(BASEDIR, fulltable, complete_for_bands, copy=True,
-                       checkbands=completebands)
+    return filterTableforCompleteBands(BASEDIR, fulltable, copy, completebands,
+                                       galcol)
+
+def filterTableforCompleteBands(
+        BASEDIR, fulltable, copy=True, galcol="objstr_01", completebands=bands):
+    '''Returns a table that only has objects with complete observations'''
+    return filterTable(BASEDIR, fulltable, complete_for_bands, copy=copy,
+                       checkbands=completebands, galcol=galcol)
 
 def match_filter(directory, band, fullpath=True, uncertainty=False, 
         sky=False):
@@ -592,12 +598,13 @@ def filterTable(BASEDIR, fulltable, isTrue, **kwargs):
     '''Filters a table based on a boolean method isTrue.'''
     try:
         copy = kwargs.pop("copy")
+        galcol = kwargs.pop("galcol")
     except KeyError:
         copy=True
     filteredTable = Table(fulltable, copy=copy, masked=False)
-    for i, object in enumerate(fulltable["objstr_01"]):
+    for i, object in enumerate(fulltable[galcol]):
         if not isTrue(BASEDIR, object, **kwargs):
-            filteredTable.remove_row(np.argwhere(filteredTable["objstr_01"] ==
+            filteredTable.remove_row(np.argwhere(filteredTable[galcol] ==
                     object)[0][0])
     return filteredTable
 
