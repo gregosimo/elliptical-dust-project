@@ -79,13 +79,16 @@ def read_Rampazzo_Table2(tablepath=os.path.join(BASEPATH,
 
 def read_Rampazzo_TableA1(tablepath=os.path.join(BASEPATH,
                                                  "Rampazzo_TableA1.csv")):
-    rampazzotable = Table.read(tablepath, format="ascci.csv", guess=False,
+    rampazzotable = Table.read(tablepath, format="ascii.csv", guess=False,
                                data_start=2, delimiter=":", comment="\s*#",
                                names=("Galaxy", "6.22 um", "6.22 um err", 
                                       "7.7 um", "7.7 um err", "8.6 um", 
                                       "8.6 um err", "11.3 um", "11.3 um err", 
                                       "12.7 um", "12.7 um err", "17 um", 
-                                      "17 um err")
+                                      "17 um err"),
+                               fill_values=[("", "0"), ("-", "0")])
+    return rampazzotable
+
 def rampazzo_sample_list(table1=os.path.join(BASEPATH, "Rampazzo_Table1.csv"), 
                          table2=os.path.join(BASEPATH, "Rampazzo_Table2.csv"),
                          destination=os.path.join(PAPERPATH, 
