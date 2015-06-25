@@ -35,7 +35,7 @@
 
   imf_type  = 0             !define the IMF (1=Chabrier 2003)
                             !see sps_vars.f90 for details of this var
-  pset%zmet = 22            !define the metallicity (see the manual)
+  pset%zmet = 20            !define the metallicity (see the manual)
                             !20 = solar metallacity
   add_agb_dust_model = 1    !Toggle the Villaume dust model. Good to determine
                             !how much of the changes we see are caused by dust.
