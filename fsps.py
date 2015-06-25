@@ -10,6 +10,7 @@ import photometry as phot
 FSPS_PATH = "/home/regulus/simonian/year1/fsps"
 OUTPUT_PATH = os.path.join(FSPS_PATH, "OUTPUTS")
 TBURST_PATH = os.path.join(OUTPUT_PATH, "tburst_change")
+MET_DIR = os.path.join(OUTPUT_PATH, "met_change")
 
 ALL_COLORS = [("FUV", "NUV"), ("NUV", "W1"), ("W1", "W2"), ("W2", "W3"), 
               ("W3", "W4")]
@@ -114,7 +115,7 @@ def color_age_plot(modelcolor, modelage, datacolor=None, dataage=None,
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
-def tburst_plot(times, TBURST_DIR=TBURST_PATH, prefix="early_t", 
+def tburst_data_plot(times, TBURST_DIR=TBURST_PATH, prefix="early_t", 
                 title="Burst Evolution", label="{0} Gyr", loc="upper right",
                 SSPfile = "SSP.mags", bands=ALL_COLORS):
     '''Makes a plot showing different values of tburst.
