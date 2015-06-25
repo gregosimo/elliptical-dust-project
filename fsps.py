@@ -114,9 +114,9 @@ def color_age_plot(modelcolor, modelage, datacolor=None, dataage=None,
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
-def tburst_data_plot(times, TBURST_DIR=TBURST_PATH, prefix="early_t", 
-                title="Burst Evolution", label="{0} Gyr", loc="upper right",
-                SSPfile = "SSP.mags", bands=ALL_COLORS):
+def tburst_data_plot(times, atlas3dtable, TBURST_DIR=TBURST_PATH, 
+                     prefix="early_t", title="Burst Evolution", label="{0} Gyr", 
+                     loc="upper right", SSPfile = "", bands=ALL_COLORS):
     '''Makes a plot showing different values of tburst.
 
     Times should be a list of ages that should be evaluated in Gyr. Currently,
@@ -133,16 +133,28 @@ def tburst_data_plot(times, TBURST_DIR=TBURST_PATH, prefix="early_t",
     command to place it.'''
     for blueband, redband in bands:
         plt.figure()
-        filename = os.path.join(TBURST_DIR, "ssp.mags")
-        magtable = read_mags(filename)
-        plt.plot(magtable["Age"]/1e9, magtable[blueband] - magtable[redband],
-                 label="SSP")
+        # If we desire an SSP, it will be added.
+        if SSPfile:
+            filename = os.path.join(TBURST_DIR, "ssp.mags")
+            magtable = read_mags(filename)
+            plt.plot(magtable["Age"]/1e9, magtable[blueband] - magtable[redband],
+                     label="SSP")
+        # Make the tracks for desired times.
         for i in times:
             filename = os.path.join(TBURST_DIR, 
                                     "{0}{1:02d}.mags".format(prefix, i))
             magtable = read_mags(filename)
             plt.plot(magtable["Age"]/1e9, magtable[blueband] - magtable[redband],
                      label=label.format(i))
+        # Now add on the data.
+        color, colorerr = phot.calc_statistical_difference(
+            atlas3dtable[phot.name_photometry_column(blueband)], 
+            atlas3dtable[phot.name_photometry_column(redband)],
+            atlas3dtable[phot.name_photometry_column(blueband, error=True)],
+            atlas3dtable[phot.name_photometry_column(redband, error=True)])
+        plt.errorbar(atlas3dtable["age"], color, colorerr,
+                     atlas3dtable["age_err"], '.')
+
         plt.title(title)
         plt.xlabel("Age (Gyr)")
         plt.ylabel("{0}-{1}".format(blueband, redband))
