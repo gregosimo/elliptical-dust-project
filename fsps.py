@@ -4,8 +4,7 @@ import matplotlib.pyplot as plt
 from astropy.table import Table, join
 import numpy as np
 
-import WISE_conversions as conv
-import photometry as phot
+import band_conversions as conv
 
 FSPS_PATH = "/home/regulus/simonian/year1/fsps"
 OUTPUT_PATH = os.path.join(FSPS_PATH, "OUTPUTS")

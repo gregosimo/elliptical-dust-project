@@ -22,20 +22,12 @@ import scipy.stats.mstats
 import masks
 import queries as query
 import synthetic_photometry as synphot
-import WISE_conversions as conv
+import band_conversions as conv
 
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
 UVBANDS = bands[4:]
 MASKBANDS = ["W1", "NUV"]
-MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ', 
-                   "markeredgewidth": 1.5},
-               1: {"marker": '^', "markerfacecolor": 'orange', "ls": ' '},
-               2: {"marker": 'o', "markerfacecolor": 'green', "ls": ' '},
-               3: {"marker": '*', "markerfacecolor": 'blue', "ls": ' '},
-               4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
-                   "markeredgecolor": 'red', "markeredgewidth": 1.5}}
-
 #STSDAS_COLUMN = "/home/gregory/work/ellipse_columns.txt"
 STSDAS_COLUMN = "/home/regulus/simonian/year1/wise/ellipse_columns.txt"
 
@@ -456,11 +448,17 @@ def filterTableforExistingObjects(BASEDIR, fulltable):
     '''Creates another table that only has the objects with images.'''
     return filterTable(BASEDIR, fulltable, objectHasImage)
 
-def filterTableforCompleteBands(
-        BASEDIR, fulltable, copy=True, completebands=bands):
+def filter_table_for_complete_bands(
+        BASEDIR, fulltable, copy=True, completebands=bands, galcol="objstr_01"):
     '''Returns a table that only has objects with complete observations'''
-    return filterTable(BASEDIR, fulltable, complete_for_bands, copy=True,
-                       checkbands=completebands)
+    return filterTableforCompleteBands(BASEDIR, fulltable, copy, completebands,
+                                       galcol)
+
+def filterTableforCompleteBands(
+        BASEDIR, fulltable, copy=True, galcol="objstr_01", completebands=bands):
+    '''Returns a table that only has objects with complete observations'''
+    return filterTable(BASEDIR, fulltable, complete_for_bands, copy=copy,
+                       checkbands=completebands, galcol=galcol)
 
 def match_filter(directory, band, fullpath=True, uncertainty=False, 
         sky=False):
@@ -592,12 +590,13 @@ def filterTable(BASEDIR, fulltable, isTrue, **kwargs):
     '''Filters a table based on a boolean method isTrue.'''
     try:
         copy = kwargs.pop("copy")
+        galcol = kwargs.pop("galcol")
     except KeyError:
         copy=True
     filteredTable = Table(fulltable, copy=copy, masked=False)
-    for i, object in enumerate(fulltable["objstr_01"]):
+    for i, object in enumerate(fulltable[galcol]):
         if not isTrue(BASEDIR, object, **kwargs):
-            filteredTable.remove_row(np.argwhere(filteredTable["objstr_01"] ==
+            filteredTable.remove_row(np.argwhere(filteredTable[galcol] ==
                     object)[0][0])
     return filteredTable
 
@@ -1809,7 +1808,8 @@ def deextinct_data(photometry_table, extinction=""):
             except KeyError:
                 pass
         return extincted_table
-
+    else:
+        return photometry_table
 
 
 
@@ -1968,14 +1968,16 @@ def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror,
     plt.ylabel(ylabel)
     plt.title(title)
 
-def ColorHistogramByClass(band1, band2, groups, xlabel, title, bins, xrange=(-4,
-    4)):
+def ColorHistogramByClass(band1, band2, groups, xlabel, title, bins, 
+                          colrange=(-4, 4)):
     '''Creates a histogam for colors for different classes.
     '''
     color = band1 - band2
     colorgroup = color.group_by(groups)
-    plt.hist(colorgroup.groups, bins, range=xrange, label=["Class {0}".format(i)
-        for i in range(5)], color=["black", "yellow", "green", "blue", "red"], histtype="bar")
+    plt.hist(colorgroup.groups, bins, range=colrange, 
+             label=["Class {0}".format(i) for i in range(5)], 
+             color=["black", "yellow", "green", "blue", "red"], 
+             histtype="step", stacked=True)
     plt.xlabel(xlabel)
     plt.ylabel("N")
     plt.title(title)
@@ -1993,210 +1995,6 @@ def makePlots(BASEDIR, w1mags, w2mags, w3mags, w1apmags, w2apmags, w3apmags):
     plt.title("Magnitude matches")
     plt.legend(loc="upper left")
 
-def MIRplot(x, y, groupkey, xlabel='', ylabel='', title='', loc='upper right'):
-    '''Makes a plot that automatically differentiates between MIR classes.
-
-    The x and y data need to be columns which have the same length as 
-    groupkey. Groupkey should be the list of MIR classes which are in the same
-    order as x and y. Labels can also be added as desired.
-    '''
-    xgroup = x.group_by(groupkey)
-    ygroup = y.group_by(groupkey)
-
-    for MIRclass in xgroup.groups.keys:
-        plt.plot(xgroup.groups[MIRclass], ygroup.groups[MIRclass], 
-        label="Class {0}".format(MIRclass), **MIR_Symbols[MIRclass])
-
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.title(title)
-    plt.legend(loc=loc)
-
-def generateCMDs(magtable):
-    '''Generates permutations of Color-Magnitude Diagrams.
-
-    The diagrams that are generated should be considered "sensible",
-    which means a color between UV and IR, with a magnitude that's 
-    either UV or IR.'''
-    MIRclass = magtable["MIR class"]
-    W1 = magtable["w1apmag"]
-    W2 = magtable["w2apmag"]
-    W3 = magtable["w3apmag"]
-    FUV = magtable["FUVapmags"]
-    NUV = magtable["NUVapmags"]
-    F1color = FUV - W1
-    F2color = FUV - W2
-    F3color = FUV - W3
-    N1color = NUV - W1
-    N2color = NUV - W2
-    N3color = NUV - W3
-
-    title = "WISE CMD"
-    plt.figure()
-    MIRplot(W1, F1color, MIRclass, "W1", "FUV-W1", title, loc="lower left")
-    plt.figure()
-    MIRplot(W2, F2color, MIRclass, "W2", "FUV-W2", title, loc="lower left")
-    plt.figure()
-    MIRplot(W3, F3color, MIRclass, "W3", "FUV-W3", title)
-    plt.figure()
-    MIRplot(W1, N1color, MIRclass, "W1", "NUV-W1", title, loc="lower left")
-    plt.figure()
-    MIRplot(W2, N2color, MIRclass, "W2", "NUV-W2", title, loc="lower left")
-    plt.figure()
-    MIRplot(W3, N3color, MIRclass, "W3", "NUV-W3", title)
-
-def generateColorColors2MASS(magtable):
-    '''Generates permutations of Color-Color Diagrams.
-  
-    The produced diagrams considered sensible involve a cross-band
-    with a intra-band color. For example, a UV-IR vs. an IR-IR color.
-    '''
-    MIRclass = magtable["MIR class"]
-    W1 = magtable["j_m_k20fe"]
-    W2 = magtable["h_m_k20fe"]
-    W3 = magtable["k_m_k20fe"]
-    FUV = magtable["FUVapmags"]
-    NUV = magtable["NUVapmags"]
-    F1color = FUV - W1
-    F2color = FUV - W2
-    F3color = FUV - W3
-    N1color = NUV - W1
-    N2color = NUV - W2
-    N3color = NUV - W3
-    W12color = W1-W2
-    W23color = W2-W3
-    FNcolor = FUV - NUV
-
-    title = "2MASS CMD"
-    plt.figure()
-    MIRplot(F1color, W12color, MIRclass, "FUV-J", "J-H", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(F1color, W23color, MIRclass, "FUV-J", "H-K", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(F1color, FNcolor, MIRclass, "FUV-J", "FUV-NUV", title,
-            loc="left")
-    plt.figure()
-    MIRplot(F2color, W12color, MIRclass, "FUV-H", "J-H", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(F2color, W23color, MIRclass, "FUV-H", "H-K", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(F2color, FNcolor, MIRclass, "FUV-H", "FUV-NUV", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(F3color, W12color, MIRclass, "FUV-K", "J-H", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(F3color, W23color, MIRclass, "FUV-K", "H-K", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(F3color, FNcolor, MIRclass, "FUV-K", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N1color, W12color, MIRclass, "NUV-J", "J-H", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(N1color, W23color, MIRclass, "NUV-J", "H-K", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(N1color, FNcolor, MIRclass, "NUV-J", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N2color, W12color, MIRclass, "NUV-H", "J-H", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(N2color, W23color, MIRclass, "NUV-H", "H-K", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(N2color, FNcolor, MIRclass, "NUV-H", "FUV-NUV", title,
-            loc="upper right")
-    plt.figure()
-    MIRplot(N3color, W12color, MIRclass, "NUV-K", "J-H", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(N3color, W23color, MIRclass, "NUV-K", "H-K", title, 
-            loc="upper left")
-    plt.figure()
-    MIRplot(N3color, FNcolor, MIRclass, "NUV-K", "FUV-NUV", title, 
-    loc="lower left")
-
-def generateColorColors(magtable):
-    '''Generates permutations of Color-Color Diagrams.
-  
-    The produced diagrams considered sensible involve a cross-band
-    with a intra-band color. For example, a UV-IR vs. an IR-IR color.
-    '''
-    MIRclass = magtable["MIR class"]
-    W1 = magtable["w1apmag"]
-    W2 = magtable["w2apmag"]
-    W3 = magtable["w3apmag"]
-    FUV = magtable["FUVapmags"]
-    NUV = magtable["NUVapmags"]
-    F1color = FUV - W1
-    F2color = FUV - W2
-    F3color = FUV - W3
-    N1color = NUV - W1
-    N2color = NUV - W2
-    N3color = NUV - W3
-    W12color = W1-W2
-    W23color = W2-W3
-    FNcolor = FUV - NUV
-
-    title = "WISE CMD"
-    plt.figure()
-    MIRplot(F1color, W12color, MIRclass, "FUV-W1", "W1-W2", title)
-    plt.figure()
-    MIRplot(F1color, W23color, MIRclass, "FUV-W1", "W2-W3", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(F1color, FNcolor, MIRclass, "FUV-W1", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(F2color, W12color, MIRclass, "FUV-W2", "W1-W2", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(F2color, W23color, MIRclass, "FUV-W2", "W2-W3", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(F2color, FNcolor, MIRclass, "FUV-W2", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(F3color, W12color, MIRclass, "FUV-W3", "W1-W2", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(F3color, W23color, MIRclass, "FUV-W3", "W2-W3", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(F3color, FNcolor, MIRclass, "FUV-W3", "FUV-NUV", title)
-    plt.figure()
-    MIRplot(N1color, W12color, MIRclass, "NUV-W1", "W1-W2", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N1color, W23color, MIRclass, "NUV-W1", "W2-W3", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(N1color, FNcolor, MIRclass, "NUV-W1", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N2color, W12color, MIRclass, "NUV-W2", "W1-W2", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N2color, W23color, MIRclass, "NUV-W2", "W2-W3", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(N2color, FNcolor, MIRclass, "NUV-W2", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N3color, W12color, MIRclass, "NUV-W3", "W1-W2", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N3color, W23color, MIRclass, "NUV-W3", "W2-W3", title, 
-            loc="lower right")
-    plt.figure()
-    MIRplot(N3color, FNcolor, MIRclass, "NUV-W3", "FUV-NUV", title)
     
 def plotWithVerticalLines(xvalues, yvalues, specialx, xlabel="", ylabel="",
         title=""):
