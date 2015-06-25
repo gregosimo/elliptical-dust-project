@@ -1978,7 +1978,7 @@ def ColorHistogramByClass(band1, band2, groups, xlabel, title, bins,
     plt.hist(colorgroup.groups, bins, range=colrange, 
              label=["Class {0}".format(i) for i in range(5)], 
              color=["black", "yellow", "green", "blue", "red"], 
-             histtype="stepfilled", stacked=True)
+             histtype="step", stacked=True)
     plt.xlabel(xlabel)
     plt.ylabel("N")
     plt.title(title)
