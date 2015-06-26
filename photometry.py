@@ -413,7 +413,13 @@ def get_sky_error(galaxydir, band, skybase="sky_level", method="adaptive"):
 
 def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
-    return objectname.replace(' ', "")
+    if isinstance(objectname, np.ndarray):
+        newobj = np.core.defchararray.replace(objectname, " ", "")
+    elif isinstance(objectname, str):
+        newobj = objectname.replace(' ', "")
+    else:
+        raise TypeError("Incorrect type passed to convert to directory.")
+    return newobj
 
 def fullphotometry(BASEDIR, WISE_Table):
     '''Performs the pipeline  building and photometry calculation of a table.
