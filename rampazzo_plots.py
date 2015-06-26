@@ -1,7 +1,9 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-from astropy.table import Table
+from astropy.table import Table, join
+
+import photometry as phot
 
 MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ', 
                    "markeredgewidth": 1.5},
@@ -11,28 +13,64 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
 
+def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01")):
+    '''Joins two tables by the provided name columns. 
+
+    By default, both columns should be called "objstr_01", in which, if both
+    columns are in folder form (without a space), it will behave like a regular
+    join. If the columns are not in folder form, this function will reduce both
+    columns to be in folder form before performing the join. It will also be
+    capable of performing joins where the galaxy names are in differently-named
+    columns. In this case, the galaxy name of the output column will be decided
+    by whichever table is passed first to table1.
+    '''
+    # Here are a list of corner cases that I can come up with:
+    # 1) names are different and name2 does not have a different column with
+    #   name1
+    # 2) Names are the same, in which case a temporary copy of column 2 should
+    #   be restored at the end of the operation.
+    # 3) Names are different, but column 2 already has a column with name1. I
+    # don't know how to deal with that off the top of my head.
+    name1, name2 = names
+    # Saving table columns in temporary variables. Make sure to put them back!
+    tempcol1 = table1[name1]
+    tempcol2 = table2[name2]
+    # Now format them to be in folder form.
+    table1[name1] = phot.object_name_to_dir(table1[name1])
+    table2[name1] = phot.object_name_to_dir(table2[name2])
+    # Now join them.
+    newtable = join(table1, table2, keys=[name1])
+    # Set columns back.
+    table1[name1] = tempcol1
+    return newtable
+
 
 def plot_color_PAH_flux_ratio(pahtable, magtable, title, colorlabel):
     '''Plots color vs a PAH flux ratio.'''
     filledpahs = pahtable.filled(0)
+    fulltable = join_by_galaxy_name(magtable, filledpahs, names=("objstr_01",
+                                                               "Galaxy"))
     # Arithmetic to take care of the PAH ratio along with the uncertainties.
-    pah_numerator = filledpahs["7.7 um"] + filledpahs["8.6 um"]
-    pah_numerator_err = np.sqrt(filledpahs["7.7 um err"]**2 + 
-                                filledpahs["8.6 um er"]**2)
-    pah_denominator = (filledpahs["11.3um"] + filledpahs["12.7um"] +
-                       filledpahs["17 um"])
-    pah_denominator_err = np.sqrt(filledpahs["11.3 um err"]**2 + 
-                                  filledpahs["12.7 um err"]**2 +
-                                  filledpahs["17 um err"]**2)
+    pah_numerator = fulltable["7.7 um"] + fulltable["8.6 um"]
+    pah_numerator_err = np.sqrt(fulltable["7.7 um err"]**2 + 
+                                fulltable["8.6 um err"]**2)
+    pah_denominator = (fulltable["11.3 um"] + fulltable["12.7 um"] +
+                       fulltable["17 um"])
+    pah_denominator_err = np.sqrt(fulltable["11.3 um err"]**2 + 
+                                  fulltable["12.7 um err"]**2 +
+                                  fulltable["17 um err"]**2)
     pahratio = pah_numerator / pah_denominator
     pahratio_err = (pahratio * 
                     (np.sqrt((pah_numerator_err / pah_numerator)**2 + 
                              (pah_denominator_err / pah_denominator)**2)))
 
-    color = magtable["w2apmag"] - magtable["w3apmag"]
-    color_err = np.sqrt(magtable["w2aperr"]**2 + magtable["w3aperr"]**2)
+    color = fulltable["w2apmag"] - fulltable["w3apmag"]
+    color_err = np.sqrt(fulltable["w2aperr"]**2 + fulltable["w3aperr"]**2)
 
-    plt.errorbar(color, pahratio, pahratio_err, color_err)
+    plt.errorbar(color, pahratio, pahratio_err, color_err, '*')
+    plt.xlabel(colorlabel)
+    plt.ylabel("(f(7.7)+f(8.6))/(f(11.3)+f(12.7)+f(17))")
+    plt.title(title)
 
 def MIRplot(x, y, groupkey, xlabel, ylabel, title, yerr=None, xerr=None, 
             loc='upper right'):
@@ -50,8 +88,15 @@ def MIRplot(x, y, groupkey, xlabel, ylabel, title, yerr=None, xerr=None,
         xerrgroup = xerr.group_by(groupkey)
 
     for MIRclass in xgroup.groups.keys:
-        plt.errorbar(xgroup.groups[MIRclass], ygroup.groups[MIRclass],
-                     yerrgroup.groups[MIRclass], xerrgroup.groups[MIRclass], 
+        # Adding errors to this is proving to be much more difficult than
+        # expected...
+#        try:
+#            plt.errorbar(xgroup.groups[MIRclass], ygroup.groups[MIRclass],
+#                         yerrgroup.groups[MIRclass], xerrgroup.groups[MIRclass], 
+#                         label="Class {0}".format(MIRclass), 
+#                         **MIR_Symbols[MIRclass])
+#        except UnboundLocalError:
+            plt.plot(xgroup.groups[MIRclass], ygroup.groups[MIRclass], 
                      label="Class {0}".format(MIRclass), 
                      **MIR_Symbols[MIRclass])
 
@@ -209,6 +254,51 @@ def generate_adjacent_color_color(magtable):
 
     plt.figure()
     MIRplot(W3W4color, W2W3color, MIRclass, "W3-W4", "W2-W3", title,
+            loc="upper left")
+
+def jk_color_vs_wise_colors(magtable):
+    '''Generates J-Ks vs wise colors.
+
+    Although J and Ks aren't adjacent bands, they are usually put together as a
+    representative color for the 2MASS infrared region. This function makes
+    plots with them instead of J-H and H-Ks separately.
+    '''
+    MIRclass = magtable["MIR class"]
+    W1 = magtable["w1apmag"]
+    W2 = magtable["w2apmag"]
+    W3 = magtable["w3apmag"]
+    W4 = magtable["w4apmag"]
+    J = magtable["j_m_k20fe"]
+    K = magtable["k_m_k20fe"]
+    #FUV = magtable["FUVapmags"]
+    #NUV = magtable["NUVapmags"]
+
+    #FNcolor = FUV - NUV
+    #NJcolor = NUV - J
+    JKcolor = J - K
+    KW1color = K - W1
+    W1W2color = W1 - W2
+    W2W3color = W2 - W3
+    W3W4color = W3 - W4
+
+    title = "MIR Class Correlations"
+#   plt.figure()
+#   MIRplot(JKcolor, FNcolor, MIRclass, "J-K", "FUV-NUV", title,
+#           loc="lower left")
+#   plt.figure()
+#   MIRplot(JKcolor, NJcolor, MIRclass, "J-H", "NUV-J", title,
+#           loc="lower left")
+    plt.figure()
+    MIRplot(KW1color, JKcolor, MIRclass, "Ks-W1", "J-Ks", title,
+            loc="lower left")
+    plt.figure()
+    MIRplot(W1W2color, JKcolor, MIRclass, "W1-W2", "J-Ks", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(W2W3color, JKcolor, MIRclass, "W2-W3", "J-Ks", title,
+            loc="upper left")
+    plt.figure()
+    MIRplot(W3W4color, JKcolor, MIRclass, "W3-W4", "J-Ks", title,
             loc="upper left")
 
 def generateColorColors2MASS(magtable):
