@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import photometry as phot
-import WISE_conversions as conv
+import band_conversions as conv
 
 # Maybe I want to subclass figure later on. But now... meh.
 class SED(object):
