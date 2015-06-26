@@ -204,13 +204,13 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
                 # directory didn't exist, and we'd like to change that.
                 try:
                     try:
-                        extract_image_with_coordinates(
+                        extract_cutout_with_coordinates(
                             extractedimage, ra, dec, sidelength, sidelength, 
                             os.path.join(galaxydir,
                                          os.path.basename(extractedimage)))
                     except OSError:
                         os.mkdir(galaxydir)
-                        extract_image_with_coordinates(
+                        extract_cutout_with_coordinates(
                             extractedimage, ra, dec, sidelength, sidelength, 
                             os.path.join(galaxydir,
                                          os.path.basename(extractedimage)))
@@ -225,7 +225,7 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
                 # the GALEX portion, not this portion.
 
                 
-def extract_image_with_coordinates(original, centerra, centerdec, arcsecwidth,
+def extract_cutout_with_coordinates(original, centerra, centerdec, arcsecwidth,
         arcsecheight, destination, band="NUV"):
     '''Copies a part of an image to a destination file.
 
