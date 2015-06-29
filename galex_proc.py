@@ -237,8 +237,10 @@ def extract_cutout_with_coordinates(original, centerra, centerdec, arcsecwidth,
     width = arcsecwidth / phot.getPixelScale(band)
     height = arcsecheight / phot.getPixelScale(band)
 
-    phot.copy_subimage_from_file_with_height_width(original, centerx, centery, 
-                                                   height, width, destination)
+#    phot.copy_subimage_from_file_with_height_width(original, centerx, centery, 
+#                                                   height, width, destination)
+    extract_from_image_with_height_width(original, centerx, centery, height,
+                                         width, destination)
 
 def extract_from_image_with_height_width(original, centerx, centery, height,
         width, destination):
