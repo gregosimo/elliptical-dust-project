@@ -152,11 +152,11 @@ def generate_adjacent_color_color(magtable):
     J = magtable["j_m_k20fe"]
     H = magtable["h_m_k20fe"]
     K = magtable["k_m_k20fe"]
-    #FUV = magtable["FUVapmags"]
-    #NUV = magtable["NUVapmags"]
+    FUV = magtable["FUVapmag"]
+    NUV = magtable["NUVapmag"]
 
-    #FNcolor = FUV - NUV
-    #NJcolor = NUV - J
+    FNcolor = FUV - NUV
+    NJcolor = NUV - J
     JHcolor = J - H
     HKcolor = H - K
     KW1color = K - W1
@@ -165,47 +165,47 @@ def generate_adjacent_color_color(magtable):
     W3W4color = W3 - W4
 
     title = "MIR class correlations"
-#   plt.figure()
-#   MIRplot(FNcolor, NJcolor, MIRclass, "NUV-J", "FUV-NUV", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(FNcolor, JHcolor, MIRclass, "J-H", "FUV-NUV", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(FNcolor, HKcolor, MIRclass, "H-Ks", "FUV-NUV", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(FNcolor, KW1color, MIRclass, "Ks-W1", "FUV-NUV", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(FNcolor, W1W2color, MIRclass, "W1-W2", "FUV-NUV", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(FNcolor, W2W3color, MIRclass, "W2-W3", "FUV-NUV", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(FNcolor, W3W4color, MIRclass, "W3-W4", "FUV-NUV", title,
-#           loc="lower left")
-
-#   plt.figure()
-#   MIRplot(NJcolor, JHcolor, MIRclass, "J-H", "NUV-J", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(NJcolor, HKcolor, MIRclass, "H-Ks", "NUV-J", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(NJcolor, KW1color, MIRclass, "Ks-W1", "NUV-J", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(NJcolor, W1W2color, MIRclass, "W1-W2", "NUV-J", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(NJcolor, W2W3color, MIRclass, "W2-W3", "NUV-J", title,
-#           loc="lower left")
-#   plt.figure()
-#   MIRplot(NJcolor, W3W4color, MIRclass, "W3-W4", "NUV-J", title,
-#           loc="lower left")
-
+    plt.figure()
+    MIRplot(NJcolor, FNcolor, MIRclass, "NUV-J", "FUV-NUV", title,
+            loc="upper left")
+    plt.figure()
+    MIRplot(JHcolor, FNcolor, MIRclass, "J-H", "FUV-NUV", title,
+            loc="upper right")
+    plt.figure()
+    MIRplot(HKcolor, FNcolor, MIRclass, "H-Ks", "FUV-NUV", title,
+            loc="upper right")
+    plt.figure()
+    MIRplot(KW1color, FNcolor, MIRclass, "Ks-W1", "FUV-NUV", title,
+            loc="upper left")
+    plt.figure()
+    MIRplot(W1W2color, FNcolor, MIRclass, "W1-W2", "FUV-NUV", title,
+            loc="upper right")
+    plt.figure()
+    MIRplot(W2W3color, FNcolor, MIRclass, "W2-W3", "FUV-NUV", title,
+            loc="upper right")
+    plt.figure()
+    MIRplot(W3W4color, FNcolor, MIRclass, "W3-W4", "FUV-NUV", title,
+            loc="upper right")
+ 
+    plt.figure()
+    MIRplot(JHcolor, NJcolor, MIRclass, "J-H", "NUV-J", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(HKcolor, NJcolor, MIRclass, "H-Ks", "NUV-J", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(KW1color, NJcolor, MIRclass, "Ks-W1", "NUV-J", title,
+            loc="lower left")
+    plt.figure()
+    MIRplot(W1W2color, NJcolor, MIRclass, "W1-W2", "NUV-J", title,
+            loc="lower right")
+    plt.figure()
+    MIRplot(W2W3color, NJcolor, MIRclass, "W2-W3", "NUV-J", title,
+            loc="lower left")
+    plt.figure()
+    MIRplot(W3W4color, NJcolor, MIRclass, "W3-W4", "NUV-J", title,
+            loc="lower left")
+ 
     plt.figure()
     MIRplot(HKcolor, JHcolor, MIRclass, "H-Ks", "J-H",  title,
             loc="lower left")
