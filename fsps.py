@@ -1,3 +1,4 @@
+import itertools
 import os
 
 import matplotlib.pyplot as plt
@@ -114,20 +115,37 @@ def color_age_plot(modelcolor, modelage, datacolor=None, dataage=None,
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
 
-def tburst_data_plot(times, atlas3dtable, TBURST_DIR=TBURST_PATH, 
-                     prefix="early_t", title="Burst Evolution", label="{0} Gyr", 
-                     loc="upper right", SSPfile = "", bands=ALL_COLORS):
+def tburst_data_plot(times, lowmet, highmet, atlas3dtable, 
+                     TBURST_DIR=TBURST_PATH, MET_PATH=MET_DIR, 
+                     met_fileformat="z{0:+3.2f}.mags", 
+                     t_fileformat="low_tau{0:02d}.mags", 
+                     title="Burst Evolution", t_label="{0} Gyr",
+                     met_label="[Z/H]={0:.2f}", loc="upper right", SSPfile="", 
+                     bands=ALL_COLORS, zh_split=0.0, 
+                     burst_colors=['k', 'g', 'y', 'c', 'm']):
     '''Makes a plot showing different values of tburst.
 
     Times should be a list of ages that should be evaluated in Gyr. Currently,
     integer values between 1 and 15 are acceptable. TBURST_DIR is where the
-    files holding the tburst variation parameters are located. The prefix
-    specifies the fixed prefix that describes the filename. It will be followed
-    by a formatted version of the age, and then an extension. Therefore, for
-    the default 3Gyr file, the filename will be "early_t03.mags". Bands should
-    be a list of 2-tuples containing the band names to be used as colors. See
-    the ALL_COLORS global variable for the format of bands.
+    files holding the tburst variation parameters are located. The fileformat
+    argument specifies the format of the file as found in TBURST_DIR. The
+    string should accept a single formatted argument, which would be the
+    current iteration through the times variable. Bands should be a list of 
+    2-tuples containing the band names to be used as colors. See the 
+    ALL_COLORS global variable for the format of bands. The color as plotted
+    will be in the burst_colors list. This is to avoid conflicts with other
+    color conventions.
+
+    Data is passed through the atlas3dtable variable. The data will be
+    color-coded according to metallicity. For data with "z/h" value greater
+    than that provided by the zh keyword, the data will be red. Otherwise, the
+    data will be blue.
     
+    Metallicity bounds will also be included from models in the MET_PATH
+    directory. There will be a lower metallicity track, which will be labeled
+    in blue, and a high metallicity track, which will be labeled in red. This
+    color scheme should be compatible with that of the data.
+
     The title will essentially be the title of the plot. label will be the
     string to be displayed in the legend. And loc will be passed to the legend 
     command to place it.'''
@@ -140,25 +158,70 @@ def tburst_data_plot(times, atlas3dtable, TBURST_DIR=TBURST_PATH,
             plt.plot(magtable["Age"]/1e9, magtable[blueband] - magtable[redband],
                      label="SSP")
         # Make the tracks for desired times.
-        for i in times:
-            filename = os.path.join(TBURST_DIR, 
-                                    "{0}{1:02d}.mags".format(prefix, i))
-            magtable = read_mags(filename)
-            plt.plot(magtable["Age"]/1e9, magtable[blueband] - magtable[redband],
-                     label=label.format(i))
+        plot_tburst_tracks(times, TBURST_DIR, blueband, redband, t_fileformat,
+                           t_label, burst_colors)
+        plot_metallicity_bounds(lowmet, highmet, MET_PATH, blueband, redband,
+                                met_fileformat, met_label)
         # Now add on the data.
         color, colorerr = phot.calc_statistical_difference(
             atlas3dtable[phot.name_photometry_column(blueband)], 
             atlas3dtable[phot.name_photometry_column(redband)],
             atlas3dtable[phot.name_photometry_column(blueband, error=True)],
             atlas3dtable[phot.name_photometry_column(redband, error=True)])
-        plt.errorbar(atlas3dtable["age"], color, colorerr,
-                     atlas3dtable["age_err"], '.')
-
+        plot_atlas3d_coded_by_metallicity(atlas3dtable["age"], color, 
+                                          colorerr, atlas3dtable["age_err"],
+                                          atlas3dtable["z/h"], 
+                                          zh_lim=zh_split)
         plt.title(title)
         plt.xlabel("Age (Gyr)")
         plt.ylabel("{0}-{1}".format(blueband, redband))
         plt.legend(loc=loc)
+
+def plot_metallicity_bounds(lowzh, highzh, MET_PATH, blueband, redband,
+                            fileformat="z{0:+3.2f}.mags", 
+                            label="[Z/H]={0:.2f}"):
+    '''Plots FSPS tracks at metallicity bounds.'''
+    lowmetfilename = os.path.join(MET_PATH, fileformat.format(lowzh))
+    lowmetmagtable = read_mags(lowmetfilename)
+    highmetfilename = os.path.join(MET_PATH, fileformat.format(highzh))
+    highmetmagtable = read_mags(highmetfilename)
+    plt.plot(lowmetmagtable["Age"]/1e9, lowmetmagtable[blueband] -
+             lowmetmagtable[redband], 'b-', label=label.format(lowzh))
+    plt.plot(highmetmagtable["Age"]/1e9, highmetmagtable[blueband] -
+             highmetmagtable[redband], 'r-', label=label.format(highzh))
+
+def plot_tburst_tracks(times, TBURST_DIR, blueband, redband, 
+                       fileformat="early_t{0:02d}.mags", label="{0} Gyr",
+                       fmts=['k', 'g', 'y', 'c', 'm']):
+    '''Plots FSPS tburst model data.'''
+    for i, fmt in zip(times, fmts):
+        filename = os.path.join(TBURST_DIR, fileformat.format(i))
+        magtable = read_mags(filename)
+        plt.plot(magtable["Age"]/1e9, magtable[blueband] - 
+                 magtable[redband], fmt, label=label.format(i))
+
+def plot_atlas3d_coded_by_metallicity(xvalues, yvalues, yerrs, xerrs, zh, 
+                                      zh_lim=0.0):
+    '''Plots atlas3d points so that they are color-coded by metallicity.
+
+    This function will ONLY plot points such that those with [Z/H] values as
+    determined by SSP models higher than the provided zh value will be red,
+    while those with lower metallicities will be blue. By default, zh
+    corresponds to solar metallicity. The atlas3dtable will require a column
+    named "z/h".
+    '''
+    highmetindices = np.where(zh >= zh_lim)
+    lowmetindices = np.where(zh < zh_lim)
+    highmetx, highmety = xvalues[highmetindices], yvalues[highmetindices]
+    lowmetx, lowmety = xvalues[lowmetindices], yvalues[lowmetindices]
+    highmetxerr, highmetyerr = xerrs[highmetindices], yerrs[highmetindices]
+    lowmetxerr, lowmetyerr = xerrs[lowmetindices], yerrs[lowmetindices]
+    
+    plt.errorbar(highmetx, highmety, highmetyerr, highmetxerr, 'r.',
+                 label="[Z/H] >= {0:.1f}".format(zh_lim))
+    plt.errorbar(lowmetx, lowmety, lowmetyerr, lowmetxerr, 'b.',
+                 label="[Z/H] < {0:.1f}".format(zh_lim))
+
 
 def color_difference_plot(times, outputdir=TBURST_PATH, prefix1="early_t",
                           colorsuff1="", prefix2="noagbdust_t",
