@@ -139,7 +139,7 @@ def generateCMDs(magtable):
     plt.figure()
     MIRplot(W3, N3color, MIRclass, "W3", "NUV-W3", title)
 
-def generate_adjacent_color_color(magtable):
+def generate_color_color(magtable):
     '''Generates all colors using adjacent colors.
 
     By adjacent colors, I mean closest bands, such as FUV-NUV, NUV-J, etc.
@@ -157,8 +157,7 @@ def generate_adjacent_color_color(magtable):
 
     FNcolor = FUV - NUV
     NJcolor = NUV - J
-    JHcolor = J - H
-    HKcolor = H - K
+    JKcolor = J - H
     KW1color = K - W1
     W1W2color = W1 - W2
     W2W3color = W2 - W3
@@ -169,10 +168,7 @@ def generate_adjacent_color_color(magtable):
     MIRplot(NJcolor, FNcolor, MIRclass, "NUV-J", "FUV-NUV", title,
             loc="upper left")
     plt.figure()
-    MIRplot(JHcolor, FNcolor, MIRclass, "J-H", "FUV-NUV", title,
-            loc="upper right")
-    plt.figure()
-    MIRplot(HKcolor, FNcolor, MIRclass, "H-Ks", "FUV-NUV", title,
+    MIRplot(JKcolor, FNcolor, MIRclass, "J-Ks", "FUV-NUV", title,
             loc="upper right")
     plt.figure()
     MIRplot(KW1color, FNcolor, MIRclass, "Ks-W1", "FUV-NUV", title,
@@ -188,10 +184,7 @@ def generate_adjacent_color_color(magtable):
             loc="upper right")
  
     plt.figure()
-    MIRplot(JHcolor, NJcolor, MIRclass, "J-H", "NUV-J", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(HKcolor, NJcolor, MIRclass, "H-Ks", "NUV-J", title,
+    MIRplot(JKcolor, NJcolor, MIRclass, "J-Ks", "NUV-J", title,
             loc="lower right")
     plt.figure()
     MIRplot(KW1color, NJcolor, MIRclass, "Ks-W1", "NUV-J", title,
@@ -207,33 +200,17 @@ def generate_adjacent_color_color(magtable):
             loc="lower left")
  
     plt.figure()
-    MIRplot(HKcolor, JHcolor, MIRclass, "H-Ks", "J-H",  title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(KW1color, JHcolor, MIRclass, "Ks-W1", "J-H", title,
+    MIRplot(KW1color, JKcolor, MIRclass, "Ks-W1", "J-Ks", title,
             loc="upper left")
     plt.figure()
-    MIRplot(W1W2color, JHcolor, MIRclass, "W1-W2", "J-H", title,
+    MIRplot(W1W2color, JKcolor, MIRclass, "W1-W2", "J-Ks", title,
             loc="lower right")
     plt.figure()
-    MIRplot(W2W3color, JHcolor, MIRclass, "W2-W3", "J-H", title,
+    MIRplot(W2W3color, JKcolor, MIRclass, "W2-W3", "J-Ks", title,
             loc="lower right")
     plt.figure()
-    MIRplot(W3W4color, JHcolor, MIRclass, "W3-W4", "J-H", title,
+    MIRplot(W3W4color, JKcolor, MIRclass, "W3-W4", "J-Ks", title,
             loc="upper left")
-
-    plt.figure()
-    MIRplot(KW1color, HKcolor, MIRclass, "Ks-W1", "H-Ks", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(W1W2color, HKcolor, MIRclass, "W1-W2", "H-Ks", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(W2W3color, HKcolor, MIRclass, "W2-W3", "H-Ks", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(W3W4color, HKcolor, MIRclass, "W3-W4", "H-Ks", title,
-            loc="lower right")
 
     plt.figure()
     MIRplot(W1W2color, KW1color, MIRclass, "W1-W2", "Ks-W1", title,
