@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from astropy.table import Table, join
 
 import photometry as phot
+import fsps
 
 MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ', 
                    "markeredgewidth": 1.5},
@@ -140,9 +141,13 @@ def generateCMDs(magtable):
     MIRplot(W3, N3color, MIRclass, "W3", "NUV-W3", title)
 
 def generate_color_color(magtable):
-    '''Generates all colors using adjacent colors.
+    '''Generates all color-color plots which could be potentially useful.
 
-    By adjacent colors, I mean closest bands, such as FUV-NUV, NUV-J, etc.
+    This currently consists of: FUV-NUV, NUV-J, J-Ks, Ks-W1, W1-W2, W2-W3,
+    W3-W4.
+
+    In addition to the plots according to MIR class, there will also be SSP
+    tracks added to the plots from FSPS
     '''
     MIRclass = magtable["MIR class"]
     W1 = magtable["w1apmag"]
@@ -165,71 +170,92 @@ def generate_color_color(magtable):
 
     title = "MIR class correlations"
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "NUV", "J", "FUV", "NUV")
     MIRplot(NJcolor, FNcolor, MIRclass, "NUV-J", "FUV-NUV", title,
             loc="upper left")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "J", "Ks", "FUV", "NUV")
     MIRplot(JKcolor, FNcolor, MIRclass, "J-Ks", "FUV-NUV", title,
             loc="upper right")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "Ks", "W1", "FUV", "NUV")
     MIRplot(KW1color, FNcolor, MIRclass, "Ks-W1", "FUV-NUV", title,
             loc="upper left")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W1", "W2", "FUV", "NUV")
     MIRplot(W1W2color, FNcolor, MIRclass, "W1-W2", "FUV-NUV", title,
             loc="upper right")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W2", "W3", "FUV", "NUV")
     MIRplot(W2W3color, FNcolor, MIRclass, "W2-W3", "FUV-NUV", title,
             loc="upper right")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W3", "W4", "FUV", "NUV")
     MIRplot(W3W4color, FNcolor, MIRclass, "W3-W4", "FUV-NUV", title,
             loc="upper right")
  
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "J", "Ks", "NUV", "J")
     MIRplot(JKcolor, NJcolor, MIRclass, "J-Ks", "NUV-J", title,
             loc="lower right")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "Ks", "W1", "NUV", "J")
     MIRplot(KW1color, NJcolor, MIRclass, "Ks-W1", "NUV-J", title,
             loc="lower left")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W1", "W2", "NUV", "J")
     MIRplot(W1W2color, NJcolor, MIRclass, "W1-W2", "NUV-J", title,
             loc="lower right")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W2", "W3", "NUV", "J")
     MIRplot(W2W3color, NJcolor, MIRclass, "W2-W3", "NUV-J", title,
             loc="lower left")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W3", "W4", "NUV", "J")
     MIRplot(W3W4color, NJcolor, MIRclass, "W3-W4", "NUV-J", title,
             loc="lower left")
  
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "Ks", "W1", "J", "Ks")
     MIRplot(KW1color, JKcolor, MIRclass, "Ks-W1", "J-Ks", title,
             loc="upper left")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W1", "W2", "J", "Ks")
     MIRplot(W1W2color, JKcolor, MIRclass, "W1-W2", "J-Ks", title,
             loc="lower right")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W2", "W3", "J", "Ks")
     MIRplot(W2W3color, JKcolor, MIRclass, "W2-W3", "J-Ks", title,
             loc="lower right")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W3", "W4", "J", "Ks")
     MIRplot(W3W4color, JKcolor, MIRclass, "W3-W4", "J-Ks", title,
             loc="upper left")
 
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W1", "W2", "Ks", "W1")
     MIRplot(W1W2color, KW1color, MIRclass, "W1-W2", "Ks-W1", title,
             loc="lower right")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W2", "W3", "Ks", "W1")
     MIRplot(W2W3color, KW1color, MIRclass, "W2-W3", "Ks-W1", title,
             loc="lower right")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W3", "W4", "Ks", "W1")
     MIRplot(W3W4color, KW1color, MIRclass, "W3-W4", "Ks-W1", title,
             loc="lower right")
 
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W2", "W3", "W1", "W2")
     MIRplot(W2W3color, W1W2color, MIRclass, "W2-W3", "W1-W2", title,
             loc="upper left")
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W3", "W4", "W1", "W2")
     MIRplot(W3W4color, W1W2color, MIRclass, "W3-W4", "W1-W2", title,
             loc="upper left")
 
     plt.figure()
+    fsps.plot_SSP_color_color(fsps.OUTPUT_PATH, "W3", "W4", "W2", "W3")
     MIRplot(W3W4color, W2W3color, MIRclass, "W3-W4", "W2-W3", title,
             loc="upper left")
 
