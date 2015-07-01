@@ -440,3 +440,18 @@ def get_extinction_table(filepath):
                                                  "E_B_V_SFD", "mean_E_B_V_SFD",
                                                  "stdev_E_B_V_SFD"))
     return extinction_table
+
+###############################################################################
+# Structure Routines
+###############################################################################
+
+# Routines to make converting values in tables more intuitive. This began from
+# the need to automatically convert 2mass values from Vega to AB mags.
+
+def convert_2MASS_table_to_AB(twomass_table):
+    '''Converts magnitude values in the 2MASS table to AB mags.
+
+    This essentially converts the 2MASS table to AB mags column by column.'''
+    twomass_table["j_m_k20fe"] = Vega2ABmag("J", twomass_table["j_m_k20fe"])
+    twomass_table["h_m_k20fe"] = Vega2ABmag("H", twomass_table["h_m_k20fe"])
+    twomass_table["k_m_k20fe"] = Vega2ABmag("Ks", twomass_table["k_m_k20fe"])
