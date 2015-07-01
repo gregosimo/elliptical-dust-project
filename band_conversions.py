@@ -26,8 +26,8 @@ ZERO_POINT_AB_MAG_UNC = {"FUV": 0.05, "NUV": 0.03}
 DN_TO_JANSKY_FACTOR = {"W1": 1.9350e-6, "W2": 2.7048e-06, "W3": 1.8326e-06, 
                        "W4": 5.2269e-05, "NUV": 3.53e-5, "FUV": 1.07e-4}
 
-VEGA_TO_AB_CONVERSIONS = {"W1": 2.699, "W2": 3.339, "W3": 5.174, "W4": 6.620, "J": 0.91,
-               "H": 1.39, "Ks": 1.85}
+VEGA_TO_AB_CONVERSIONS = {"W1": 2.699, "W2": 3.339, "W3": 5.174, "W4": 6.620, 
+                          "J": 0.91, "H": 1.39, "Ks": 1.85}
 
 COLOR_CORRECTIONS = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921, 
     1.0000, 1.0142, 1.0347]),
@@ -388,6 +388,9 @@ def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=WISE_bands):
 # Extinction #
 ###############################################################################
 
+EXTINCTION_RATIO = {"FUV": 7.9, "NUV": 8.0, "J": 0.723, "H": 0.460, "Ks":
+                    0.310, "W1": 0.189, "W2": 0.146}
+
 def NUV_extinction(EB_V, Rv=3.1):
     '''Calculates the extinction in NUV.
 
@@ -404,19 +407,19 @@ def FUV_extinction(EB_V, Rv=3.1):
     A_FUV = 7.9 * EB_V
     return A_FUV
 
+
 def extinction_correction(band, truemag, EB_V, Rv=3.1, deredden=False):
     '''Extincts a given magnitude using a reddening law.
 
     This function assumes magnitudes are expressed in the AB system.
     '''
-    # For non-UV bands, we'll set extinction to be 0. This may change in the
-    # future.
-    if band is "NUV":
-        A = NUV_extinction(EB_V, Rv)
-    elif band is "FUV":
-        A = FUV_extinction(EB_V, Rv)
-    else:
-        A = 0
+    try:
+        A = EXTINCTION_RATIO[band] * EB_V
+    except KeyError:
+        if band in ["W3", "W4"]:
+            A = 0
+        else:
+            raise
 
     if deredden:
         extincted_mag = truemag - A
@@ -452,6 +455,21 @@ def convert_2MASS_table_to_AB(twomass_table):
     '''Converts magnitude values in the 2MASS table to AB mags.
 
     This essentially converts the 2MASS table to AB mags column by column.'''
-    twomass_table["j_m_k20fe"] = Vega2ABmag("J", twomass_table["j_m_k20fe"])
-    twomass_table["h_m_k20fe"] = Vega2ABmag("H", twomass_table["h_m_k20fe"])
-    twomass_table["k_m_k20fe"] = Vega2ABmag("Ks", twomass_table["k_m_k20fe"])
+    try:
+        twomass_table["j_m_k20fe"] = Vega2ABmag("J", twomass_table["j_m_k20fe"])
+        twomass_table["h_m_k20fe"] = Vega2ABmag("H", twomass_table["h_m_k20fe"])
+        twomass_table["k_m_k20fe"] = Vega2ABmag("Ks", twomass_table["k_m_k20fe"])
+    except KeyError:
+        print "No K20 aperture magnitude"
+    try:
+        twomass_table["j_m_fe"] = Vega2ABmag("J", twomass_table["j_m_fe"])
+        twomass_table["h_m_fe"] = Vega2ABmag("H", twomass_table["h_m_fe"])
+        twomass_table["k_m_fe"] = Vega2ABmag("Ks", twomass_table["k_m_fe"])
+    except KeyError:
+        print "No Kron aperture magnitude"
+    try:
+        twomass_table["j_m_ext"] = Vega2ABmag("J", twomass_table["j_m_ext"])
+        twomass_table["h_m_ext"] = Vega2ABmag("H", twomass_table["h_m_ext"])
+        twomass_table["k_m_ext"] = Vega2ABmag("Ks", twomass_table["k_m_ext"])
+    except KeyError:
+        print "No extrapolated magnitude"
