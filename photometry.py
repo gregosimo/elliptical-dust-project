@@ -27,6 +27,7 @@ import band_conversions as conv
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
 UVBANDS = bands[4:]
+TWOMASSBANDS = ["J", "H", "Ks"]
 MASKBANDS = ["W1", "NUV"]
 MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ', 
                    "markeredgewidth": 1.5},
@@ -2021,7 +2022,7 @@ def aperture_photometry_table(
     return photometry_table
 
 
-def deextinct_data(photometry_table, extinction=""):
+def deextinct_data(photometry_table, extinction="", runbands=bands):
     '''Uses the IRSA dust map to de-extinct data.
 
     A photometry table with the usual photometric entries should be provided.
@@ -2036,7 +2037,7 @@ def deextinct_data(photometry_table, extinction=""):
         extinction_table = conv.get_extinction_table(extinction)
         extinction_table.rename_column("objname", "objstr_01")
         extincted_table = join(photometry_table, extinction_table)
-        for band in UVBANDS:
+        for band in runbands:
             # Get the names of the photometry columns.
             ap_mag = name_photometry_column(band, error=False, category="ap")
             ap_err = name_photometry_column(band, error=True, category="ap")
@@ -2052,10 +2053,10 @@ def deextinct_data(photometry_table, extinction=""):
             try:
                 extincted_table[unext_mag] = conv.extinction_correction(
                     band, extincted_table[ap_mag], 
-                    extincted_table["E_B_V_SandF"])
+                    extincted_table["E_B_V_SFD"])
                 extincted_table[unext_err] = np.sqrt(
                     extincted_table[ap_err]**2 +
-                    extincted_table["stdev_E_B_V_SandF"]**2)
+                    extincted_table["stdev_E_B_V_SFD"]**2)
             except KeyError:
                 pass
         return extincted_table

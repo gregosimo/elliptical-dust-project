@@ -16,6 +16,7 @@ from astroquery.irsa import Irsa
 import numpy as np
 
 import photometry as phot
+import band_conversions as conv
 
 # This is the entry point for the catalog.
 CATALOG_BASE = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query"
@@ -206,16 +207,23 @@ def get_WISE_catalog_entries(objectfile):
             allwiseTable[i] = allskyTable[i]
     return allwiseTable
 
-def get_2MASS_catalog_entries(objectfile):
+def get_2MASS_catalog_entries(objectfile, mags="AB"):
     '''Gets the catalog entries from objectfile and returns it as a table.
 
     This function queries the 2MASS All-Sky Extended Source Catalog for objects
     in the objectfile.
+
+    The mags specifies whether the 2MASS entries should be in Vega magnitudes
+    or AB magnitudes. By default, they will be converted to AB.
     '''
     twomassTable = query_WISE_catalog_file_upload(objectfile,
             catalog=CATALOG_NAMES["2MASS"], cols=("ra", "dec", "j_m_k20fe",
             "j_msig_k20fe", "h_m_k20fe", "h_msig_k20fe", "k_m_k20fe",
-            "k_msig_k20fe"), clearentries=[])
+            "k_msig_k20fe", "j_m_fe", "j_msig_fe", "h_m_fe", "h_msig_fe",
+            "k_m_fe", "k_msig_fe", "j_m_ext", "j_msig_ext", "h_m_ext", 
+            "h_msig_ext", "k_m_ext", "k_msig_ext"), clearentries=[])
+    if mags == "AB":
+        conv.convert_2MASS_table_to_AB(twomassTable)
     return twomassTable
 
 def query_metadata(ra, dec, survey):
