@@ -200,6 +200,16 @@ def plot_tburst_tracks(times, TBURST_DIR, blueband, redband,
         plt.plot(magtable["Age"]/1e9, magtable[blueband] - 
                  magtable[redband], fmt, label=label.format(i))
 
+def plot_SSP_color_color(DIR, xblueband, xredband, yblueband, yredband, 
+                         fileformat="SSP.out.mags", label="SSP"):
+    '''Plots an SSP on a color-color plot.'''
+    filename = os.path.join(DIR, fileformat)
+    magtable = read_mags(filename)
+    xcolor = magtable[xblueband] - magtable[xredband]
+    ycolor = magtable[yblueband] - magtable[yredband]
+    plt.plot([xcolor[0]], [ycolor[0]], 'bs')
+    plt.plot(xcolor, ycolor, 'b-', label=label)
+
 def plot_atlas3d_coded_by_metallicity(xvalues, yvalues, yerrs, xerrs, zh, 
                                       zh_lim=0.0):
     '''Plots atlas3d points so that they are color-coded by metallicity.
