@@ -207,7 +207,7 @@ def plot_SSP_color_color(DIR, xblueband, xredband, yblueband, yredband,
     magtable = read_mags(filename)
     xcolor = magtable[xblueband] - magtable[xredband]
     ycolor = magtable[yblueband] - magtable[yredband]
-    plt.plot(xcolor[0], ycolor[0], 'bs')
+    plt.plot([xcolor[0]], [ycolor[0]], 'bs')
     plt.plot(xcolor, ycolor, 'b-', label=label)
 
 def plot_atlas3d_coded_by_metallicity(xvalues, yvalues, yerrs, xerrs, zh, 

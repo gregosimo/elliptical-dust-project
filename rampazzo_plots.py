@@ -163,7 +163,7 @@ def generate_color_color(magtable, SSPpath=fsps.OUTPUT_PATH,
 
     FNcolor = FUV - NUV
     NJcolor = NUV - J
-    JKcolor = J - H
+    JKcolor = J - K
     KW1color = K - W1
     W1W2color = W1 - W2
     W2W3color = W2 - W3
