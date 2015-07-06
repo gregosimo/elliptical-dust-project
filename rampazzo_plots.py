@@ -140,6 +140,18 @@ def generateCMDs(magtable):
     plt.figure()
     MIRplot(W3, N3color, MIRclass, "W3", "NUV-W3", title)
 
+def plot_SSP_color_color(DIR, xblueband, xredband, yblueband, yredband, 
+                         fileformat="SSP.out.mags", label="SSP"):
+    '''Plots an SSP on a color-color plot.'''
+    filename = os.path.join(DIR, fileformat)
+    magtable = fsps.read_mags(filename)
+    xcolor = magtable[xblueband] - magtable[xredband]
+    ycolor = magtable[yblueband] - magtable[yredband]
+    plt.plot([xcolor[0]], [ycolor[0]], 'bs')
+    plt.plot(xcolor, ycolor, 'b-', label=label)
+
+def plot_metallicity_color_color
+
 def generate_color_color(magtable, SSPpath=fsps.OUTPUT_PATH, 
                          SSPfile="SSP.out.mags"):
     '''Generates all color-color plots which could be potentially useful.

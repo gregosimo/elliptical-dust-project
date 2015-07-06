@@ -1837,20 +1837,32 @@ def name_photometry_column(band, error=False, category="ap"):
     The "unext" category is for magnitudes which have been corrected for
     extinction. 
     '''
-    if error:
-        suffix = "err"
+    # Separate case for 2MASS colors because they are not done via photometry,
+    # but ONLY through catalog entries.
+    if band in TWOMASSBANDS:
+        stringtemplate = "{0}_m{1}_k20fe"
+        if error:
+            errstring="sig"
+        else:
+            errstring=""
+        # We take the first index of band because only the first character is
+        # used in the column name.
+        colname = stringtemplate.format(band[0].lower(), errstring)
     else:
-        suffix = "mag"
+        if error:
+            suffix = "err"
+        else:
+            suffix = "mag"
 
-    if category not in ["ap", "unext"]:
-        raise ValueError("Can not understand photometry category")
+        if category not in ["ap", "unext"]:
+            raise ValueError("Can not understand photometry category")
 
-    if band in IRBANDS:
-        prefix = band.lower()
-    else:
-        prefix = band
+        if band in IRBANDS:
+            prefix = band.lower()
+        else:
+            prefix = band
 
-    colname = prefix + category + suffix
+        colname = prefix + category + suffix
 
     return colname
 
