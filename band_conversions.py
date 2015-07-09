@@ -137,9 +137,9 @@ def DNflux2Vegamag(band, flux):
     # will be broken up into cases.
     if band in WISE_bands:
         mag = flux2mag(flux, 1, get_zero_point_magnitude_level(band))
-    elif band in UV_bands:
+    elif band in GALEX_bands:
         raise ValueError("Cannot convert GALEX measurements to Vega.")
-    return 
+    return mag
 
 def DNflux2ABmag(band, flux):
     '''Returns a flux in the AB system.
