@@ -65,8 +65,8 @@ def plot_color_PAH_flux_ratio(pahtable, magtable, title, colorlabel):
                     (np.sqrt((pah_numerator_err / pah_numerator)**2 + 
                              (pah_denominator_err / pah_denominator)**2)))
 
-    color = fulltable["w2apmag"] - fulltable["w3apmag"]
-    color_err = np.sqrt(fulltable["w2aperr"]**2 + fulltable["w3aperr"]**2)
+    color = fulltable["w2unextmag"] - fulltable["w3unextmag"]
+    color_err = np.sqrt(fulltable["w2unexterr"]**2 + fulltable["w3unexterr"]**2)
 
     plt.errorbar(color, pahratio, pahratio_err, color_err, '*')
     plt.xlabel(colorlabel)
@@ -114,11 +114,11 @@ def generateCMDs(magtable):
     which means a color between UV and IR, with a magnitude that's 
     either UV or IR.'''
     MIRclass = magtable["MIR class"]
-    W1 = magtable["w1apmag"]
-    W2 = magtable["w2apmag"]
-    W3 = magtable["w3apmag"]
-    FUV = magtable["FUVapmags"]
-    NUV = magtable["NUVapmags"]
+    W1 = magtable["w1unextmag"]
+    W2 = magtable["w2unextmag"]
+    W3 = magtable["w3unextmag"]
+    FUV = magtable["FUVunextmags"]
+    NUV = magtable["NUVunextmags"]
     F1color = FUV - W1
     F2color = FUV - W2
     F3color = FUV - W3
@@ -151,15 +151,15 @@ def generate_color_color(magtable, SSPpath=fsps.OUTPUT_PATH,
     tracks added to the plots from FSPS
     '''
     MIRclass = magtable["MIR class"]
-    W1 = magtable["w1apmag"]
-    W2 = magtable["w2apmag"]
-    W3 = magtable["w3apmag"]
-    W4 = magtable["w4apmag"]
+    W1 = magtable["w1unextmag"]
+    W2 = magtable["w2unextmag"]
+    W3 = magtable["w3unextmag"]
+    W4 = magtable["w4unextmag"]
     J = magtable["j_m_k20fe"]
     H = magtable["h_m_k20fe"]
     K = magtable["k_m_k20fe"]
-    FUV = magtable["FUVapmag"]
-    NUV = magtable["NUVapmag"]
+    FUV = magtable["FUVunextmag"]
+    NUV = magtable["NUVunextmag"]
 
     FNcolor = FUV - NUV
     NJcolor = NUV - J
@@ -289,14 +289,14 @@ def jk_color_vs_wise_colors(magtable):
     plots with them instead of J-H and H-Ks separately.
     '''
     MIRclass = magtable["MIR class"]
-    W1 = magtable["w1apmag"]
-    W2 = magtable["w2apmag"]
-    W3 = magtable["w3apmag"]
-    W4 = magtable["w4apmag"]
+    W1 = magtable["w1unextmag"]
+    W2 = magtable["w2unextmag"]
+    W3 = magtable["w3unextmag"]
+    W4 = magtable["w4unextmag"]
     J = magtable["j_m_k20fe"]
     K = magtable["k_m_k20fe"]
-    #FUV = magtable["FUVapmags"]
-    #NUV = magtable["NUVapmags"]
+    #FUV = magtable["FUVunextmags"]
+    #NUV = magtable["NUVunextmags"]
 
     #FNcolor = FUV - NUV
     #NJcolor = NUV - J
@@ -336,8 +336,8 @@ def generateColorColors2MASS(magtable):
     W1 = magtable["j_m_k20fe"]
     W2 = magtable["h_m_k20fe"]
     W3 = magtable["k_m_k20fe"]
-    FUV = magtable["FUVapmags"]
-    NUV = magtable["NUVapmags"]
+    FUV = magtable["FUVunextmags"]
+    NUV = magtable["NUVunextmags"]
     F1color = FUV - W1
     F2color = FUV - W2
     F3color = FUV - W3
@@ -411,11 +411,11 @@ def generateColorColors(magtable):
     with a intra-band color. For example, a UV-IR vs. an IR-IR color.
     '''
     MIRclass = magtable["MIR class"]
-    W1 = magtable["w1apmag"]
-    W2 = magtable["w2apmag"]
-    W3 = magtable["w3apmag"]
-    FUV = magtable["FUVapmags"]
-    NUV = magtable["NUVapmags"]
+    W1 = magtable["w1unextmag"]
+    W2 = magtable["w2unextmag"]
+    W3 = magtable["w3unextmag"]
+    FUV = magtable["FUVunextmags"]
+    NUV = magtable["NUVunextmags"]
     F1color = FUV - W1
     F2color = FUV - W2
     F3color = FUV - W3
