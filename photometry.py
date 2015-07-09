@@ -2068,7 +2068,7 @@ def deextinct_data(photometry_table, extinction="", runbands=bands):
 
 
             
-def name_photometry_column(band, error=False, category="ap"):
+def name_photometry_column(band, error=False, category="unext"):
     '''Generates the names of photometry columns in the photometry table.
 
     Photometry columns are the columns which will be returned in the aperture
