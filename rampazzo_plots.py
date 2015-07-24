@@ -45,6 +45,24 @@ def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01")):
     table1[name1] = tempcol1
     return newtable
 
+def multijoin_by_galaxy_name(*tables, **kwargs):
+    '''Joins multiple tables by the provided name columns.
+
+    This function joins an arbitrarily large number of tables together by a
+    sequence of names provided in the names tuple. The length of the names list
+    should correspond to the number of tables. It will return one large table.
+    I haven't dealt with collisions yet...
+    '''
+    names = kwargs["names"]
+    if len(names) != len(tables):
+        raise ValueError("Names and Tables have different lengths")
+    temptable = tables[0]
+    finalname = name[0]
+    for (newtab, newname) in zip(tables[1:], names[1:]):
+        temptable = join_by_galaxy_name(temptable, newtable, names=(finalname,
+                                                                    newname))
+    return temptable
+
 
 def plot_color_PAH_flux_ratio(pahtable, magtable, title, colorlabel):
     '''Plots color vs a PAH flux ratio.'''
