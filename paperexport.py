@@ -1,3 +1,10 @@
+'''This module sets up the tables and figures necessary for the paper. 
+
+Big tables which contain a large swath of data should be located at the
+FULL_*_TABLE variables. These tables will be used to generate all of the
+necessary plots and tables in the paper. When in doubt, include it.
+
+'''
 import os
 
 from astropy.table import Table, vstack
@@ -6,12 +13,39 @@ import numpy as np
 import photometry as phot
 
 BASEPATH = "/home/regulus/simonian/year1/wise"
-PAPERPATH = "/home/regulus/simonian/papers/wise14"
 FSPSPATH = "/home/regulus/simonian/year1/fsps"
 
 ATLAS3DBASE = os.path.join(BASEPATH, "ATLAS3D_DB")
 RAMPAZZOBASE = os.path.join(BASEPATH, "Rampazzo_DB")
 JARRETTBASE = os.path.join(BASEPATH, "Jarrett_DB")
+
+PAPERPATH = "/home/regulus/simonian/papers/wise14"
+TABLEPATH = os.path.join(PAPERPATH, "tables")
+
+FULL_ATLAS3D_TABLE = os.path.join(ATLAS3DBASE, "atlas3d.tbl")
+FULL_RAMPAZZO_TABLE = os.path.join(RAMPAZZOBASE, "rampazzo.tbl")
+
+# I'd like for the tables to just be loaded without worrying about writing to
+# and from disk.
+try:
+    rampazzo_table = Table.read(FULL_RAMPAZZO_TABLE, format="ascii.ipac")
+    atlas3d_table = Table.read(FULL_ATLAS3D_TABLE, format="ascii.ipac")
+except IOError:
+    rampazzo_table=[]
+    atlas3d_table=[]
+
+def create_Rampazzo_sample_table(table=rampazzo_table,
+                                 dest=os.path.join(TABLEPATH,
+                                                   "rampazzotbl.tex")):
+    '''Table corresponding to information about Rampazzo galaxies.'''
+    columns = ["objstr_01", ]
+
+def create_ATLAS3D_sample_table(table=atlas3d_table,
+                                dest=os.path.join(TABLEPATH,
+                                                  "atlas3dtbl.tex")):
+    columns = []
+
+    
 
 def move_rampazzo():
     # First read in Table 1
