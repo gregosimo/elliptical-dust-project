@@ -279,5 +279,39 @@ def color_difference_plot(times, outputdir=TBURST_PATH, prefix1="early_t",
                      color=linecolor)
             plt.title(title)
             plt.xlabel("Age (Gyr)")
-            plt.ylabel("({0}-{1})".format(blueband, redband)) 
+            plt.ylabel("({0}-{1})".format(blueband, redband))
             plt.legend(loc=loc)
+
+def plot_FSPS_SED(datatable, FSPS_DIR, modelfile="SSP.out.mags",
+                  label="FSPS", modfmt="c*",  datafmt="ro",
+                  runbands=(conv.WISE_bands + conv.TWOMASS_bands + 
+                            conv.GALEX_bands)):
+    '''Plots a model FSPS SED with data.
+
+    Takes an FSPS directory and file with a table full of data, and then plots
+    both as an SED.
+    '''
+    filepath = os.path.join(FSPS_DIR, modelfile)
+    magtable = read_mags(filepath)
+    # I haven't decided how to choose an age, so I'm choosing the very last
+    # one.
+    ageindex = -1
+
+    wavelengths = np.array([conv.WAVELENGTHS[band] for band in runbands])*1e6
+    mags = np.array([magtable[ageindex][band] for band in runbands])
+    plt.semilogx(wavelengths, mags, modfmt, label=label)
+
+    for galrow in datatable:
+        galmags = np.array([
+            galrow[phot.name_photometry_column(band, error=False)] for band in 
+            runbands])
+        galerrs = np.array([
+            galrow[phot.name_photometry_column(band, error=True)] for band in 
+            runbands])
+        galmags += (magtable[ageindex]["Ks"] - 
+                    galrow[phot.name_photometry_column("Ks")])
+        plt.semilogx(wavelengths, galmags, datafmt)
+
+    plt.xlabel("Wavelength (um)")
+    plt.ylabel("AB Mag")
+    plt.gca().invert_yaxis()

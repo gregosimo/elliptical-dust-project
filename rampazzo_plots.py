@@ -57,10 +57,10 @@ def multijoin_by_galaxy_name(*tables, **kwargs):
     if len(names) != len(tables):
         raise ValueError("Names and Tables have different lengths")
     temptable = tables[0]
-    finalname = name[0]
+    finalname = names[0]
     for (newtab, newname) in zip(tables[1:], names[1:]):
-        temptable = join_by_galaxy_name(temptable, newtable, names=(finalname,
-                                                                    newname))
+        temptable = join_by_galaxy_name(temptable, newtab, names=(finalname,
+                                                                  newname))
     return temptable
 
 

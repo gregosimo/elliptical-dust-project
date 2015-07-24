@@ -29,16 +29,22 @@ FULL_RAMPAZZO_TABLE = os.path.join(RAMPAZZOBASE, "rampazzo.tbl")
 # and from disk.
 try:
     rampazzo_table = Table.read(FULL_RAMPAZZO_TABLE, format="ascii.ipac")
-    atlas3d_table = Table.read(FULL_ATLAS3D_TABLE, format="ascii.ipac")
 except IOError:
     rampazzo_table=[]
+
+try:
+    atlas3d_table = Table.read(FULL_ATLAS3D_TABLE, format="ascii.ipac")
+except IOError:
     atlas3d_table=[]
 
 def create_Rampazzo_sample_table(table=rampazzo_table,
                                  dest=os.path.join(TABLEPATH,
                                                    "rampazzotbl.tex")):
     '''Table corresponding to information about Rampazzo galaxies.'''
-    columns = ["objstr_01", ]
+    columns = ["objstr_01", "RSA_morph_type", "D", "MIR_class"]
+    names = ["Galaxy", "Morph.", "Distance", "MIR Class"]
+    table1 = table[columns]
+    table1.write(dest, format="ascii.aastex", names=names)
 
 def create_ATLAS3D_sample_table(table=atlas3d_table,
                                 dest=os.path.join(TABLEPATH,
@@ -59,8 +65,8 @@ def read_Rampazzo_Table1(tablepath=os.path.join(BASEPATH,
                                                 "Rampazzo_Table1.csv")):
     rampazzotable = Table.read(tablepath, format="ascii.csv", guess=False,
                                data_start=2, delimiter=":", comment="\s*#",
-                               names=("Galaxy", "RSA morph. type", "T", "Terr", 
-                                      "D", "T88 Group", "MK", "re", "sigc"),
+                               names=("Galaxy", "RSA_morph_type", "T", "Terr", 
+                                      "D", "T88_Group", "MK", "re", "sigc"),
                                fill_values=[("", "0"), ('---', "0")])
     # First flag the entries which are starred.
     rampazzotable["H0D"] = np.char.endswith(rampazzotable["D"], '*')

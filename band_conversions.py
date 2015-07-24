@@ -6,6 +6,11 @@ WISE_bands = ["W1", "W2", "W3", "W4"]
 TWOMASS_bands = ["J", "H", "Ks"]
 GALEX_bands = ["NUV", "FUV"]
 
+# Isophotal wavelengths of the bands:
+WAVELENGTHS = {"W1": 3.4e-6, "W2": 4.6e-6, "W3": 12e-6, "W4": 22e-6, "J":
+               1.24e-6, "H": 1.66e-6, "Ks": 2.16e-6, "NUV": 2267e-10, "FUV":
+               1516e-10}
+
 # Dictionaries of Zero-points for bands
 ZERO_POINT_FLUXES = {"W1": 306.682, "W2": 170.663, "W3": 29.0448, "W4": 8.2839, 
                      "NUV": 3810, "FUV": 3620}
