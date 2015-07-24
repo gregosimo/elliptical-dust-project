@@ -1713,8 +1713,8 @@ def aperture_photometry_table(
     #
     # This section is about setting up the table outline with a dictionary.
     photcolumns = {"objstr_01": []}
-    photkeys = [name_photometry_column(band) for band in runbands]
-    errkeys = [name_photometry_column(band, error=True) for band in runbands]
+    photkeys = [name_photometry_column(band, category="ap") for band in runbands]
+    errkeys = [name_photometry_column(band, category="ap", error=True) for band in runbands]
     for photkey, photerr in zip(photkeys, errkeys):
         photcolumns[photkey] = []
         photcolumns[photerr] = []
@@ -1806,12 +1806,12 @@ def deextinct_data(photometry_table, extinction="", runbands=bands):
             # time. When I move de-exinction to galaxy_photometry, this will be
             # a moot point!
             try:
-                extincted_table[unext_mag] = conv.extinction_correction(
-                    band, extincted_table[ap_mag], 
-                    extincted_table["E_B_V_SFD"])
-                extincted_table[unext_err] = np.sqrt(
-                    extincted_table[ap_err]**2 +
-                    extincted_table["stdev_E_B_V_SFD"]**2)
+                unextmags, unexterrs = conv.extinction_correction(band,
+                    extincted_table[ap_mag], extincted_table["E_B_V_SFD"],
+                    extincted_table[ap_err], extincted_table["stdev_E_B_V_SFD"], 
+                    deredden=True)
+                extincted_table[unext_mag] = unextmags
+                extincted_table[unext_err] = unexterrs
             except KeyError:
                 pass
         return extincted_table

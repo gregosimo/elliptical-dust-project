@@ -408,7 +408,8 @@ def FUV_extinction(EB_V, Rv=3.1):
     return A_FUV
 
 
-def extinction_correction(band, truemag, EB_V, Rv=3.1, deredden=False):
+def extinction_correction(band, truemag, EB_V, magerr=None, EBVerr=None, Rv=3.1, 
+                          deredden=False):
     '''Extincts a given magnitude using a reddening law.
 
     This function assumes magnitudes are expressed in the AB system.
@@ -426,7 +427,12 @@ def extinction_correction(band, truemag, EB_V, Rv=3.1, deredden=False):
     else:
         extincted_mag = truemag + A
 
-    return extincted_mag
+    if magerr is None and EBVerr is None:
+        return extincted_mag
+    elif magerr is not None and EBVerr is not None:
+        extinctederr = np.sqrt(magerr**2 + (EXTINCTION_RATIO[band] *
+                                            EBVerr)**2)
+        return (extincted_mag, extinctederr)
 
 def get_extinction_table(filepath):
     '''Reads in an extinction table from the IRSA extinction service.
