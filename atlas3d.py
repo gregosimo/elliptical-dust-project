@@ -151,7 +151,7 @@ def plot_dustless_galaxy_histogram(
 def read_Krajnovic_Table_D1(
         URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
              "Krajnovic2011_Atlas3D_Paper2_TableD1.txt")):
-    '''Reads the table from Kajnovich 2011
+    '''Reads the table from Krajnovich 2011
 
     In particular, this table contains information about dust.'''
     krajnovic_table = Table.read(
