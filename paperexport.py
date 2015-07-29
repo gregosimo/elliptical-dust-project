@@ -59,9 +59,14 @@ def create_Rampazzo_sample_table(table=rampazzo_table,
 def create_ATLAS3D_sample_table(table=atlas3d_table,
                                 dest=os.path.join(TABLEPATH,
                                                   "atlas3dtbl.tex")):
-    columns = []
+    caption = r"""Properties of galaxies in the ATLAS3D sample.
+    \label{tab:atlas3dsample}"""
+    columns = ["objstr_01", "type", "D", "Age_SSP", "[Z/H]_SSP"]
+    names = ["Galaxy", "Morph.", "Distance", "SSP Age", "SSP [Z/H]"]
+    table1 = table[columns]
+    table1.write(dest, format="ascii.aastex", names=names,
+                 latexdict={"caption": caption})
 
-    
 
 def move_rampazzo():
     # First read in Table 1
@@ -153,6 +158,15 @@ def read_Rampazzo_TableA1(tablepath=os.path.join(BASEPATH,
     rampazzotable["12.7 um err"].fill_value = 1.5
     rampazzotable["17 um err"].fill_value = 1.1
     return rampazzotable
+
+def read_Cappellari11_Table_3(tablepath=os.path.join(ATLAS3DBASE,
+                                                     "Cappellari11_Table_3.txt")):
+    '''Reads in the third table from Cappellari 2011.'''
+    names = ["Galaxy", "RA", "DEC", "SBF", "NED-D", "Virgo", "VHel", "D",
+             "M_K", "A_B", "T-type", "log(Re)"]
+    atlas3dsample = Table.read(tablepath, format="ascii.no_header", data_start=3,
+                               names=names, guess=False)
+    return atlas3dsample
 
 def rampazzo_sample_list(table1=os.path.join(BASEPATH, "Rampazzo_Table1.csv"), 
                          table2=os.path.join(BASEPATH, "Rampazzo_Table2.csv"),
