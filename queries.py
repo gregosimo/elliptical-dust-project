@@ -477,3 +477,33 @@ def expand_IPAC_table(inputfile, outputfile):
     # work around the fact that I can't use them as keyword args.
     run_stilts("tcopy", ifmt="ipac", ofmt="ipac", **{"in": inputfile, 
         "out": outputfile})
+
+def create_HYPERLEDA_upload_file(ids, output):
+    '''Creates a file that can be uploaded to HYPERLEDA.
+
+    The file will only contain object names without any columns in a way that
+    can be immediately parseable by HYPERLEDA.'''
+    # I'm a very naughty boy for doing this.
+    # We don't want a header because that will cause problems with HYPERLEDA.
+    # However, using the ascii.no_header writer will enclose the object names in
+    # quotes, which also causes problems with HYPERLEDA. Therefore, the
+    # workaround I've arrived at is to use a newline as the column name. When
+    # writing the column name, it will instead make it into a blank line, which
+    # is ignored by HYPERLEDA. It would be nice to have it actually be
+    # configurable, though.
+    hypertable = Table([ids], names=("\n",))
+    hypertable.write(output, format="ascii.tab")
+
+def read_HYPERLEDA_output(outputfile):
+    '''Reads the output of a HYPERLEDA query.
+
+    This is basically a wrapper around Table.read which makes the appropriate
+    delimiter of "|" and comment of "!".
+    '''
+    hypertable = Table.read(outputfile, format="ascii.basic", delimiter="|",
+                            comment="\s*!")
+    emptycols = filter(lambda s: s.startswith("col"), hypertable.colnames)
+    assert len(emptycols) == 1
+    del hypertable[emptycols[0]]
+
+    return hypertable

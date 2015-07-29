@@ -14,54 +14,6 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
 
-def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01")):
-    '''Joins two tables by the provided name columns. 
-
-    By default, both columns should be called "objstr_01", in which, if both
-    columns are in folder form (without a space), it will behave like a regular
-    join. If the columns are not in folder form, this function will reduce both
-    columns to be in folder form before performing the join. It will also be
-    capable of performing joins where the galaxy names are in differently-named
-    columns. In this case, the galaxy name of the output column will be decided
-    by whichever table is passed first to table1.
-    '''
-    # Here are a list of corner cases that I can come up with:
-    # 1) names are different and name2 does not have a different column with
-    #   name1
-    # 2) Names are the same, in which case a temporary copy of column 2 should
-    #   be restored at the end of the operation.
-    # 3) Names are different, but column 2 already has a column with name1. I
-    # don't know how to deal with that off the top of my head.
-    name1, name2 = names
-    # Saving table columns in temporary variables. Make sure to put them back!
-    tempcol1 = table1[name1]
-    tempcol2 = table2[name2]
-    # Now format them to be in folder form.
-    table1[name1] = phot.object_name_to_dir(table1[name1])
-    table2[name1] = phot.object_name_to_dir(table2[name2])
-    # Now join them.
-    newtable = join(table1, table2, keys=[name1])
-    # Set columns back.
-    table1[name1] = tempcol1
-    return newtable
-
-def multijoin_by_galaxy_name(*tables, **kwargs):
-    '''Joins multiple tables by the provided name columns.
-
-    This function joins an arbitrarily large number of tables together by a
-    sequence of names provided in the names tuple. The length of the names list
-    should correspond to the number of tables. It will return one large table.
-    I haven't dealt with collisions yet...
-    '''
-    names = kwargs["names"]
-    if len(names) != len(tables):
-        raise ValueError("Names and Tables have different lengths")
-    temptable = tables[0]
-    finalname = names[0]
-    for (newtab, newname) in zip(tables[1:], names[1:]):
-        temptable = join_by_galaxy_name(temptable, newtab, names=(finalname,
-                                                                  newname))
-    return temptable
 
 
 def plot_color_PAH_flux_ratio(pahtable, magtable, title, colorlabel):
