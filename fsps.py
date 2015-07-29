@@ -273,7 +273,7 @@ def color_difference_plot(times, outputdir=TBURST_PATH, prefix1="early_t",
             plt.legend(loc=loc)
 
 def plot_FSPS_SED(datatable, FSPS_DIR, modelfile="SSP.out.mags",
-                  label="FSPS", modfmt="c*",  datafmt="ro",
+                  label="FSPS", modfmt="c*",  datafmt="r.",
                   runbands=(conv.WISE_bands + conv.TWOMASS_bands + 
                             conv.GALEX_bands)):
     '''Plots a model FSPS SED with data.
@@ -300,7 +300,7 @@ def plot_FSPS_SED(datatable, FSPS_DIR, modelfile="SSP.out.mags",
             runbands])
         galmags += (magtable[ageindex]["Ks"] - 
                     galrow[phot.name_photometry_column("Ks")])
-        plt.semilogx(wavelengths, galmags, datafmt)
+        plt.errorbar(wavelengths, galmags, galerrs, fmt=datafmt)
 
     plt.xlabel("Wavelength (um)")
     plt.ylabel("AB Mag")

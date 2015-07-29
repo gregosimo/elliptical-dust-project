@@ -11,6 +11,7 @@ from astropy.table import Table, vstack
 import numpy as np
 
 import photometry as phot
+import queries
 
 BASEPATH = "/home/regulus/simonian/year1/wise"
 FSPSPATH = "/home/regulus/simonian/year1/fsps"
@@ -32,8 +33,10 @@ try:
 except IOError:
     rampazzo_table=[]
 
+# I made this a csv because the astropy ipac routine doesn't believe in having
+# slashes in ipac column names
 try:
-    atlas3d_table = Table.read(FULL_ATLAS3D_TABLE, format="ascii.ipac")
+    atlas3d_table = Table.read(FULL_ATLAS3D_TABLE, format="ascii.csv")
 except IOError:
     atlas3d_table=[]
 
@@ -41,10 +44,17 @@ def create_Rampazzo_sample_table(table=rampazzo_table,
                                  dest=os.path.join(TABLEPATH,
                                                    "rampazzotbl.tex")):
     '''Table corresponding to information about Rampazzo galaxies.'''
+    caption = r"""Properties of the galaxies in the Rampazzo sample. Columns:
+    (1) galaxy name; (2) Morphological type; (3) Distance; (4) MIR Class.
+    References can be found as \citet{Rampazzo13}.
+    \label{tab:rampazzosample}"""
     columns = ["objstr_01", "RSA_morph_type", "D", "MIR_class"]
     names = ["Galaxy", "Morph.", "Distance", "MIR Class"]
+    units = {"Distance", "Mpc"}
     table1 = table[columns]
-    table1.write(dest, format="ascii.aastex", names=names)
+#    table1.write(dest, format="ascii.latex", names=names)
+    table1.write(dest, format="ascii.aastex", names=names,
+                 latexdict={"caption": caption, "units": units})
 
 def create_ATLAS3D_sample_table(table=atlas3d_table,
                                 dest=os.path.join(TABLEPATH,
