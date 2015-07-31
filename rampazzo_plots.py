@@ -15,6 +15,21 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
 
 
+def color_histogram_by_class(band1, band2, groupcol, xlabel, title, bins, 
+                             colrange=(-4, 4), classes=np.arange(0,5)):
+    '''Creates a histogam for colors for different classes.
+    '''
+    color = band1 - band2
+    colorgroup = color.group_by(groupcol)
+    plotcolors = ["black", "yellow", "green", "blue", "red"]
+    plt.hist([colorgroup.groups[i] for i in classes], bins, range=colrange, 
+             label=["Class {0}".format(i) for i in classes], 
+             color= [plotcolors[i] for i in classes],
+             histtype="bar", rwidth=1)
+    plt.xlabel(xlabel)
+    plt.ylabel("N")
+    plt.title(title)
+    plt.legend()
 
 def plot_color_PAH_flux_ratio(pahtable, magtable, title, colorlabel):
     '''Plots color vs a PAH flux ratio.'''
@@ -119,8 +134,6 @@ def plot_SSP_color_color(DIR, xblueband, xredband, yblueband, yredband,
     ycolor = magtable[yblueband] - magtable[yredband]
     plt.plot([xcolor[0]], [ycolor[0]], 'bs')
     plt.plot(xcolor, ycolor, 'b-', label=label)
-
-def plot_metallicity_color_color
 
 def generate_color_color(magtable, SSPpath=fsps.OUTPUT_PATH, 
                          SSPfile="SSP.out.mags"):
