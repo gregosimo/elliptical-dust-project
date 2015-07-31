@@ -2233,20 +2233,6 @@ def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror,
     plt.ylabel(ylabel)
     plt.title(title)
 
-def ColorHistogramByClass(band1, band2, groups, xlabel, title, bins, 
-                          colrange=(-4, 4)):
-    '''Creates a histogam for colors for different classes.
-    '''
-    color = band1 - band2
-    colorgroup = color.group_by(groups)
-    plt.hist(colorgroup.groups, bins, range=colrange, 
-             label=["Class {0}".format(i) for i in range(5)], 
-             color=["black", "yellow", "green", "blue", "red"], 
-             histtype="step", stacked=True)
-    plt.xlabel(xlabel)
-    plt.ylabel("N")
-    plt.title(title)
-    plt.legend()
 
 def makePlots(BASEDIR, w1mags, w2mags, w3mags, w1apmags, w2apmags, w3apmags):
     '''Plots the WISE photometry versus aperture photometry.

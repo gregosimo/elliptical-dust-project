@@ -7,11 +7,16 @@ necessary plots and tables in the paper. When in doubt, include it.
 '''
 import os
 
+import matplotlib
+matplotlib.use("PDF")
+import matplotlib.pyplot as plt
 from astropy.table import Table, vstack
 import numpy as np
 
 import photometry as phot
 import queries
+import rampazzo_plots as rp
+import fsps
 
 BASEPATH = "/home/regulus/simonian/year1/wise"
 FSPSPATH = "/home/regulus/simonian/year1/fsps"
@@ -22,6 +27,7 @@ JARRETTBASE = os.path.join(BASEPATH, "Jarrett_DB")
 
 PAPERPATH = "/home/regulus/simonian/papers/wise14"
 TABLEPATH = os.path.join(PAPERPATH, "tables")
+FIGUREPATH = os.path.join(PAPERPATH, "fig")
 
 FULL_ATLAS3D_TABLE = os.path.join(ATLAS3DBASE, "atlas3d.tbl")
 FULL_RAMPAZZO_TABLE = os.path.join(RAMPAZZOBASE, "rampazzo.tbl")
@@ -66,6 +72,19 @@ def create_ATLAS3D_sample_table(table=atlas3d_table,
     table1 = table[columns]
     table1.write(dest, format="ascii.aastex", names=names,
                  latexdict={"caption": caption})
+
+def create_NUV_J_histogram(table=rampazzo_table, dest=os.path.join(FIGUREPATH,
+                               "uvsed.pdf")):
+    '''Creates the histogram which plots Class 2/3 objects in NUV-J.'''
+    title = "Class Histogram"
+    xlabel = "NUV-J"
+    rp.color_histogram_by_class(rampazzo_table["NUVunextmag"],
+                                rampazzo_table["j_m_k20fe"],
+                                rampazzo_table["MIR_class"], "NUV-J", 
+                                "Class Histogram", 26, classes=[2,3],
+                                colrange=(2.5, 9))
+    plt.savefig(dest)
+    plt.close()
 
 
 def move_rampazzo():
