@@ -46,6 +46,16 @@ try:
 except IOError:
     atlas3d_table=[]
 
+# With a later version of astropy, I could just use the unique function...
+fulltable = vstack([rampazzo_table, atlas3d_table])
+groupedtable = fulltable.group_by('objstr_01')
+fulltable = Table(rows=groupedtable[0])
+for ix in xrange(1, len(groupedtable.groups)):
+    fulltable.add_row(groupedtable.groups[ix][0])
+
+#######################################################################
+# Create Tables #
+#######################################################################
 def create_Rampazzo_sample_table(table=rampazzo_table,
                                  dest=os.path.join(TABLEPATH,
                                                    "rampazzotbl.tex")):
@@ -65,13 +75,37 @@ def create_Rampazzo_sample_table(table=rampazzo_table,
 def create_ATLAS3D_sample_table(table=atlas3d_table,
                                 dest=os.path.join(TABLEPATH,
                                                   "atlas3dtbl.tex")):
-    caption = r"""Properties of galaxies in the ATLAS3D sample.
+    caption = r"""Properties of galaxies in the \ATLAS sample.
     \label{tab:atlas3dsample}"""
     columns = ["objstr_01", "type", "D", "Age_SSP", "[Z/H]_SSP"]
     names = ["Galaxy", "Morph.", "Distance", "SSP Age", "SSP [Z/H]"]
     table1 = table[columns]
     table1.write(dest, format="ascii.aastex", names=names,
                  latexdict={"caption": caption})
+
+def create_magnitude_table(table=fulltable, dest=os.path.join(TABLEPATH,
+                                                              "mags.tex")):
+    caption = r"""Magnitudes of galaxies in the \ATLAS and Rampazzo samples.
+    \label{tab:magtable}"""
+    tablefoot = r"""\tablecomments{Magnitudes are reported in the AB system. 
+    They have not been corrected for extinction.}"""
+    columns = ["objstr_01", "FUVapmag", "FUVaperr", "NUVapmag", "NUVaperr", 
+               "w1apmag", "w1aperr", "w2apmag", "w2aperr", "w3apmag",
+               "w3aperr", "w4apmag", "w4aperr"]
+    names = ["Galaxy", "FUV", r"\(\sigma_{FUV}\)", "NUV", r"\(\sigma_{NUV}\)", 
+             "W1", r"\(\sigma_{W1}\)", "W2", r"\(\sigma_{W2}\)", "W3",
+             r"\(\sigma_{W3}\)", "W4", r"\(\sigma_{W4}\)"]
+    formats = {"Galaxy": "%s",
+               "FUV": format_mag, r"\(\sigma_{FUV}\)": format_mag_err, 
+               "NUV": format_mag, r"\(\sigma_{NUV}\)": format_mag_err, 
+               "W1": format_mag, r"\(\sigma_{W1}\)": format_mag_err, 
+               "W2": format_mag, r"\(\sigma_{W2}\)": format_mag_err, 
+               "W3": format_mag, r"\(\sigma_{W3}\)": format_mag_err, 
+               "W4": format_mag, r"\(\sigma_{W4}\)": format_mag_err}
+    export = table[columns]
+    export.write(dest, format="ascii.aastex", names=names, formats=formats,
+                 latexdict={"caption": caption, "tablefoot": tablefoot,
+                 "tabletype": "deluxetable*"})
 
 def create_NUV_J_histogram(table=rampazzo_table, dest=os.path.join(FIGUREPATH,
                                "uvsed.pdf")):
@@ -127,8 +161,8 @@ def read_Rampazzo_Table2(tablepath=os.path.join(BASEPATH,
                                                 "Rampazzo_Table2.csv")):
     rampazzotable = Table.read(tablepath, format="ascii.csv", guess=False,
                                data_start=2, delimiter=":", comment="\s*#",
-                               names=("Galaxy", "RSA morph. type", "T", "Terr", 
-                                      "D", "T88 Group", "MK", "re", "sigc"),
+                               names=("Galaxy", "RSA_morph_type", "T", "Terr", 
+                                      "D", "T88_Group", "MK", "re", "sigc"),
                                fill_values=[("", "0"), ('---', "0")])
     # First flag the entries which are starred.
     rampazzotable["H0D"] = np.char.endswith(rampazzotable["D"], '*')
@@ -204,6 +238,23 @@ def rampazzo_sample_list(table1=os.path.join(BASEPATH, "Rampazzo_Table1.csv"),
 
     sampletable.write(destination, format="ascii.csv", delimiter=":")
 
+def format_mag(mag):
+    '''Format magnitudes so that they can be displayed on a table.
+
+    This essentially breaks off the magnitude at the second decimal place. It
+    is meant to be used with the format keyword in Table.write().
+    '''
+    magstr = "{0:.2f}".format(mag)
+    return magstr
+
+def format_mag_err(err):
+    '''Format magnitude errors so that they can be displayed on a table.
+
+    This essentially breaks off the error at the third decimal place. It is
+    meant to be used with the format keyword in Table.write().
+    '''
+    magerrstr = "{0:.3f}".format(err)
+    return magerrstr
 
 if __name__ == "__main__":
 
