@@ -190,6 +190,42 @@ def plot_metallicity_bounds(lowzh, highzh, MET_PATH, blueband, redband,
     plt.plot(highmetmagtable["Age"]/1e9, highmetmagtable[blueband] -
              highmetmagtable[redband], 'r-', label=label.format(highzh))
 
+def plot_dust_toggled_metallicity_bounds(FILE_PATH, blueband, redband,
+                                        highdusthighmet="dust_highmet.mags",
+                                        highdustlowmet="dust_lowmet.mags",
+                                        lowdusthighmet="nodust_highmet.mags",
+                                        lowdustlowmet="nodust_lowmet.mags",
+                                        highmet=0.2, lowmet=-0.89,
+                                        dustsuffix="", 
+                                        nodustsuffix=" (No dust)"):
+    '''Plots two FSPS metallicity bounds for dusty and dustless galaxies.
+
+    This function is kinda contrived and not elegant at all. But oh well, I
+    think that's the price I pay for not making a super legit FORTRAN routine,
+    or just runnings FSPS over and over and over again.'''
+    highdusthighmetfilename = os.path.join(FILE_PATH, highdusthighmet)
+    highdusthighmettable = read_mags(highdusthighmetfilename)
+    highdustlowmetfilename = os.path.join(FILE_PATH, highdustlowmet)
+    highdustlowmettable = read_mags(highdustlowmetfilename)
+    lowdustlowmetfilename = os.path.join(FILE_PATH, lowdustlowmet)
+    lowdustlowmettable = read_mags(lowdustlowmetfilename)
+    lowdusthighmetfilename = os.path.join(FILE_PATH, lowdusthighmet)
+    lowdusthighmettable = read_mags(lowdusthighmetfilename)
+
+    highdusthighmetlabel="[Z/H]={0:.2f}{1}".format(highmet, dustsuffix)
+    highdustlowmetlabel="[Z/H]={0:.2f}{1}".format(lowmet, dustsuffix)
+    lowdusthighmetlabel="[Z/H]={0:.2f}{1}".format(highmet, nodustsuffix)
+    lowdustlowmetlabel="[Z/H]={0:.2f}{1}".format(lowmet, nodustsuffix)
+
+    plt.plot(highdusthighmettable["Age"]/1e9, highdusthighmettable[blueband] -
+             highdusthighmettable[redband], 'r-', label=highdusthighmetlabel)
+    plt.plot(highdustlowmettable["Age"]/1e9, highdustlowmettable[blueband] -
+             highdustlowmettable[redband], 'b-', label=highdustlowmetlabel)
+    plt.plot(lowdusthighmettable["Age"]/1e9, lowdusthighmettable[blueband] -
+             lowdusthighmettable[redband], 'r--', label=lowdusthighmetlabel)
+    plt.plot(lowdustlowmettable["Age"]/1e9, lowdustlowmettable[blueband] -
+             lowdustlowmettable[redband], 'b--', label=lowdustlowmetlabel)
+
 def plot_tburst_tracks(times, TBURST_DIR, blueband, redband, 
                        fileformat="early_t{0:02d}.mags", label="{0} Gyr",
                        fmts=['k', 'g', 'y', 'c', 'm']):
