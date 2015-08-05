@@ -46,12 +46,25 @@ try:
 except IOError:
     atlas3d_table=[]
 
-# With a later version of astropy, I could just use the unique function...
-fulltable = vstack([rampazzo_table, atlas3d_table])
-groupedtable = fulltable.group_by('objstr_01')
-fulltable = Table(rows=groupedtable[0])
-for ix in xrange(1, len(groupedtable.groups)):
-    fulltable.add_row(groupedtable.groups[ix][0])
+fulltable = []
+
+def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
+    '''Function to take care of generating the full sample table.
+
+    Since generating the full table is an expensive operation, this function is
+    called to ensure it is only called once per load, and only when it is
+    really needed.'''
+    global fulltable
+    if fulltable is []:
+        # With a later version of astropy, I could just use the unique 
+        # function...
+        fulltable = vstack([rampazzo_table, atlas3d_table])
+        groupedtable = fulltable.group_by('objstr_01')
+        fulltable = Table(rows=groupedtable[0])
+        for ix in xrange(1, len(groupedtable.groups)):
+            fulltable.add_row(groupedtable.groups[ix][0])
+    else:
+        pass
 
 #######################################################################
 # Create Tables #
@@ -75,7 +88,7 @@ def create_Rampazzo_sample_table(table=rampazzo_table,
 def create_ATLAS3D_sample_table(table=atlas3d_table,
                                 dest=os.path.join(TABLEPATH,
                                                   "atlas3dtbl.tex")):
-    caption = r"""Properties of galaxies in the \ATLAS sample.
+    caption = r"""Properties of galaxies in the \ATLAS{} sample.
     \label{tab:atlas3dsample}"""
     columns = ["objstr_01", "type", "D", "Age_SSP", "[Z/H]_SSP"]
     names = ["Galaxy", "Morph.", "Distance", "SSP Age", "SSP [Z/H]"]
@@ -83,9 +96,21 @@ def create_ATLAS3D_sample_table(table=atlas3d_table,
     table1.write(dest, format="ascii.aastex", names=names,
                  latexdict={"caption": caption})
 
+def create_param_table(table=fulltable, dest=os.path.join(TABLEPATH,
+                                                          "params.tex")):
+    generate_fulltable()
+    caption = r"""Aperture photometry parameters for galaxies in the \ATLAS{}
+    and Rampazzo samples
+    \label{tab:params}"""
+    columns = ["objstr_01", "w1rsemi", "w1ba", "w1pa", "cat", "NUV_Tile",
+               "FUV_Tile"]
+    names = ["Galaxy", "Semimajor Axis", "Axis Ratio", "Position Angle",
+             "\WISE{} Survey", "NUV Tile", "FUV Tile"]
+
 def create_magnitude_table(table=fulltable, dest=os.path.join(TABLEPATH,
                                                               "mags.tex")):
-    caption = r"""Magnitudes of galaxies in the \ATLAS and Rampazzo samples.
+    generate_fulltable()
+    caption = r"""Magnitudes of galaxies in the \ATLAS{} and Rampazzo samples.
     \label{tab:magtable}"""
     tablefoot = r"""\tablecomments{Magnitudes are reported in the AB system. 
     They have not been corrected for extinction.}"""
@@ -95,7 +120,7 @@ def create_magnitude_table(table=fulltable, dest=os.path.join(TABLEPATH,
     names = ["Galaxy", "FUV", r"\(\sigma_{FUV}\)", "NUV", r"\(\sigma_{NUV}\)", 
              "W1", r"\(\sigma_{W1}\)", "W2", r"\(\sigma_{W2}\)", "W3",
              r"\(\sigma_{W3}\)", "W4", r"\(\sigma_{W4}\)"]
-    formats = {"Galaxy": "%s",
+    formats = {"Galaxy": format_reflect,
                "FUV": format_mag, r"\(\sigma_{FUV}\)": format_mag_err, 
                "NUV": format_mag, r"\(\sigma_{NUV}\)": format_mag_err, 
                "W1": format_mag, r"\(\sigma_{W1}\)": format_mag_err, 
@@ -212,6 +237,36 @@ def read_Rampazzo_TableA1(tablepath=os.path.join(BASEPATH,
     rampazzotable["17 um err"].fill_value = 1.1
     return rampazzotable
 
+def read_Rampazzo_TableA2(tablepath=os.path.join(BASEPATH,
+                                                 "Rampazzo_TableA2.csv")):
+    rampazzotable = Table.read(tablepath, format="ascii.csv", guess=False, 
+                               data_start=2, delimiter=":", comment="\s*#",
+                               header_start=1,
+                               names=("Galaxy", "H2 S(7)", "H2 S(7) err", 
+                                      "H2 S(6)", "H2 S(6) err", "H2 S(5)", 
+                                      "H2 S(5) err", "[Ar II]", "[Ar II] err",
+                                      "H Pfa", "H Pfa err", "H2 S(4)", 
+                                      "H2 S(4) err", "[Ar III] 9um", 
+                                      "[Ar III] 9 um err", "H2 S(3)", 
+                                      "H2 S(3) err", "[S IV]", "[S IV] err", 
+                                      "H2 S(2)", "H2 S(2) err", "[Ne II]", 
+                                      "[Ne II] err", "[Ne V] 14 um", 
+                                      "[Ne V] 14 um err", "[Ne III] 16 um", 
+                                      "[Ne III] 16 um err", "H2 S(1)", 
+                                      "H2 S(1) err", "[Fe II] 18 um", 
+                                      "[Fe II] 18 um err", "[S III] 19 um", 
+                                      "[S III] 19 um err", "[Ar III] 22 um", 
+                                      "[Ar III] 22 um err", "[Ne V] 24 um", 
+                                      "[Ne V] 24 um err", "[O IV]", 
+                                      "[O IV] err", "[Fe II] 26 um", 
+                                      "[Fe II] 26 um err", "H2 S(0)", 
+                                      "H2 S(0) err", "[S III] 33 um", 
+                                      "[S III] 33 um err", "[Si II]", 
+                                      "[Si II] err", "[Fe II] 35 um", 
+                                      "[Fe II] 35 um err", "[Ne III] 36 um",
+                                      "[Ne III] 36 um err"))
+    return rampazzotable
+
 def read_Cappellari11_Table_3(tablepath=os.path.join(ATLAS3DBASE,
                                                      "Cappellari11_Table_3.txt")):
     '''Reads in the third table from Cappellari 2011.'''
@@ -255,6 +310,28 @@ def format_mag_err(err):
     '''
     magerrstr = "{0:.3f}".format(err)
     return magerrstr
+
+def format_arcseconds(arc):
+    '''Format a number so that it is displayed with arcsecond units'''
+    arcstr = "{0:.1f}''".format(arc)
+    return arcstr
+
+def format_degrees(deg):
+    '''Format a number so that it is displayed with degree units'''
+    degstr = "{0:.1f}\\\\(^\\\\circ\\\\)".format(deg)
+    return degstr
+
+def format_axis_ratio(ax):
+    '''Format a number so that it's displayed as a proper axis ratio.'''
+    axstr = "{0:.2f}".format(ax)
+    return axstr
+
+def format_reflect(inp):
+    '''Returns the same string.
+
+    This is made primarily to make functions for the formats argument in
+    Table.write() more transparent.'''
+    return inp
 
 if __name__ == "__main__":
 
