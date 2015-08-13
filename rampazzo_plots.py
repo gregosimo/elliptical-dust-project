@@ -34,8 +34,8 @@ def color_histogram_by_class(band1, band2, groupcol, xlabel, title, bins,
 def plot_color_PAH_flux_ratio(pahtable, magtable, title, colorlabel):
     '''Plots color vs a PAH flux ratio.'''
     filledpahs = pahtable.filled(0)
-    fulltable = join_by_galaxy_name(magtable, filledpahs, names=("objstr_01",
-                                                               "Galaxy"))
+    fulltable = phot.join_by_galaxy_name(magtable, filledpahs, 
+                                         names=("objstr_01", "Galaxy"))
     # Arithmetic to take care of the PAH ratio along with the uncertainties.
     pah_numerator = fulltable["7.7 um"] + fulltable["8.6 um"]
     pah_numerator_err = np.sqrt(fulltable["7.7 um err"]**2 + 
@@ -58,31 +58,130 @@ def plot_color_PAH_flux_ratio(pahtable, magtable, title, colorlabel):
     plt.ylabel("(f(7.7)+f(8.6))/(f(11.3)+f(12.7)+f(17))")
     plt.title(title)
 
-def MIRplot(x, y, groupkey, xlabel, ylabel, title, yerr=None, xerr=None, 
+def plot_PAH_flux_ratios(pahtable, mirtable, title):
+    '''Plots two PAH intensity ratios.'''
+    linetable = phot.join_by_galaxy_name(pahtable, mirtable, 
+                                         names=("Galaxy", "objstr_01"))
+    shortratio = linetable["7.7 um"] / linetable["11.3 um"]
+    shortratio_err = shortratio * np.sqrt((linetable["7.7 um err"] / 
+        linetable["7.7 um"])**2 + (linetable["11.3 um err"] / 
+        linetable["11.3 um"])**2)
+    longratio = linetable["17 um"] / linetable["11.3 um"]
+    longratio_err = longratio * np.sqrt((linetable["17 um err"] / 
+        linetable["17 um"])**2 + (linetable["11.3 um err"] / 
+        linetable["11.3 um"])**2)
+
+    linetable["short"] = shortratio
+    linetable["short err"] = shortratio_err
+    linetable["long"] = longratio
+    linetable["long err"] = longratio_err
+    linegroups = linetable.group_by("MIR_Class")
+
+    class2table = linegroups.groups[0]
+    class3table = linegroups.groups[1]
+
+    print class2table[["objstr_01", "short"]][np.where(class2table["short"] > 2.3)]
+
+    plt.errorbar(class2table["short"], class2table["long"], 
+                 class2table["long err"], class2table["short err"], 
+                 label="Class 2", **MIR_Symbols[2])
+    plt.errorbar(class3table["short"], class3table["long"], 
+                 class3table["long err"], class3table["short err"], 
+                 label="Class 3", **MIR_Symbols[3])
+
+    plt.xlabel("7.7um/11.3um")
+    plt.ylabel("17um/11.3um")
+    plt.legend()
+
+def plot_rampazzo_line_ratios(linetable, mirtable, title):
+    '''Plots line ratios of a galaxy with respect to each other.
+    
+    NOTE: Make this more flexible by adding arguments: ynum, ydenom, xnum,
+    xdenom, xlabel, ylabel. All of these are strings.'''
+    linetable = phot.join_by_galaxy_name(linetable, mirtable, 
+                                         names=("Galaxy", "objstr_01"))
+    sulfurlines = linetable["[S III] 19 um"] / linetable["[S III] 33 um"]
+    sulfurlineerrs = sulfurlines * np.ma.sqrt(
+        (linetable["[S III] 19 um err"]/linetable["[S III] 19 um"])**2 +
+        (linetable["[S III] 33 um err"]/linetable["[S III] 33 um"])**2)
+    hydrogenlines = linetable["H2 S(3)"] / linetable["H2 S(1)"]
+    hydrogenlineerrs = hydrogenlines * np.ma.sqrt(
+        (linetable["H2 S(3) err"]/linetable["H2 S(3)"])**2 +
+        (linetable["H2 S(1) err"]/linetable["H2 S(1)"])**2)
+
+    # This should make grouping more straightforward.
+    linetable["Sratio"] = sulfurlines
+    linetable["Sratioerr"] = sulfurlineerrs
+    linetable["Hratio"] = hydrogenlines
+    linetable["Hratioerr"] = hydrogenlineerrs
+    linegroups = linetable.group_by("MIR_Class")
+    
+    class2table = linegroups.groups[1]
+    class3table = linegroups.groups[2]
+    plt.errorbar(class2table["Hratio"], class2table["Sratio"], 
+                 class2table["Sratioerr"], class2table["Hratioerr"], 
+                 label="Class 2", **MIR_Symbols[2])
+    plt.errorbar(class3table["Hratio"], class3table["Sratio"], 
+                 class3table["Sratioerr"], class3table["Hratioerr"], 
+                 label="Class 3", **MIR_Symbols[3])
+
+    print "Class 2"
+    print class2table[["Galaxy", "Hratio", "Sratio"]]
+    print "Class 3"
+    print class3table[["Galaxy", "Hratio", "Sratio"]]
+
+    plt.xlabel("H2S(3)/H2S(1)")
+    plt.ylabel("[SIII]18.7/[SIII]33.5")
+    plt.legend()
+    plt.title(title)
+
+def MIRplot(x, y, mirindex, yerr=None, xerr=None, classes=xrange(5), xlabel="", ylabel="", title="", 
             loc='upper right'):
     '''Makes a plot that automatically differentiates between MIR classes.
 
     The x and y data need to be columns which have the same length as 
-    groupkey. Groupkey should be the list of MIR classes which are in the same
+    mirindex. Groupkey should be the list of MIR classes which are in the same
     order as x and y. Labels can also be added as desired.
     '''
-    xgroup = x.group_by(groupkey)
-    ygroup = y.group_by(groupkey)
-    if yerr is not None:
-        yerrgroup = yerr.group_by(groupkey)
-    if xerr is not None:
-        xerrgroup = xerr.group_by(groupkey)
+    xgroup = x.group_by(mirindex)
+    ygroup = y.group_by(mirindex)
+    try:
+        yerrgroup = yerr.group_by(mirindex)
+    except AttributeError:
+        if yerr is None:
+            yerrgroup = None
+        else:
+            raise ValueError("yerr must be a Table or None")
+    try:
+        xerrgroup = xerr.group_by(mirindex)
+    except AttributeError:
+        if xerr is None:
+            xerrgroup = None
+        else:
+            raise ValueError("xerr must be a Table or None")
 
-    for MIRclass in xgroup.groups.keys:
-        # Adding errors to this is proving to be much more difficult than
-        # expected...
-#        try:
-#            plt.errorbar(xgroup.groups[MIRclass], ygroup.groups[MIRclass],
-#                         yerrgroup.groups[MIRclass], xerrgroup.groups[MIRclass], 
-#                         label="Class {0}".format(MIRclass), 
-#                         **MIR_Symbols[MIRclass])
-#        except UnboundLocalError:
-            plt.plot(xgroup.groups[MIRclass], ygroup.groups[MIRclass], 
+    for MIRclass in classes:
+        try:
+            xvals = xgroup.groups[xgroup.groups.keys==MIRclass]
+            yvals = ygroup.groups[ygroup.groups.keys==MIRclass]
+            try:
+                yerrvals = yerrgroup.groups[yerrgroup.groups.keys==MIRclass]
+            except AttributeError:
+                # Since yerrgroup was defined in this function. It can't be
+                # anything other than a table or None. So I don't need the if..else
+                # statement above.
+                yerrvals = None
+            try:
+                xerrvals = xerrgroup.groups[yerrgroup.groups.keys==MIRclass]
+            except AttributeError:
+                xerrvals = None
+        except IndexError:
+            # If the given class is not in the groups, ignore it.
+            print "Class {0} not detected.".format(MIRclass)
+            raise
+        
+
+        plt.errorbar(xvals, yvals, yerrvals, xerrvals,
                      label="Class {0}".format(MIRclass), 
                      **MIR_Symbols[MIRclass])
 
@@ -90,7 +189,6 @@ def MIRplot(x, y, groupkey, xlabel, ylabel, title, yerr=None, xerr=None,
     plt.ylabel(ylabel)
     plt.title(title)
     plt.legend(loc=loc)
-
 
 def generateCMDs(magtable):
     '''Generates permutations of Color-Magnitude Diagrams.
@@ -113,17 +211,21 @@ def generateCMDs(magtable):
 
     title = "WISE CMD"
     plt.figure()
-    MIRplot(W1, F1color, MIRclass, "W1", "FUV-W1", title, loc="lower left")
+    MIRplot(W1, F1color, MIRclass, xlabel="W1", ylabel="FUV-W1", title=title, 
+            loc="lower left")
     plt.figure()
-    MIRplot(W2, F2color, MIRclass, "W2", "FUV-W2", title, loc="lower left")
+    MIRplot(W2, F2color, MIRclass, xlabel="W2", ylabel="FUV-W2", title=title, 
+            loc="lower left")
     plt.figure()
-    MIRplot(W3, F3color, MIRclass, "W3", "FUV-W3", title)
+    MIRplot(W3, F3color, MIRclass, xlabel="W3", ylabel="FUV-W3", title=title)
     plt.figure()
-    MIRplot(W1, N1color, MIRclass, "W1", "NUV-W1", title, loc="lower left")
+    MIRplot(W1, N1color, MIRclass, xlabel="W1", ylabel="NUV-W1", title=title, 
+            loc="lower left")
     plt.figure()
-    MIRplot(W2, N2color, MIRclass, "W2", "NUV-W2", title, loc="lower left")
+    MIRplot(W2, N2color, MIRclass, xlabel="W2", ylabel="NUV-W2", title=title, 
+            loc="lower left")
     plt.figure()
-    MIRplot(W3, N3color, MIRclass, "W3", "NUV-W3", title)
+    MIRplot(W3, N3color, MIRclass, xlabel="W3", ylabel="NUV-W3", title=title)
 
 def plot_SSP_color_color(DIR, xblueband, xredband, yblueband, yredband, 
                          fileformat="SSP.out.mags", label="SSP"):
@@ -163,118 +265,117 @@ def generate_color_color(magtable, SSPpath=fsps.OUTPUT_PATH,
     W1W2color = W1 - W2
     W2W3color = W2 - W3
     W3W4color = W3 - W4
-
     title = "MIR class correlations"
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "NUV", "J", "FUV", "NUV",
                               fileformat=SSPfile)
-    MIRplot(NJcolor, FNcolor, MIRclass, "NUV-J", "FUV-NUV", title,
-            loc="upper left")
+    MIRplot(NJcolor, FNcolor, MIRclass, xlabel="NUV-J", ylabel="FUV-NUV",
+            title=title, loc="upper left")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "J", "Ks", "FUV", "NUV",
                               fileformat=SSPfile)
-    MIRplot(JKcolor, FNcolor, MIRclass, "J-Ks", "FUV-NUV", title,
-            loc="upper right")
+    MIRplot(JKcolor, FNcolor, MIRclass, xlabel="J-Ks", ylabel="FUV-NUV", 
+            title=title, loc="upper right")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "Ks", "W1", "FUV", "NUV",
                               fileformat=SSPfile)
-    MIRplot(KW1color, FNcolor, MIRclass, "Ks-W1", "FUV-NUV", title,
-            loc="upper left")
+    MIRplot(KW1color, FNcolor, MIRclass, xlabel="Ks-W1", ylabel="FUV-NUV", 
+            title=title, loc="upper left")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W1", "W2", "FUV", "NUV",
                               fileformat=SSPfile)
-    MIRplot(W1W2color, FNcolor, MIRclass, "W1-W2", "FUV-NUV", title,
-            loc="upper right")
+    MIRplot(W1W2color, FNcolor, MIRclass, xlabel="W1-W2", ylabel="FUV-NUV", 
+            title=title, loc="upper right")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W2", "W3", "FUV", "NUV",
                               fileformat=SSPfile)
-    MIRplot(W2W3color, FNcolor, MIRclass, "W2-W3", "FUV-NUV", title,
-            loc="upper right")
+    MIRplot(W2W3color, FNcolor, MIRclass, xlabel="W2-W3", ylabel="FUV-NUV", 
+            title=title, loc="upper right")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W3", "W4", "FUV", "NUV",
                               fileformat=SSPfile)
-    MIRplot(W3W4color, FNcolor, MIRclass, "W3-W4", "FUV-NUV", title,
-            loc="upper right")
+    MIRplot(W3W4color, FNcolor, MIRclass, xlabel="W3-W4", ylabel="FUV-NUV", 
+            title=title, loc="upper right")
  
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "J", "Ks", "NUV", "J",
                               fileformat=SSPfile)
-    MIRplot(JKcolor, NJcolor, MIRclass, "J-Ks", "NUV-J", title,
-            loc="lower right")
+    MIRplot(JKcolor, NJcolor, MIRclass, xlabel="J-Ks", ylabel="NUV-J", 
+            title=title, loc="lower right")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "Ks", "W1", "NUV", "J",
                               fileformat=SSPfile)
-    MIRplot(KW1color, NJcolor, MIRclass, "Ks-W1", "NUV-J", title,
-            loc="lower left")
+    MIRplot(KW1color, NJcolor, MIRclass, xlabel="Ks-W1", ylabel="NUV-J", 
+            title=title, loc="lower left")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W1", "W2", "NUV", "J",
                               fileformat=SSPfile)
-    MIRplot(W1W2color, NJcolor, MIRclass, "W1-W2", "NUV-J", title,
-            loc="lower right")
+    MIRplot(W1W2color, NJcolor, MIRclass, xlabel="W1-W2", ylabel="NUV-J", 
+            title=title, loc="lower right")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W2", "W3", "NUV", "J",
                               fileformat=SSPfile)
-    MIRplot(W2W3color, NJcolor, MIRclass, "W2-W3", "NUV-J", title,
-            loc="lower left")
+    MIRplot(W2W3color, NJcolor, MIRclass, xlabel="W2-W3", ylabel="NUV-J", 
+            title=title, loc="lower left")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W3", "W4", "NUV", "J",
                               fileformat=SSPfile)
-    MIRplot(W3W4color, NJcolor, MIRclass, "W3-W4", "NUV-J", title,
-            loc="lower left")
+    MIRplot(W3W4color, NJcolor, MIRclass, xlabel="W3-W4", ylabel="NUV-J", 
+            title=title, loc="lower left")
  
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "Ks", "W1", "J", "Ks",
                               fileformat=SSPfile)
-    MIRplot(KW1color, JKcolor, MIRclass, "Ks-W1", "J-Ks", title,
-            loc="upper left")
+    MIRplot(KW1color, JKcolor, MIRclass, xlabel="Ks-W1", ylabel="J-Ks", 
+            title=title, loc="upper left")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W1", "W2", "J", "Ks",
                               fileformat=SSPfile)
-    MIRplot(W1W2color, JKcolor, MIRclass, "W1-W2", "J-Ks", title,
-            loc="lower right")
+    MIRplot(W1W2color, JKcolor, MIRclass, xlabel="W1-W2", ylabel="J-Ks", 
+            title=title, loc="lower right")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W2", "W3", "J", "Ks",
                               fileformat=SSPfile)
-    MIRplot(W2W3color, JKcolor, MIRclass, "W2-W3", "J-Ks", title,
-            loc="lower right")
+    MIRplot(W2W3color, JKcolor, MIRclass, xlabel="W2-W3", ylabel="J-Ks", 
+            title=title, loc="lower right")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W3", "W4", "J", "Ks",
                               fileformat=SSPfile)
-    MIRplot(W3W4color, JKcolor, MIRclass, "W3-W4", "J-Ks", title,
-            loc="upper left")
+    MIRplot(W3W4color, JKcolor, MIRclass, xlabel="W3-W4", ylabel="J-Ks", 
+            title=title, loc="upper left")
 
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W1", "W2", "Ks", "W1",
                               fileformat=SSPfile)
-    MIRplot(W1W2color, KW1color, MIRclass, "W1-W2", "Ks-W1", title,
-            loc="lower right")
+    MIRplot(W1W2color, KW1color, MIRclass, xlabel="W1-W2", ylabel="Ks-W1", 
+            title=title, loc="lower right")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W2", "W3", "Ks", "W1",
                               fileformat=SSPfile)
-    MIRplot(W2W3color, KW1color, MIRclass, "W2-W3", "Ks-W1", title,
-            loc="lower right")
+    MIRplot(W2W3color, KW1color, MIRclass, xlabel="W2-W3", ylabel="Ks-W1", 
+            title=title, loc="lower right")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W3", "W4", "Ks", "W1",
                               fileformat=SSPfile)
-    MIRplot(W3W4color, KW1color, MIRclass, "W3-W4", "Ks-W1", title,
-            loc="lower right")
+    MIRplot(W3W4color, KW1color, MIRclass, xlabel="W3-W4", ylabel="Ks-W1", 
+            title=title, loc="lower right")
 
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W2", "W3", "W1", "W2",
                               fileformat=SSPfile)
-    MIRplot(W2W3color, W1W2color, MIRclass, "W2-W3", "W1-W2", title,
-            loc="upper left")
+    MIRplot(W2W3color, W1W2color, MIRclass, xlabel="W2-W3", ylabel="W1-W2", 
+            title=title, loc="upper left")
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W3", "W4", "W1", "W2",
                               fileformat=SSPfile)
-    MIRplot(W3W4color, W1W2color, MIRclass, "W3-W4", "W1-W2", title,
-            loc="upper left")
+    MIRplot(W3W4color, W1W2color, MIRclass, xlabel="W3-W4", ylabel="W1-W2", 
+            title=title, loc="upper left")
 
     plt.figure()
     fsps.plot_SSP_color_color(SSPpath, "W3", "W4", "W2", "W3",
                               fileformat=SSPfile)
-    MIRplot(W3W4color, W2W3color, MIRclass, "W3-W4", "W2-W3", title,
-            loc="upper left")
+    MIRplot(W3W4color, W2W3color, MIRclass, xlabel="W3-W4", ylabel="W2-W3", 
+            title=title, loc="upper left")
 
 def jk_color_vs_wise_colors(magtable):
     '''Generates J-Ks vs wise colors.
@@ -309,17 +410,17 @@ def jk_color_vs_wise_colors(magtable):
 #   MIRplot(JKcolor, NJcolor, MIRclass, "J-H", "NUV-J", title,
 #           loc="lower left")
     plt.figure()
-    MIRplot(KW1color, JKcolor, MIRclass, "Ks-W1", "J-Ks", title,
-            loc="lower left")
+    MIRplot(KW1color, JKcolor, MIRclass, xlabel="Ks-W1", ylabel="J-Ks", 
+            title=title, loc="lower left")
     plt.figure()
-    MIRplot(W1W2color, JKcolor, MIRclass, "W1-W2", "J-Ks", title,
-            loc="lower right")
+    MIRplot(W1W2color, JKcolor, MIRclass, xlabel="W1-W2", ylabel="J-Ks", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(W2W3color, JKcolor, MIRclass, "W2-W3", "J-Ks", title,
-            loc="upper left")
+    MIRplot(W2W3color, JKcolor, MIRclass, xlabel="W2-W3", ylabel="J-Ks", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(W3W4color, JKcolor, MIRclass, "W3-W4", "J-Ks", title,
-            loc="upper left")
+    MIRplot(W3W4color, JKcolor, MIRclass, xlabel="W3-W4", ylabel="J-Ks", 
+            title=title, loc="upper left")
 
 def generateColorColors2MASS(magtable):
     '''Generates permutations of Color-Color Diagrams.
@@ -345,59 +446,59 @@ def generateColorColors2MASS(magtable):
 
     title = "2MASS CMD"
     plt.figure()
-    MIRplot(F1color, W12color, MIRclass, "FUV-J", "J-H", title,
-            loc="lower left")
+    MIRplot(F1color, W12color, MIRclass, xlabel="FUV-J", ylabel="J-H", 
+            title=title, loc="lower left")
     plt.figure()
-    MIRplot(F1color, W23color, MIRclass, "FUV-J", "H-K", title,
-            loc="lower right")
+    MIRplot(F1color, W23color, MIRclass, xlabel="FUV-J", ylabel="H-K", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(F1color, FNcolor, MIRclass, "FUV-J", "FUV-NUV", title,
-            loc="left")
+    MIRplot(F1color, FNcolor, MIRclass, xlabel="FUV-J", ylabel="FUV-NUV", 
+            title=title, loc="left")
     plt.figure()
-    MIRplot(F2color, W12color, MIRclass, "FUV-H", "J-H", title,
-            loc="lower left")
+    MIRplot(F2color, W12color, MIRclass, xlabel="FUV-H", ylabel="J-H", 
+            title=title, loc="lower left")
     plt.figure()
-    MIRplot(F2color, W23color, MIRclass, "FUV-H", "H-K", title,
-            loc="lower right")
+    MIRplot(F2color, W23color, MIRclass, xlabel="FUV-H", ylabel="H-K", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(F2color, FNcolor, MIRclass, "FUV-H", "FUV-NUV", title,
-            loc="lower right")
+    MIRplot(F2color, FNcolor, MIRclass, xlabel="FUV-H", ylabel="FUV-NUV", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(F3color, W12color, MIRclass, "FUV-K", "J-H", title,
-            loc="lower left")
+    MIRplot(F3color, W12color, MIRclass, xlabel="FUV-K", ylabel="J-H", 
+            title=title, loc="lower left")
     plt.figure()
-    MIRplot(F3color, W23color, MIRclass, "FUV-K", "H-K", title,
-            loc="lower right")
+    MIRplot(F3color, W23color, MIRclass, xlabel="FUV-K", ylabel="H-K", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(F3color, FNcolor, MIRclass, "FUV-K", "FUV-NUV", title,
-            loc="upper left")
+    MIRplot(F3color, FNcolor, MIRclass, xlabel="FUV-K", ylabel="FUV-NUV", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(N1color, W12color, MIRclass, "NUV-J", "J-H", title,
-            loc="lower right")
+    MIRplot(N1color, W12color, MIRclass, xlabel="NUV-J", ylabel="J-H", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(N1color, W23color, MIRclass, "NUV-J", "H-K", title,
-            loc="lower right")
+    MIRplot(N1color, W23color, MIRclass, xlabel="NUV-J", ylabel="H-K", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(N1color, FNcolor, MIRclass, "NUV-J", "FUV-NUV", title,
-            loc="upper left")
+    MIRplot(N1color, FNcolor, MIRclass, xlabel="NUV-J", ylabel="FUV-NUV", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(N2color, W12color, MIRclass, "NUV-H", "J-H", title,
-            loc="lower right")
+    MIRplot(N2color, W12color, MIRclass, xlabel="NUV-H", ylabel="J-H", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(N2color, W23color, MIRclass, "NUV-H", "H-K", title,
-            loc="lower right")
+    MIRplot(N2color, W23color, MIRclass, xlabel="NUV-H", ylabel="H-K", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(N2color, FNcolor, MIRclass, "NUV-H", "FUV-NUV", title,
-            loc="upper right")
+    MIRplot(N2color, FNcolor, MIRclass, xlabel="NUV-H", ylabel="FUV-NUV", 
+            title=title, loc="upper right")
     plt.figure()
-    MIRplot(N3color, W12color, MIRclass, "NUV-K", "J-H", title,
-            loc="lower right")
+    MIRplot(N3color, W12color, MIRclass, xlabel="NUV-K", ylabel="J-H", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(N3color, W23color, MIRclass, "NUV-K", "H-K", title, 
-            loc="upper left")
+    MIRplot(N3color, W23color, MIRclass, xlabel="NUV-K", ylabel="H-K", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(N3color, FNcolor, MIRclass, "NUV-K", "FUV-NUV", title, 
-    loc="lower left")
+    MIRplot(N3color, FNcolor, MIRclass, xlabel="NUV-K", ylabel="FUV-NUV", 
+            title=title, loc="lower left")
 
 def generateColorColors(magtable):
     '''Generates permutations of Color-Color Diagrams.
@@ -423,53 +524,56 @@ def generateColorColors(magtable):
 
     title = "WISE CMD"
     plt.figure()
-    MIRplot(F1color, W12color, MIRclass, "FUV-W1", "W1-W2", title)
+    MIRplot(F1color, W12color, MIRclass, xlabel="FUV-W1", ylabel="W1-W2", 
+            title=title)
     plt.figure()
-    MIRplot(F1color, W23color, MIRclass, "FUV-W1", "W2-W3", title,
-            loc="lower left")
+    MIRplot(F1color, W23color, MIRclass, xlabel="FUV-W1", ylabel="W2-W3", 
+            title=title, loc="lower left")
     plt.figure()
-    MIRplot(F1color, FNcolor, MIRclass, "FUV-W1", "FUV-NUV", title,
-            loc="upper left")
+    MIRplot(F1color, FNcolor, MIRclass, xlabel="FUV-W1", ylabel="FUV-NUV", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(F2color, W12color, MIRclass, "FUV-W2", "W1-W2", title,
-            loc="upper left")
+    MIRplot(F2color, W12color, MIRclass, xlabel="FUV-W2", ylabel="W1-W2", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(F2color, W23color, MIRclass, "FUV-W2", "W2-W3", title,
-            loc="lower left")
+    MIRplot(F2color, W23color, MIRclass, xlabel="FUV-W2", ylabel="W2-W3", 
+            title=title, loc="lower left")
     plt.figure()
-    MIRplot(F2color, FNcolor, MIRclass, "FUV-W2", "FUV-NUV", title,
-            loc="upper left")
+    MIRplot(F2color, FNcolor, MIRclass, xlabel="FUV-W2", ylabel="FUV-NUV", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(F3color, W12color, MIRclass, "FUV-W3", "W1-W2", title,
-            loc="upper left")
+    MIRplot(F3color, W12color, MIRclass, xlabel="FUV-W3", ylabel="W1-W2", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(F3color, W23color, MIRclass, "FUV-W3", "W2-W3", title,
-            loc="lower right")
+    MIRplot(F3color, W23color, MIRclass, xlabel="FUV-W3", ylabel="W2-W3", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(F3color, FNcolor, MIRclass, "FUV-W3", "FUV-NUV", title)
+    MIRplot(F3color, FNcolor, MIRclass, xlabel="FUV-W3", ylabel="FUV-NUV", 
+            title=title)
     plt.figure()
-    MIRplot(N1color, W12color, MIRclass, "NUV-W1", "W1-W2", title,
-            loc="upper left")
+    MIRplot(N1color, W12color, MIRclass, xlabel="NUV-W1", ylabel="W1-W2", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(N1color, W23color, MIRclass, "NUV-W1", "W2-W3", title,
-            loc="lower left")
+    MIRplot(N1color, W23color, MIRclass, xlabel="NUV-W1", ylabel="W2-W3", 
+            title=title, loc="lower left")
     plt.figure()
-    MIRplot(N1color, FNcolor, MIRclass, "NUV-W1", "FUV-NUV", title,
-            loc="upper left")
+    MIRplot(N1color, FNcolor, MIRclass, xlabel="NUV-W1", ylabel="FUV-NUV", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(N2color, W12color, MIRclass, "NUV-W2", "W1-W2", title,
-            loc="upper left")
+    MIRplot(N2color, W12color, MIRclass, xlabel="NUV-W2", ylabel="W1-W2", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(N2color, W23color, MIRclass, "NUV-W2", "W2-W3", title,
-            loc="lower left")
+    MIRplot(N2color, W23color, MIRclass, xlabel="NUV-W2", ylabel="W2-W3", 
+            title=title, loc="lower left")
     plt.figure()
-    MIRplot(N2color, FNcolor, MIRclass, "NUV-W2", "FUV-NUV", title,
-            loc="upper left")
+    MIRplot(N2color, FNcolor, MIRclass, xlabel="NUV-W2", ylabel="FUV-NUV", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(N3color, W12color, MIRclass, "NUV-W3", "W1-W2", title,
-            loc="upper left")
+    MIRplot(N3color, W12color, MIRclass, xlabel="NUV-W3", ylabel="W1-W2", 
+            title=title, loc="upper left")
     plt.figure()
-    MIRplot(N3color, W23color, MIRclass, "NUV-W3", "W2-W3", title, 
-            loc="lower right")
+    MIRplot(N3color, W23color, MIRclass, xlabel="NUV-W3", ylabel="W2-W3", 
+            title=title, loc="lower right")
     plt.figure()
-    MIRplot(N3color, FNcolor, MIRclass, "NUV-W3", "FUV-NUV", title)
+    MIRplot(N3color, FNcolor, MIRclass, xlabel="NUV-W3", ylabel="FUV-NUV", 
+            title=title)

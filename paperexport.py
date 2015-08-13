@@ -130,10 +130,10 @@ def create_magnitude_table(table=fulltable, dest=os.path.join(TABLEPATH,
     export = table[columns]
     export.write(dest, format="ascii.aastex", names=names, formats=formats,
                  latexdict={"caption": caption, "tablefoot": tablefoot,
-                 "tabletype": "deluxetable*"})
+                 "tabletype": "deluxetable"})
 
 def create_NUV_J_histogram(table=rampazzo_table, dest=os.path.join(FIGUREPATH,
-                               "uvsed.pdf")):
+        "uvsed.pdf")):
     '''Creates the histogram which plots Class 2/3 objects in NUV-J.'''
     title = "Class Histogram"
     xlabel = "NUV-J"
@@ -145,6 +145,70 @@ def create_NUV_J_histogram(table=rampazzo_table, dest=os.path.join(FIGUREPATH,
     plt.savefig(dest)
     plt.close()
 
+def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
+       dest=os.path.join(FIGUREPATH, "shortpahs.pdf")):
+    pahtable = read_Rampazzo_TableA1()
+    fulltable = phot.join_by_galaxy_name(rampazzo_table, pahtable,
+                                    names=("objstr_01", "Galaxy"))
+
+    # Restrict to only Class 2 and Class 3 objects
+    fullgroups = fulltable.group_by("MIR_class")
+    classtable = fullgroups.groups[0:2]
+
+    pah77 = classtable["7.7 um"]
+    pah77_err = classtable["7.7 um err"]
+    pah113 = classtable["11.3 um"]
+    pah113_err = classtable["11.3 um err"]
+    pah17 = classtable["17 um"]
+    pah17_err = classtable["17 um err"]
+
+    xratio, xratioerr = phot.calc_statistical_quotient(pah113, pah17, 
+                                                       pah113_err, pah17_err)
+    yratio, yratioerr = phot.calc_statistical_quotient(pah77, pah113,
+                                                       pah77_err, pah113_err)
+
+    rp.MIRplot(xratio, yratio, classtable["MIR_class"], yerr=yratioerr,
+               xerr=xratioerr, classes=(2,3), xlabel="11.3 um/17 um", 
+               ylabel="7.7 um/11.3 um")
+
+    plt.xlim([0, 6])
+    plt.ylim([0, 6])
+    plt.savefig(dest)
+    plt.close()
+
+def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
+                                dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
+    pahtable = read_Rampazzo_TableA1()
+    fulltable = phot.join_by_galaxy_name(rampazzo_table, pahtable,
+                                    names=("objstr_01", "Galaxy"))
+
+    # Restrict to only Class 2 and Class 3 objects
+    fullgroups = fulltable.group_by("MIR_class")
+    classtable = fullgroups.groups[0:2]
+
+    nuv = classtable["NUVunextmag"]
+    nuv_err = classtable["NUVunexterr"]
+    j = classtable["j_m_k20fe"]
+    j_err = classtable["j_msig_k20fe"]
+    pah77 = classtable["7.7 um"]
+    pah77_err = classtable["7.7 um err"]
+    pah113 = classtable["11.3 um"]
+    pah113_err = classtable["11.3 um err"]
+
+    xcolor, xcolorerr = phot.calc_statistical_difference(nuv, j, nuv_err, j_err)
+    yratio, yratioerr = phot.calc_statistical_quotient(pah77, pah113,
+                                                       pah77_err, pah113_err)
+
+    rp.MIRplot(xcolor, yratio, classtable["MIR_class"], yerr=yratioerr, 
+               xerr=xcolorerr, classes=(2,3), xlabel="NUV-J",
+               ylabel="7.7 um / 11.3 um")
+    plt.xlabel("NUV-J")
+    plt.ylabel("7.7 um/11.3 um")
+    plt.title("Correlation for PAH-detected galaxies")
+    plt.savefig(dest)
+    plt.close()
+
+    return classtable
 
 def move_rampazzo():
     # First read in Table 1
