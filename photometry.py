@@ -1971,6 +1971,17 @@ def calc_statistical_difference(minuend, subtrahend, minuerr, subtraerr):
     meanerrs = np.sqrt(minuerr**2 + subtraerr**2)
     return means, meanerrs
 
+def calc_statistical_quotient(dividend, divisor, dividenderr, divisorerr):
+    '''Returns the statistically divided quotient of two arrays.
+
+    This function takes two arrays involving two measurements with errors. It
+    then returns a 2-tuple. The first is simply the ratio of the numbers. The
+    second is the error of that ratio.'''
+    quotient = dividend / divisor
+    quoterrs = np.sqrt(quotient**2 * ((dividenderr / dividend)**2 + 
+                                      (divisorerr / divisor)**2))
+    return quotient, quoterrs
+
 def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror, 
         xlabel, ylabel, title, label=""):
     '''Plots the fractional difference between two values against one value.
