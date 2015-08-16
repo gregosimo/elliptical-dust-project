@@ -32,6 +32,10 @@ FIGUREPATH = os.path.join(PAPERPATH, "fig")
 FULL_ATLAS3D_TABLE = os.path.join(ATLAS3DBASE, "atlas3d.tbl")
 FULL_RAMPAZZO_TABLE = os.path.join(RAMPAZZOBASE, "rampazzo.tbl")
 
+# If we want to change the type of file which is exported, just change this
+# extension!
+EXT = "pdf"
+
 # I'd like for the tables to just be loaded without worrying about writing to
 # and from disk.
 try:
@@ -132,16 +136,14 @@ def create_magnitude_table(table=fulltable, dest=os.path.join(TABLEPATH,
                  latexdict={"caption": caption, "tablefoot": tablefoot,
                  "tabletype": "deluxetable"})
 
-def create_NUV_J_histogram(table=rampazzo_table, dest=os.path.join(FIGUREPATH,
-        "uvsed.pdf")):
-    '''Creates the histogram which plots Class 2/3 objects in NUV-J.'''
-    title = "Class Histogram"
-    xlabel = "NUV-J"
-    rp.color_histogram_by_class(rampazzo_table["NUVunextmag"],
-                                rampazzo_table["j_m_k20fe"],
-                                rampazzo_table["MIR_class"], "NUV-J", 
-                                "Class Histogram", 26, classes=[2,3],
-                                colrange=(2.5, 9))
+def create_W2_W3_histogram(table=rampazzo_table, 
+                           dest=build_filepath(FIGUREPATH, "w2w3hist")):
+    '''Creates the histogram which plots all of the objects in W2-W3.'''
+    xlabel = "W2-W3"
+    rp.color_histogram_by_class(rampazzo_table["w2unextmag"],
+                                rampazzo_table["w3unextmag"],
+                                rampazzo_table["MIR_class"], "W2-W3", 
+                                "", 80, colrange=(-1.5, 2.5))
     plt.savefig(dest)
     plt.close()
 
@@ -274,6 +276,13 @@ def read_Rampazzo_Table2(tablepath=os.path.join(BASEPATH,
     
     return rampazzotable
 
+def read_Rampazzo_Table5(tablepath=os.path.join(BASEPATH,
+                                                "Rampazzo_Table5.csv")):
+    rampazzotable = Table.read(tablepath, format="ascii.csv", guess=False,
+                               data_start=1,
+                               names=("Galaxy", "RSA_morph_type", "MIR_class"))
+    return rampazzotable
+
 def read_Rampazzo_TableA1(tablepath=os.path.join(BASEPATH,
                                                  "Rampazzo_TableA1.csv")):
     rampazzotable = Table.read(tablepath, format="ascii.csv", guess=False,
@@ -396,6 +405,17 @@ def format_reflect(inp):
     This is made primarily to make functions for the formats argument in
     Table.write() more transparent.'''
     return inp
+
+def build_filepath(basepath, filename, extension=EXT):
+    '''Builds a full file path of a file.
+
+    This function takes a basepath, joins it to a filename, and intelligently
+    adds a filename extension to the end. This is so that extensions can be
+    specified independently of the filename.
+    '''
+    fullfilename = os.extsep.join((filename, extension))
+    fullpath = os.path.join(basepath, fullfilename)
+    return fullpath
 
 if __name__ == "__main__":
 

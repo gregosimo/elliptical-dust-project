@@ -25,7 +25,7 @@ def color_histogram_by_class(band1, band2, groupcol, xlabel, title, bins,
     plt.hist([colorgroup.groups[i] for i in classes], bins, range=colrange, 
              label=["Class {0}".format(i) for i in classes], 
              color= [plotcolors[i] for i in classes],
-             histtype="bar", rwidth=1)
+             histtype="bar", rwidth=1, lw=0)
     plt.xlabel(xlabel)
     plt.ylabel("N")
     plt.title(title)
@@ -36,19 +36,28 @@ def plot_color_PAH_flux_ratio(pahtable, magtable, title, colorlabel):
     filledpahs = pahtable.filled(0)
     fulltable = phot.join_by_galaxy_name(magtable, filledpahs, 
                                          names=("objstr_01", "Galaxy"))
+
+    pahvalues = [fulltable["7.7 um"], fulltable["8.6 um"], 
+                 fulltable["11.3 um"], fulltable["12.7 um"],
+                 fulltable["17 um"]]
+    paherrs = [fulltable["7.7 um err"], fulltable["8.6 um err"],
+               fulltable["11.3 um err"], fulltable["12.7 um err"],
+               fulltable["17 um err"]]
+    pahratio, pahratio_err = phot.calc_statistical_fraction_of_sums(pahvalues,
+        paherrs, (1, 1, 0, 0, 0), (0, 0, 1, 1, 1))
     # Arithmetic to take care of the PAH ratio along with the uncertainties.
-    pah_numerator = fulltable["7.7 um"] + fulltable["8.6 um"]
-    pah_numerator_err = np.sqrt(fulltable["7.7 um err"]**2 + 
-                                fulltable["8.6 um err"]**2)
-    pah_denominator = (fulltable["11.3 um"] + fulltable["12.7 um"] +
-                       fulltable["17 um"])
-    pah_denominator_err = np.sqrt(fulltable["11.3 um err"]**2 + 
-                                  fulltable["12.7 um err"]**2 +
-                                  fulltable["17 um err"]**2)
-    pahratio = pah_numerator / pah_denominator
-    pahratio_err = (pahratio * 
-                    (np.sqrt((pah_numerator_err / pah_numerator)**2 + 
-                             (pah_denominator_err / pah_denominator)**2)))
+    #pah_numerator = fulltable["7.7 um"] + fulltable["8.6 um"]
+    #pah_numerator_err = np.sqrt(fulltable["7.7 um err"]**2 + 
+    #                            fulltable["8.6 um err"]**2)
+    #pah_denominator = (fulltable["11.3 um"] + fulltable["12.7 um"] +
+    #                   fulltable["17 um"])
+    #pah_denominator_err = np.sqrt(fulltable["11.3 um err"]**2 + 
+    #                              fulltable["12.7 um err"]**2 +
+    #                              fulltable["17 um err"]**2)
+    #pahratio = pah_numerator / pah_denominator
+    #pahratio_err = (pahratio * 
+    #                (np.sqrt((pah_numerator_err / pah_numerator)**2 + 
+    #                         (pah_denominator_err / pah_denominator)**2)))
 
     color = fulltable["w2unextmag"] - fulltable["w3unextmag"]
     color_err = np.sqrt(fulltable["w2unexterr"]**2 + fulltable["w3unexterr"]**2)
