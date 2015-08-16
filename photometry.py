@@ -1982,6 +1982,47 @@ def calc_statistical_quotient(dividend, divisor, dividenderr, divisorerr):
                                       (divisorerr / divisor)**2))
     return quotient, quoterrs
 
+def calc_statistical_fraction_of_sums(allvalues, allerrs, nummask, denommask,
+                                      propagate=False):
+    r'''Return statistically summed and divided quotient of many arrays.
+
+    Allvalues and allerrs should be sequences of some given length. Nummask and
+    denommask should be boolean (or boolean-like) arrays which indicate the
+    values to be included in the numerator and the denominator.
+
+    The form of this is:
+    \sum_k \left[ \frac{\sum_i \left(a_k b_i - b_k a_i\right) x_i}
+    {\left(\sum_i b_i x_i\right)^2\right]**2 \sigma_k**2
+    '''
+    valarray = np.ma.array(allvalues, dtype=np.float)
+    errarray = np.ma.array(allerrs, dtype=np.float)
+    if propagate:
+        valarray = valarray.filled(np.nan)
+        errarray = errarray.filled(np.nan)
+    numindicator = np.array(nummask, 
+                            dtype=np.int).reshape((valarray.shape[0], 1))
+    denomindicator = np.array(denommask, 
+                              dtype=np.int).reshape((valarray.shape[0],1))
+    answer = np.sum(numindicator * valarray, axis=0) / np.sum(denomindicator * 
+        valarray, axis=0)
+    anserr = 0
+    denomsum = np.sum(denomindicator * valarray, axis=0)
+    for k in xrange(valarray.shape[0]):
+        numindex = numindicator[k]
+        denomindex = denomindicator[k]
+        errindex = allerrs[k]
+
+        # This represents the a_k b_i - b_k a_i
+        indicatordiff = (numindex * denomindicator - denomindex * numindicator)
+        # Finish off the part inside the brackets
+        bracket = np.sum(indicatordiff * valarray, axis=0) / denomsum**2
+        # Now multiply by sigma squared.
+        errnum = bracket**2 * errindex**2
+
+        anserr += errnum
+    return answer, np.sqrt(anserr)
+
+
 def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror, 
         xlabel, ylabel, title, label=""):
     '''Plots the fractional difference between two values against one value.
