@@ -310,6 +310,15 @@ def combinemasks(basefile, additionfile):
     os.remove(additionfile)
     return basefile
 
+def mask_check(galaxydir, sigstart, sigend, sigstep, runbands=["W1"],
+               foregroundbase="foreground", pixelmaskbase="bad_pixels"
+
+        mask_algorithm(BASEDIR, WISETable, threshold=maskthresh,
+                       runbands=runbands, foregroundbase=foregroundbase,
+                       pixelmaskbase=foregroundbase, outputbase=maskbase, 
+                       maskconfig=maskconfig, overwrite=overwritemask,
+                       ignore_exception=ignore_exceptions,
+                       regionbase=regionbase)
 def subtractw3fromw1(config, w1image, w3image, w1output_nobackground, 
         w3output_nobackground, w3output_scaled, w1output_convolved, 
         subtracted_output, objcenter, central_radius):
