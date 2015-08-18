@@ -233,10 +233,22 @@ def Jansky2ABmag(band, flux, colorIndex=-2):
         mag = basemag
     return mag
 
-def Jansky_err_to_mag_err(band, flux, fluxerr):
-    '''Converts an error in Janskys to an error in magnitudes.'''
-    err = fluxerr2magerr(flux, fluxerr, get_zero_point_flux_level(band),
-            get_zero_point_flux_uncertainty(band), 0, 0)
+def Jansky_err_to_mag_err(band, flux, fluxerr, invert=False):
+    '''Converts an error in Janskys to an error in magnitudes.
+    
+    Inverting the calculation means that an uncertainty which was previously
+    included is now undone, meaning the uncertainty should get smaller.
+    According to the WISE atlas, the zero-point flux adds additional
+    uncertainty, which should go away when we use magnitudes again.'''
+    zp = get_zero_point_flux_level(band)
+    zperr = get_zero_point_flux_uncertainty(band)
+    # The zperr array is generally squared and then added in quadrature.
+    # Therefore, by making it imaginary, upon squaring it will be negative, and
+    # therefore subtracted. This is entirely a mathematical trick and has
+    # nothing to do with physical errors.
+    if invert:
+        zperr *= np.array(0+1j)
+    err = np.absolute(fluxerr2magerr(flux, fluxerr, zp, zperr, 0, 0))
     return err
 
 def Vegamag2Jansky(band, mag, colorIndex=-2):
