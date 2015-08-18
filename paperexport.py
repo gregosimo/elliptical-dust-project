@@ -17,6 +17,7 @@ import photometry as phot
 import queries
 import rampazzo_plots as rp
 import fsps
+import band_conversions as conv
 
 BASEPATH = "/home/regulus/simonian/year1/wise"
 FSPSPATH = "/home/regulus/simonian/year1/fsps"
@@ -31,6 +32,7 @@ FIGUREPATH = os.path.join(PAPERPATH, "fig")
 
 FULL_ATLAS3D_TABLE = os.path.join(ATLAS3DBASE, "atlas3d.tbl")
 FULL_RAMPAZZO_TABLE = os.path.join(RAMPAZZOBASE, "rampazzo.tbl")
+FULL_JARRETT_TABLE = os.path.join(JARRETTBASE, "jarrett.tbl")
 
 # If we want to change the type of file which is exported, just change this
 # extension!
@@ -50,7 +52,16 @@ try:
 except IOError:
     atlas3d_table=[]
 
+# This table contains the full ATLAS3D + RSA Sample.
 fulltable = []
+
+# I made this a csv because the astropy ipac routine doesn't believe in having
+# periods in ipac column names.
+try:
+    jarrett_table = Table.read(FULL_JARRETT_TABLE, format="ascii.csv")
+except IOError:
+    jarrett_table=[]
+
 
 def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
     '''Function to take care of generating the full sample table.
@@ -69,6 +80,17 @@ def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
             fulltable.add_row(groupedtable.groups[ix][0])
     else:
         pass
+
+def build_filepath(basepath, filename, extension=EXT):
+    '''Builds a full file path of a file.
+
+    This function takes a basepath, joins it to a filename, and intelligently
+    adds a filename extension to the end. This is so that extensions can be
+    specified independently of the filename.
+    '''
+    fullfilename = os.extsep.join((filename, extension))
+    fullpath = os.path.join(basepath, fullfilename)
+    return fullpath
 
 #######################################################################
 # Create Tables #
@@ -212,6 +234,50 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
 
     return classtable
 
+def create_jarrett_comparison_plot(table=jarrett_table,
+                                   dest=build_filepath(FIGUREPATH, "jarrett",
+                                                       EXT)):
+    #smallindices = [0, 2, 3, 12, 13]
+    smallindices = range(len(table))
+    orig_fluxes = read_Jarrett_Table2()[smallindices]
+    my_mags = table[smallindices]
+
+    orig_w1 = conv.Jansky2Vegamag("W1", orig_fluxes["W1"])
+    orig_w1_err = conv.Jansky_err_to_mag_err("W1", orig_fluxes["W1"], 
+                                  orig_fluxes["W1_err"])
+    myw1 = my_mags["w1apmag"]
+    myw1err = my_mags["w1aperr"]
+    orig_w2 = conv.Jansky2Vegamag("W2", orig_fluxes["W2"])
+    orig_w2_err = conv.Jansky_err_to_mag_err("W2", orig_fluxes["W2"], 
+                                  orig_fluxes["W2_err"])
+    myw2 = my_mags["w2apmag"]
+    myw2err = my_mags["w2aperr"]
+    orig_w3 = conv.Jansky2Vegamag("W3", orig_fluxes["W3"])
+    orig_w3_err = conv.Jansky_err_to_mag_err("W3", orig_fluxes["W3"], 
+                                  orig_fluxes["W3_err"])
+    myw3 = my_mags["w3apmag"]
+    myw3err = my_mags["w3aperr"]
+    orig_w4 = conv.Jansky2Vegamag("W4", orig_fluxes["W4"])
+    orig_w4_err = conv.Jansky_err_to_mag_err("W4", orig_fluxes["W4"], 
+                                  orig_fluxes["W4_err"])
+    myw4 = my_mags["w4apmag"]
+    myw4err = my_mags["w4aperr"]
+
+    w1diff, w1differr = phot.calc_statistical_difference(myw1, orig_w1,
+        myw1err, orig_w1_err)
+    w2diff, w2differr = phot.calc_statistical_difference(myw2, orig_w2,
+        myw2err, orig_w2_err)
+    w3diff, w3differr = phot.calc_statistical_difference(myw3, orig_w3,
+        myw3err, orig_w3_err)
+    w4diff, w4differr = phot.calc_statistical_difference(myw4, orig_w4,
+        myw4err, orig_w4_err)
+
+    phot.doubleDifferencePlot(myw1, orig_w1, myw2, orig_w2, myw1err,
+                              orig_w1_err, myw2err, orig_w2_err,
+                              "W1 Difference", "W2 Difference", "")
+    plt.savefig(dest)
+    plt.close()
+
 def move_rampazzo():
     # First read in Table 1
     # Then Table 2
@@ -219,6 +285,10 @@ def move_rampazzo():
     # filter them for galaxies we have data for.
     pass
 
+def read_Jarrett_Table2(tablepath=os.path.join(BASEPATH,
+        "WISE_Isophotal-aperture_Photometry.txt")):
+    jarrett_table2 = Table.read(tablepath, format="ascii.csv")
+    return jarrett_table2
 
 def read_Rampazzo_Table1(tablepath=os.path.join(BASEPATH,
                                                 "Rampazzo_Table1.csv")):
@@ -349,6 +419,14 @@ def read_Cappellari11_Table_3(tablepath=os.path.join(ATLAS3DBASE,
                                names=names, guess=False)
     return atlas3dsample
 
+def read_Diamond_Stanic_Table1(
+    tablepath=os.path.join(BASEPATH, "Diamond_Stanic_Table1.txt")):
+    '''Reads the first table from Diamond-Stanic 2010.'''
+    names = ["Name", "6.2 um", "6.2 um err", "7.7 um", "7.7 um err", "8.6 um",
+             "8.6 um err", "11.3 um", "11.3 um err", "12.7 um", "12.7 um err",
+             "[Ne II]", "[Ne II] err", "H2 S(3)", "H2 S(3) err"]
+    dstable = Table.read
+
 def rampazzo_sample_list(table1=os.path.join(BASEPATH, "Rampazzo_Table1.csv"), 
                          table2=os.path.join(BASEPATH, "Rampazzo_Table2.csv"),
                          destination=os.path.join(PAPERPATH, 
@@ -406,16 +484,6 @@ def format_reflect(inp):
     Table.write() more transparent.'''
     return inp
 
-def build_filepath(basepath, filename, extension=EXT):
-    '''Builds a full file path of a file.
-
-    This function takes a basepath, joins it to a filename, and intelligently
-    adds a filename extension to the end. This is so that extensions can be
-    specified independently of the filename.
-    '''
-    fullfilename = os.extsep.join((filename, extension))
-    fullpath = os.path.join(basepath, fullfilename)
-    return fullpath
 
 if __name__ == "__main__":
 
