@@ -1710,10 +1710,12 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
             filename = format_band_dependence(
                     object_name_to_dir(WISErow["objstr_01"]),
                     band, "png", galaxydir)
+        outerlength = get_outer_sky_length(galaxydir, band, skyprefix,
+                                           skymethod)
         gc.recenter(
-            Xval, Yval, 
-            radius=sizescale * get_outer_sky_length(
-                galaxydir, band, skyprefix, method=skymethod))
+            Xval, Yval, radius=sizescale * outerlength)
+        gc.refresh()
+        #print outerlength
 
         gc.save(filename)
         gc.close()
@@ -1773,13 +1775,12 @@ def get_outer_sky_length(galaxydir, band, skyprefix="sky_level",
             format="ascii.daophot")
         outer_dim = (float(skypars.meta["keywords"]["ANNULUS"]["value"]) +
                        float(skypars.meta["keywords"]["DANNULUS"]["value"]))
-        return outer_dim
     elif method.lower() == "patch":
         skypars = Table.read(
             format_band_dependence(skyprefix, band, "txt", galaxydir), 
             format="ascii.basic")
         outer_dim = skypars["A2"]
-    return outer_dim * px / 3600.0
+    return (outer_dim * px / 3600.0)
 
 
 def generatePixelMasks(galaxydir, masterfile="foreground.reg",
