@@ -1400,7 +1400,7 @@ def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion",
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
         skyAperture=True, skyimage=False, skyprefix="sky_level",
         aperturefile="ellipse_aperture", ignore_exception=False,
-        maskbase="mask"):
+        maskbase="mask", suffix="", sizescale=1.5):
     '''Runs through all objects and creates cutouts in their folder.
     '''
     current_backend = matplotlib.get_backend()
@@ -1410,12 +1410,12 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS,
         BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands, 
         skyAperture=skyAperture, skyimage=skyimage, skyprefix=skyprefix, 
         aperturefile=aperturefile, ignore_exception=ignore_exception,
-        maskbase=maskbase)
+        maskbase=maskbase, suffix=suffix, sizescale=sizescale)
     matplotlib.use(current_backend)
 
 def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
-        skymethod="adaptive", maskbase="mask", sizescale=1.5):
+        skymethod="adaptive", maskbase="mask", suffix="", sizescale=1.5):
     '''Creates a set of four cutouts with the aperture and sky ellipses
 
     A cutout for each band will be created that contains the aperture
@@ -1457,14 +1457,15 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         if skyAperture:
             drawSkyParams(galaxydir, band, gc, skyprefix=skyprefix,
                     method=skymethod)
+        outputbase = object_name_to_dir(WISErow["objstr_01"])
+        if suffix:
+            outputbase += "_" + suffix
         if skyimage:
             filename = format_band_dependence(
-                    object_name_to_dir(WISErow["objstr_01"]) + "_sky",
-                    band, "png", galaxydir)
+                    outputbase + "_sky", band, "png", galaxydir)
         else:
             filename = format_band_dependence(
-                    object_name_to_dir(WISErow["objstr_01"]),
-                    band, "png", galaxydir)
+                    outputbase, band, "png", galaxydir)
         outerlength = get_outer_sky_length(galaxydir, band, skyprefix,
                                            skymethod)
         gc.recenter(
