@@ -1400,7 +1400,7 @@ def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion",
 def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
         skyAperture=True, skyimage=False, skyprefix="sky_level",
         aperturefile="ellipse_aperture", ignore_exception=False,
-        maskbase="mask"):
+        maskbase="mask", suffix="", sizescale=1.5):
     '''Runs through all objects and creates cutouts in their folder.
     '''
     current_backend = matplotlib.get_backend()
@@ -1410,12 +1410,12 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS,
         BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands, 
         skyAperture=skyAperture, skyimage=skyimage, skyprefix=skyprefix, 
         aperturefile=aperturefile, ignore_exception=ignore_exception,
-        maskbase=maskbase)
+        maskbase=maskbase, suffix=suffix, sizescale=sizescale)
     matplotlib.use(current_backend)
 
 def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
-        skymethod="adaptive", maskbase="mask"):
+        skymethod="adaptive", maskbase="mask", suffix="", sizescale=1.5):
     '''Creates a set of four cutouts with the aperture and sky ellipses
 
     A cutout for each band will be created that contains the aperture
@@ -1446,7 +1446,8 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
 
         px = getPixelScale(band)
         # Make the ellipse indicating the aperture:
-        Xval, Yval = gc.pixel2world(aperturepars["X0"][0], aperturepars["Y0"][0])
+        Xval, Yval = gc.pixel2world(aperturepars["X0"][0], 
+                                    aperturepars["Y0"][0])
         height = 2 * px * aperturepars["SMA"] / 3600.0
         width = height * (1.0 - float(aperturepars["ELLIP"]))
         angle = float(aperturepars["PA"])
@@ -1456,14 +1457,22 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         if skyAperture:
             drawSkyParams(galaxydir, band, gc, skyprefix=skyprefix,
                     method=skymethod)
+        outputbase = object_name_to_dir(WISErow["objstr_01"])
+        if suffix:
+            outputbase += "_" + suffix
         if skyimage:
             filename = format_band_dependence(
-                    object_name_to_dir(WISErow["objstr_01"]) + "_sky",
-                    band, "png", galaxydir)
+                    outputbase + "_sky", band, "png", galaxydir)
         else:
             filename = format_band_dependence(
-                    object_name_to_dir(WISErow["objstr_01"]),
-                    band, "png", galaxydir)
+                    outputbase, band, "png", galaxydir)
+        outerlength = get_outer_sky_length(galaxydir, band, skyprefix,
+                                           skymethod)
+        gc.recenter(
+            Xval, Yval, radius=sizescale * outerlength)
+        gc.refresh()
+        #print outerlength
+
         gc.save(filename)
         gc.close()
         plt.close("all")
@@ -1497,18 +1506,37 @@ def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive")
             format="ascii.basic")
         Xval, Yval = gc.pixel2world(skypars["X0"][0], 
                 skypars["Y0"][0])
-        semimajor_in = 2 * skypars["A0"] * px / 3600.0
-        semiminor_in = 2 * skypars["B0"] * px / 3600.0
-        semimajor_mid = 2 * skypars["A1"] * px / 3600.0
-        semiminor_mid = 2 * skypars["B1"] * px / 3600.0
-        semimajor_out = 2 * skypars["A2"] * px / 3600.0
-        semiminor_out = 2 * skypars["B2"] * px / 3600.0
+        major_in = 2 * skypars["A0"] * px / 3600.0
+        minor_in = 2 * skypars["B0"] * px / 3600.0
+        major_mid = 2 * skypars["A1"] * px / 3600.0
+        minor_mid = 2 * skypars["B1"] * px / 3600.0
+        major_out = 2 * skypars["A2"] * px / 3600.0
+        minor_out = 2 * skypars["B2"] * px / 3600.0
         angle=skypars["PA"]
 
-        gc.show_ellipses([Xval]*3, [Yval]*3, [semiminor_in, semiminor_mid,
-            semiminor_out], [semimajor_in, semimajor_mid, semimajor_out],
-            angle=[angle]*3, edgecolor="cyan")
+        gc.show_ellipses([Xval]*3, [Yval]*3, [minor_in, minor_mid, minor_out], 
+                         [major_in, major_mid, major_out], angle=[angle]*3, 
+                         edgecolor="cyan")
 
+def get_outer_sky_length(galaxydir, band, skyprefix="sky_level",
+                         method="adaptive"):
+    '''Retrieves the outmost length of the sky measurement in pixels.'''
+    px = getPixelScale(band)
+
+    if method.lower() == "adaptive":
+        method = adaptive_background[band]
+    if method.lower() == "annulus":
+        skypars = Table.read(
+            format_band_dependence(skyprefix, band, "txt", galaxydir), 
+            format="ascii.daophot")
+        outer_dim = (float(skypars.meta["keywords"]["ANNULUS"]["value"]) +
+                       float(skypars.meta["keywords"]["DANNULUS"]["value"]))
+    elif method.lower() == "patch":
+        skypars = Table.read(
+            format_band_dependence(skyprefix, band, "txt", galaxydir), 
+            format="ascii.basic")
+        outer_dim = skypars["A2"]
+    return (outer_dim * px / 3600.0)
 
 
 def generatePixelMasks(galaxydir, masterfile="foreground.reg",
