@@ -310,15 +310,28 @@ def combinemasks(basefile, additionfile):
     os.remove(additionfile)
     return basefile
 
-def mask_check(galaxydir, sigstart, sigend, sigstep, runbands=["W1"],
-               foregroundbase="foreground", pixelmaskbase="bad_pixels"
+def mask_check(BASEDIR, WISErow, sigstart, sigend, sigstep, maskband="W1",
+               foregroundbase="foreground", pixelmaskbase="foreground",
+               outputbase="mask", ellipsebase="ellipsepars",
+               ellipsebase="ellipseregions", spreadpix=5, maskconfig=""):
 
-        mask_algorithm(BASEDIR, WISETable, threshold=maskthresh,
-                       runbands=runbands, foregroundbase=foregroundbase,
-                       pixelmaskbase=foregroundbase, outputbase=maskbase, 
-                       maskconfig=maskconfig, overwrite=overwritemask,
-                       ignore_exception=ignore_exceptions,
-                       regionbase=regionbase)
+    for sig in xrange(sigstart, sigend, sigstep):
+        newmaskbase = "{0}_{1}sig".format(sig)
+        mask_algorithm(
+            BASEDIR, WISErow, maskband=maskband, threshold=sig, 
+            foregroundbase=foregroundbase, pixelmaskbase=foregroundbase, 
+            outputbase=newmaskbase, ellipsebase=ellipsebase, 
+            maskconfig=maskconfig, overwrite=True, 
+            ignore_exception=ignore_exceptions, regionbase=regionbase)
+        phot.genEllipsetables(
+            BASEDIR, WISErow, baseparamname=ellipsebase,
+            baseoutput="ellipse_output", maskbase=newmaskbase, 
+            runbands=["W1"])
+        phot.genSkyValues(
+            BASEDIR, WISErow, coordbase="fitsky",
+            ellipsebase="ellipse_aperture"
+
+
 def subtractw3fromw1(config, w1image, w3image, w1output_nobackground, 
         w3output_nobackground, w3output_scaled, w1output_convolved, 
         subtracted_output, objcenter, central_radius):
