@@ -310,27 +310,43 @@ def combinemasks(basefile, additionfile):
     os.remove(additionfile)
     return basefile
 
-def mask_check(BASEDIR, WISErow, sigstart, sigend, sigstep, maskband="W1",
-               foregroundbase="foreground", pixelmaskbase="foreground",
-               outputbase="mask", ellipsebase="ellipsepars",
-               ellipsebase="ellipseregions", spreadpix=5, maskconfig=""):
+def mask_check(BASEDIR, WISEtable, sigstart, sigend, sigstep, maskband="W1",
+               maskbase="mask", skybase="sky_level", 
+               ellipseoutput="ellipse_aperture", uncertaintybase="uncertainty",
+               readonly=False):
 
-    for sig in xrange(sigstart, sigend, sigstep):
-        newmaskbase = "{0}_{1}sig".format(sig)
-        mask_algorithm(
-            BASEDIR, WISErow, maskband=maskband, threshold=sig, 
-            foregroundbase=foregroundbase, pixelmaskbase=foregroundbase, 
-            outputbase=newmaskbase, ellipsebase=ellipsebase, 
-            maskconfig=maskconfig, overwrite=True, 
-            ignore_exception=ignore_exceptions, regionbase=regionbase)
-        phot.genEllipsetables(
-            BASEDIR, WISErow, baseparamname=ellipsebase,
-            baseoutput="ellipse_output", maskbase=newmaskbase, 
-            runbands=["W1"])
-        phot.genSkyValues(
-            BASEDIR, WISErow, coordbase="fitsky",
-            ellipsebase="ellipse_aperture"
+    sigs = np.arange(sigstart, sigend, sigstep)
+    mags = np.zeros(sigs.shape)
+    errs = np.zeros(sigs.shape)
 
+    for i,sig in enumerate(xrange(sigstart, sigend, sigstep)):
+        newmaskbase = sigify(maskbase, sig)
+        newellipseaperture = sigify(ellipseoutput, sig)
+        newskybase = sigify(skybase, sig)
+        newuncertaintybase = sigify(uncertaintybase, sig)
+        if not readonly:
+            phot.build_pipeline(
+                BASEDIR, WISEtable, maskthresh=sig, maskbase=newmaskbase, 
+                skipmask=False, overwritemask=True, 
+                ellipseoutput=newellipseaperture, skybase=newskybase,
+                uncertaintybase=newuncertaintybase, runbands=["W1"], 
+                ignore_exceptions=False)
+            phot.generateEllipseCutouts(
+                BASEDIR, WISEtable, runbands=["W1"], skyprefix=newskybase,
+                aperturefile=newellipseaperture, maskbase=newmaskbase,
+                suffix="{0}".format(sig))
+        magtable = phot.aperture_photometry_table(
+            BASEDIR, WISEtable["objstr_01"], runbands=["W1"],
+            ellipseoutput=newellipseaperture, skybase=newskybase,
+            uncertaintybase=newuncertaintybase, brightness="Vega")
+        mags[i] = magtable["w1apmag"][0]
+        errs[i] = magtable["w1aperr"][0]
+
+    return sigs, mags, errs
+
+def sigify(basename, sig):
+    '''Turns a basename into one which corresponds to a sigma value.'''
+    return "{0}_{1}sig".format(basename, sig)
 
 def subtractw3fromw1(config, w1image, w3image, w1output_nobackground, 
         w3output_nobackground, w3output_scaled, w1output_convolved, 
