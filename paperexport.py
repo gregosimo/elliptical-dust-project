@@ -169,6 +169,51 @@ def create_W2_W3_histogram(table=rampazzo_table,
     plt.savefig(dest)
     plt.close()
 
+def create_W1W2_W2W3_MIR_plot(table=rampazzo_table,
+                              dest=build_filepath(FIGUREPATH, "w1w2w2w3_mir")):
+    '''Plots W1-W2 vs W2-W3'''
+    ylabel = "W1-W2"
+    xlabel = "W2-W3"
+
+    w1 = rampazzo_table["w1unextmag"]
+    w2 = rampazzo_table["w2unextmag"]
+    w3 = rampazzo_table["w3unextmag"]
+    w1err = rampazzo_table["w1unexterr"]
+    w2err = rampazzo_table["w2unexterr"]
+    w3err = rampazzo_table["w3unexterr"]
+    MIR = rampazzo_table["MIR_class"]
+
+    w1w2, w1w2err = phot.calc_statistical_difference(w1, w2, w1err, w2err)
+    w2w3, w2w3err = phot.calc_statistical_difference(w2, w3, w2err, w3err)
+
+    rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, xrange(5), xlabel,
+               ylabel, "", loc="upper left")
+    plt.savefig(dest)
+    plt.close()
+
+def create_W2W3_W3W4_MIR_plot(table=rampazzo_table,
+                              dest=build_filepath(FIGUREPATH, "w2w3w3w4_mir")):
+    '''Plots W2-W3 vs W3-W4'''
+    ylabel = "W2-W3"
+    xlabel = "W3-W4"
+
+    w2 = rampazzo_table["w2unextmag"]
+    w3 = rampazzo_table["w3unextmag"]
+    w4 = rampazzo_table["w4unextmag"]
+    w2err = rampazzo_table["w2unexterr"]
+    w3err = rampazzo_table["w3unexterr"]
+    w4err = rampazzo_table["w4unexterr"]
+    MIR = rampazzo_table["MIR_class"]
+
+    w2w3, w2w3err = phot.calc_statistical_difference(w2, w3, w2err, w3err)
+    w3w4, w3w4err = phot.calc_statistical_difference(w3, w4, w3err, w4err)
+
+    rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, xrange(5), xlabel,
+               ylabel, "", loc="upper left")
+    plt.savefig(dest)
+    plt.close()
+
+
 def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
        dest=os.path.join(FIGUREPATH, "shortpahs.pdf")):
     pahtable = read_Rampazzo_TableA1()

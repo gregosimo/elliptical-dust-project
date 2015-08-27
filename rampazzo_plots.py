@@ -21,11 +21,28 @@ def color_histogram_by_class(band1, band2, groupcol, xlabel, title, bins,
     '''
     color = band1 - band2
     colorgroup = color.group_by(groupcol)
-    plotcolors = ["black", "yellow", "green", "blue", "red"]
+    plotcolors = ["black", "orange", "green", "blue", "red"]
     plt.hist([colorgroup.groups[i] for i in classes], bins, range=colrange, 
              label=["Class {0}".format(i) for i in classes], 
              color= [plotcolors[i] for i in classes],
              histtype="bar", rwidth=1, lw=0)
+    plt.xlabel(xlabel)
+    plt.ylabel("N")
+    plt.title(title)
+    plt.legend()
+
+def color_cumulative_histogram_by_class(
+        band1, band2, groupcol, xlabel, title, bins, colrange=(-4, 4), 
+        classes=np.arange(0,5)):
+    '''Creates a histogam for colors for different classes.
+    '''
+    color = band1 - band2
+    colorgroup = color.group_by(groupcol)
+    plotcolors = ["black", "orange", "green", "blue", "red"]
+    plt.hist([colorgroup.groups[i] for i in classes], bins, range=colrange, 
+             label=["Class {0}".format(i) for i in classes], 
+             color= [plotcolors[i] for i in classes],
+             histtype="step", rwidth=1, cumulative=True, normed=True)
     plt.xlabel(xlabel)
     plt.ylabel("N")
     plt.title(title)
@@ -144,8 +161,8 @@ def plot_rampazzo_line_ratios(linetable, mirtable, title):
     plt.legend()
     plt.title(title)
 
-def MIRplot(x, y, mirindex, yerr=None, xerr=None, classes=xrange(5), xlabel="", ylabel="", title="", 
-            loc='upper right'):
+def MIRplot(x, y, mirindex, yerr=None, xerr=None, classes=xrange(5), xlabel="", 
+            ylabel="", title="", loc='upper right'):
     '''Makes a plot that automatically differentiates between MIR classes.
 
     The x and y data need to be columns which have the same length as 
