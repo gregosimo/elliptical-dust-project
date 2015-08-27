@@ -961,7 +961,9 @@ def extract_subtable_from_column(table, column, selections):
     return table[indices]
 
 def filterTable(BASEDIR, fulltable, isTrue, **kwargs):
-    '''Filters a table based on a boolean method isTrue.'''
+    '''Filters a table based on a boolean method isTrue.
+    
+    isTrue should have a call signature of isTrue(BASEDIR, WISErow, **kwargs)'''
     try:
         copy = kwargs.pop("copy")
         galcol = kwargs.pop("galcol")
@@ -2010,13 +2012,18 @@ def aperture_photometry_table(
                     apertureCorrection=apertureCorrection, 
                     colorIndex=colorIndex))
             except ValueError as e:
+                # This -99 value will only be used internally to this
+                # function to specify where we need to mask the array.
+                # Outside users of the API will not need to bother
+                # themselves with this.
+                print ("Likely encountered negative flux for "
+                "{0}. Detection may be marginal. Masking".format(galname))
+                measurements.append((-99.0, -99.0))
+
+            except iraf.IrafError as e:
                 if ignore_exception:
-                    print ("Likely encountered negative flux for "
-                    "{0}. Masking".format(galname))
-                    # This -99 value will only be used internally to this
-                    # function to specify where we need to mask the array.
-                    # Outside users of the API will not need to bother
-                    # themselves with this.
+                    print ("Pipeline problem for {0}. "
+                           "Masking.").format(galname)
                     measurements.append((-99.0, -99.0))
                 else:
                     raise
@@ -2045,7 +2052,8 @@ def aperture_photometry_table(
 
     # Now deal with extinction.
     photometry_table = deextinct_data(photometry_table,
-                                      extinction=deextinction)
+                                      extinction=deextinction, 
+                                      runbands=runbands)
 
     return photometry_table
 
@@ -2094,7 +2102,15 @@ def deextinct_data(photometry_table, extinction="", runbands=bands):
 
 
 
+def unpack_bands_from_table(table, extractbands=phot.bands, category="unext"):
+    '''Returns a tuple containing extracted magnitudes and errors.
 
+    This is a convenience function to automatically extract the magnitudes and
+    errors that are stored in the table. It will be an N-tuple of 2-tuples,
+    where N is the length of extractbands, which should be a list of bands we
+    want to extract.
+    '''
+    pass
 
             
 def name_photometry_column(band, error=False, category="unext"):

@@ -329,14 +329,14 @@ def mask_check(BASEDIR, WISEtable, sigstart, sigend, sigstep, maskband="W1",
                 BASEDIR, WISEtable, maskthresh=sig, maskbase=newmaskbase, 
                 skipmask=False, overwritemask=True, 
                 ellipseoutput=newellipseaperture, skybase=newskybase,
-                uncertaintybase=newuncertaintybase, runbands=["W1"], 
+                uncertaintybase=newuncertaintybase, runbands=[maskband], 
                 ignore_exceptions=False)
             phot.generateEllipseCutouts(
-                BASEDIR, WISEtable, runbands=["W1"], skyprefix=newskybase,
+                BASEDIR, WISEtable, runbands=[maskband], skyprefix=newskybase,
                 aperturefile=newellipseaperture, maskbase=newmaskbase,
                 suffix="{0}".format(sig))
         magtable = phot.aperture_photometry_table(
-            BASEDIR, WISEtable["objstr_01"], runbands=["W1"],
+            BASEDIR, WISEtable["objstr_01"], runbands=[maskband],
             ellipseoutput=newellipseaperture, skybase=newskybase,
             uncertaintybase=newuncertaintybase, brightness="Vega")
         mags[i] = magtable["w1apmag"][0]
