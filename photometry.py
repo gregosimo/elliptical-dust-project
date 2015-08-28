@@ -1774,8 +1774,9 @@ def aperture_photometry_table(
                 print ("Likely encountered negative flux for "
                 "{0}. Detection may be marginal. Masking".format(galname))
                 measurements.append((-99.0, -99.0))
-
             except iraf.IrafError as e:
+                # Are exceptions truly exceptional now? Or just a sign that
+                # there is a missing value, which is to be expected?
                 if ignore_exception:
                     print ("Pipeline problem for {0}. "
                            "Masking.").format(galname)
@@ -1857,7 +1858,7 @@ def deextinct_data(photometry_table, extinction="", runbands=bands):
 
 
 
-def unpack_bands_from_table(table, extractbands=phot.bands, category="unext"):
+def unpack_bands_from_table(table, extractbands=bands, category="unext"):
     '''Returns a tuple containing extracted magnitudes and errors.
 
     This is a convenience function to automatically extract the magnitudes and
