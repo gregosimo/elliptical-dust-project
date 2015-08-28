@@ -133,7 +133,7 @@ def create_param_table(table=fulltable, dest=os.path.join(TABLEPATH,
     names = ["Galaxy", "Semimajor Axis", "Axis Ratio", "Position Angle",
              "\WISE{} Survey", "NUV Tile", "FUV Tile"]
 
-def create_magnitude_table(table=fulltable, dest=os.path.join(TABLEPATH,
+def create_magnitude_table(table=rampazzo_table, dest=os.path.join(TABLEPATH,
                                                               "mags.tex")):
     generate_fulltable()
     caption = r"""Magnitudes of galaxies in the \ATLAS{} and Rampazzo samples.

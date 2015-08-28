@@ -10,7 +10,7 @@ import gzip
 
 import requests
 import astropy
-from astropy.table import Table, vstack
+from astropy.table import Table, vstack, join
 from astroquery.ned import Ned
 from astroquery.irsa import Irsa
 import numpy as np
@@ -167,8 +167,9 @@ def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE,
     ##########################################################################
     # Uncomment the line below in order in order to upgrade to astropy 1.0.0.
     #ipac_table = Table.read(ipac_output.content, format="ascii.ipac")
-    for colname in clearentries:
-        ipac_table = clear_invalid_entries(ipac_table, ipac_table[colname])
+    #
+    # I don't think I want to remove invalid entries anymore. Just propagate
+    # them through, maybe?
     ipac_table["cat"] = INVERTED_CATALOG_NAMES[catalog]
     return ipac_table
 	
@@ -183,29 +184,88 @@ def clear_invalid_entries(fulltable, indexcolumn):
     except AttributeError:
         return fulltable
 
-def get_WISE_catalog_entries(objectfile):
+def get_WISE_catalog_entries(objectfile, localallwise="", localallsky=""):
     '''Gets entries from objectfile and returns it as a table.
 	
     This function first gets the AllWISE data for the objects in objectfile,
     and then gets the WISE All-Sky data for the objects in objectfile. For 
     objects which are saturated in the AllWISE data, it will replace them 
     with objects in the All-Sky data, thereby decreasing the effects of 
-    saturation.'''
-    allwiseTable = query_WISE_catalog_file_upload(objectfile, 
-            catalog=CATALOG_NAMES["AllWISE"], clearentries=["w1rsemi"])
-    allskyTable = query_WISE_catalog_file_upload(objectfile, 
-            catalog=CATALOG_NAMES["All-Sky"], clearentries=["w1rsemi"])
-    satobjects  = (allwiseTable["w1sat"] + allwiseTable["w2sat"] +
-            allwiseTable["w3sat"] + allwiseTable["w4sat"])
-    # I'm hoping there's a better way to iterate through lists, because we're
-    # not guaranteed that there will be a correct number of valid entries. Some
-    # weird poblems could occur where this is not the case.
-    # I'd rather do something like joining and then processing or just
-    # processing by objstr rather than index.
-    for i, satpixels in enumerate(satobjects):
-        if satpixels != 0:
-            allwiseTable[i] = allskyTable[i]
-    return allwiseTable
+    saturation.
+    
+    If the local* keywords are specified, the catalog entries are read from the
+    specified file rather than queried from the server. This is because the
+    server drops entries for no discernable reason. A more complete listing can
+    be made by using the web interface once, and using that from now on. It
+    also has the added benefit of making things faster.'''
+    # Algorithm is to make a new table, and fill it by columns. So in this
+    # case, let's join the tables, and build the new table by columns. This
+    # will allow us to use the numpy machinery to get things done.
+    # * Join both of the tables and separate into fields which end with
+    #   *_allwise and *_allsky.
+    # * Go through original columns and move the column from the combined table
+    # to the new table. If that column isn't found, that likely means there was
+    # a conflict. Then make a new column based on the saturation, and add that
+    # to the new table.
+    # * There is a corner case for when rows are missing from fullsample...
+    # Throw an error for now.
+    fullsample = Table.read(objectfile, format="ascii.ipac")
+    fullnames = set(fullsample["objstr"])
+
+    if localallwise:
+        allwiseTable = Table.read(localallwise, format="ascii.ipac")
+    else:
+        allwiseTable = query_WISE_catalog_file_upload(objectfile, 
+                catalog=CATALOG_NAMES["AllWISE"], clearentries=["w1rsemi"])
+
+    if localallsky:
+        allskyTable = Table.read(localallwise, format="ascii.ipac")
+    else:
+        allskyTable = query_WISE_catalog_file_upload(objectfile, 
+                catalog=CATALOG_NAMES["All-Sky"], clearentries=["w1rsemi"])
+
+    combinedtable = join(allwiseTable, allskyTable, join_type="outer",
+                         table_names=["allwise", "allsky"], keys="objstr_01")
+
+    # This is the table we will eventually export.
+    output_table = Table()
+
+    # If an object is missing from the allwise catalog, take the object from
+    # the allsky catalog. This is why we fill the value with 0.
+    sat_allwiseobjects  = (combinedtable["w1sat_allwise"] + 
+                           combinedtable["w2sat_allwise"] + 
+                           combinedtable["w3sat_allwise"] + 
+                           combinedtable["w4sat_allwise"]).filled(1)
+
+    # Get all of the colnames we desire to move to the new Table.
+    allwisecols = set(allwiseTable.colnames)
+    allskycols = set(allskyTable.colnames)
+    fullcols = allwisecols.union(allskycols)
+
+    for colname in fullcols:
+        # Make the common case fast, and the fast case common. So avoid the
+        # exception unless you encounter the rare case.
+        colname_allwise = "{0}_{1}".format(colname, "allwise")
+        colname_allsky = "{0}_{1}".format(colname, "allsky")
+        try:
+            # If there is saturation, pick from allsky, otherwise, pick from
+            # allwise.
+            newcolumn = np.ma.where(
+                sat_allwiseobjects, combinedtable[colname_allsky],
+                combinedtable[colname_allwise])
+        except KeyError:
+            # This means that there was no conflict, so just add colname.
+            # If this throws an error, something is weird and I would like to
+            # know.
+            newcolumn = combinedtable[colname]
+        output_table[colname] = newcolumn
+
+    # Finally test to see if all of the objects are present. If they are not,
+    # then raise some kind of error.
+    if fullnames != set(output_table["objstr_01"]):
+        raise ValueError("Some objects were lost in the query.")
+
+    return output_table
 
 def get_2MASS_catalog_entries(objectfile, mags="AB"):
     '''Gets the catalog entries from objectfile and returns it as a table.
