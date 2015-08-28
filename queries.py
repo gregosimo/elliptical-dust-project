@@ -168,8 +168,13 @@ def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE,
     # Uncomment the line below in order in order to upgrade to astropy 1.0.0.
     #ipac_table = Table.read(ipac_output.content, format="ascii.ipac")
     #
-    # I don't think I want to remove invalid entries anymore. Just propagate
-    # them through, maybe?
+    # The removal of invalid entries occurs because oftentimes, some galaxies
+    # will have spurious duplicate entries where all of the meaningful
+    # parameters are masked. This has the slight problem of removing galaxies
+    # with legitimate entry at all from this table. I think it's a sacrifice
+    # I'm willing to make.
+    for colname in clearentries:
+        ipac_table = clear_invalid_entries(ipac_table, ipac_table[colname])
     ipac_table["cat"] = INVERTED_CATALOG_NAMES[catalog]
     return ipac_table
 	
