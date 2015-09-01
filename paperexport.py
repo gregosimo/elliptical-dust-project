@@ -11,6 +11,7 @@ import matplotlib
 matplotlib.use("PDF")
 import matplotlib.pyplot as plt
 from astropy.table import Table, vstack
+from astropy.io.ascii import masked
 import numpy as np
 
 import photometry as phot
@@ -38,17 +39,22 @@ FULL_JARRETT_TABLE = os.path.join(JARRETTBASE, "jarrett.tbl")
 # extension!
 EXT = "pdf"
 
+# This is the string which is displayed in LaTeX for a missing value.
+LATEX_TABLE_MASKSTRING = r"--"
+
 # I'd like for the tables to just be loaded without worrying about writing to
 # and from disk.
 try:
-    rampazzo_table = Table.read(FULL_RAMPAZZO_TABLE, format="ascii.ipac")
+    rampazzo_table = Table.read(FULL_RAMPAZZO_TABLE, format="ascii.csv",
+                                guess=False)
 except IOError:
     rampazzo_table=[]
 
 # I made this a csv because the astropy ipac routine doesn't believe in having
 # slashes in ipac column names
 try:
-    atlas3d_table = Table.read(FULL_ATLAS3D_TABLE, format="ascii.csv")
+    atlas3d_table = Table.read(FULL_ATLAS3D_TABLE, format="ascii.csv",
+                               guess=False)
 except IOError:
     atlas3d_table=[]
 
@@ -210,8 +216,42 @@ def create_W2W3_W3W4_MIR_plot(table=rampazzo_table,
 
     rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, xrange(5), xlabel,
                ylabel, "", loc="upper left")
+    plt.axis([-1.5, 0, -1.5, 0])
     plt.savefig(dest)
     plt.close()
+
+def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
+    table=rampazzo_table, dest=build_filepath(FIGUREPATH, "dual_mir_plot")):
+    w1 = rampazzo_table["w1unextmag"]
+    w2 = rampazzo_table["w2unextmag"]
+    w3 = rampazzo_table["w3unextmag"]
+    w4 = rampazzo_table["w4unextmag"]
+    w1err = rampazzo_table["w1unexterr"]
+    w2err = rampazzo_table["w2unexterr"]
+    w3err = rampazzo_table["w3unexterr"]
+    w4err = rampazzo_table["w4unexterr"]
+    MIR = rampazzo_table["MIR_class"]
+
+    w1w2, w1w2err = phot.calc_statistical_difference(w1, w2, w1err, w2err)
+    w2w3, w2w3err = phot.calc_statistical_difference(w2, w3, w2err, w3err)
+    w3w4, w3w4err = phot.calc_statistical_difference(w3, w4, w3err, w4err)
+
+    w1w2label = "W1-W2"
+    w2w3label = "W2-W3"
+    w3w4label = "W3-W4"
+
+    plt.subplot(1, 2, 1)
+    rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, xrange(5), w2w3label,
+               w1w2label, "", loc="upper left")
+    plt.axis([-1.5, 0, -0.75, -0.6])
+
+    plt.subplot(1, 2, 2)
+    rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, xrange(5), w3w4label,
+               w2w3label, "", loc="upper left")
+    plt.axis([-1.5, 0, -1.5, 0])
+    plt.savefig(dest)
+    plt.close()
+
 
 
 def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
@@ -495,7 +535,11 @@ def format_mag(mag):
     This essentially breaks off the magnitude at the second decimal place. It
     is meant to be used with the format keyword in Table.write().
     '''
-    magstr = "{0:.2f}".format(mag)
+    try:
+        magstr = "{0:.2f}".format(mag)
+    except ValueError:
+        # May occur for masked values. 
+        magstr = LATEX_TABLE_MASKSTRING
     return magstr
 
 def format_mag_err(err):
@@ -504,7 +548,11 @@ def format_mag_err(err):
     This essentially breaks off the error at the third decimal place. It is
     meant to be used with the format keyword in Table.write().
     '''
-    magerrstr = "{0:.3f}".format(err)
+    try:
+        magerrstr = "{0:.3f}".format(err)
+    except ValueError:
+        # May occur for masked values. 
+        magerrstr = LATEX_TABLE_MASKSTRING
     return magerrstr
 
 def format_arcseconds(arc):
