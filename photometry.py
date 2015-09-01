@@ -2540,7 +2540,8 @@ def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi,
             "w4ba")
     return Table(fulltable , names=names)
 
-def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01")):
+def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
+                        join_type="inner"):
     '''Joins two tables by the provided name columns. 
 
     By default, both columns should be called "objstr_01", in which, if both
@@ -2566,7 +2567,7 @@ def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01")):
     table1[name1] = object_name_to_dir(table1[name1])
     table2[name1] = object_name_to_dir(table2[name2])
     # Now join them.
-    newtable = join(table1, table2, keys=[name1])
+    newtable = join(table1, table2, keys=[name1], join_type=join_type)
     # Set columns back.
     table1[name1] = tempcol1
     return newtable
@@ -2579,6 +2580,8 @@ def multijoin_by_galaxy_name(*tables, **kwargs):
     should correspond to the number of tables. It will return one large table.
     I haven't dealt with collisions yet...
     '''
+    # Maybe add in a mechanism to deal with multiple join types. But I don't
+    # think it's worth the thought at this point.
     names = kwargs["names"]
     if len(names) != len(tables):
         raise ValueError("Names and Tables have different lengths")
