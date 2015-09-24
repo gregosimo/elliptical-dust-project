@@ -79,7 +79,7 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
         useskybase="sky_level", skymethod="adaptive", 
         uncertaintybase="uncertainty", ZPuncertainty=True, brightness="AB",
-        errors=True, apertureCorrection=True, colorIndex=-2):
+        errors=True, apertureCorrection=True, colorIndex=-2, max_mag_err=0.3):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -96,6 +96,13 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     skymethod is "skyfile", the suffix should be "tab" since the file should be
     the output of ellipse. "Adaptive" should adapt to the necessary sky
     measurement methods.
+
+    The max_mag_err keyword indicates how large the magnitude error should be
+    before the object is flagged as a non-detection. The way non-detections are
+    marked is by having a blank field for the magnitude, and putting the upper
+    magnitude limit in the magnitude error field. Although this is somewhat
+    counterintuitive, it will make sure that upper limits are not accidentally
+    plotted as actual values.
     '''
     galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
     DNflux = calc_DNflux(galaxydir, band, baseobjectfile, useskybase,
@@ -116,6 +123,16 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
                 photvalue = conv.DNflux2Vegamag(band, DNflux)
             err = conv.DN_err_to_mag_err(galaxydir, band, objectError,
                     DNflux, ZPunc=ZPuncertainty)
+            if err >= max_mag_err:
+                photvalue = np.nan
+                fluxupperlimit = 3.0 * objectError
+                # I don't want to duplicate this, but I don't feel like making
+                # a better logic. I think this entire function should be
+                # trimmed down to not return anything other than (photvalue,
+                # err) tuples.
+                if brightness is "AB":
+                    err = conv.DNflux2ABmag(band, fluxupperlimit)
+                else: err = conv.DNflux2Vegamag(band, fluxupperlimit)
         return (photvalue, err)
     else:
         if brightness is "flux":
@@ -1850,8 +1867,11 @@ def aperture_photometry_table(
         photcol = photometry_table[photkey]
         errcol = photometry_table[errkey]
 
-        photcol.mask = photcol < 0
-        errcol.mask = errcol < 0
+        # Galaxy_photometry returns NaN values if the error on an object is too
+        # large. When this is the case, we want to replace NaN values with
+        # -99.0, so that they will be masked later on.
+        photcol.mask = np.logical_or(photcol < 0, np.isnan(photcol))
+        errcol.mask = np.logical_or(errcol < 0, np.isnan(errcol))
 
     # Now deal with extinction.
     photometry_table = deextinct_data(photometry_table,
