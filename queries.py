@@ -136,7 +136,7 @@ def batch_download_images(BASEDIR, objects, ras, decs, surveys, size=600,
 
 def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE, 
         catalog=CATALOG_NAMES["AllWISE"], radius=10, 
-        cols=['ra', 'dec', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
+        cols=['ra', 'dec', 'xscprox', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
         'w1sat', 'w2rsemi', 'w2ba', 'w2pa', 'w2gmag', 'w2sat', 'w3rsemi', 
         'w3ba', 'w3pa', 'w3gmag', 'w3sat', 'w4rsemi', 'w4ba', 'w4pa', 
         'w4gmag', 'w4sat'], clearentries=[]):
@@ -182,7 +182,8 @@ def clear_invalid_entries(fulltable, indexcolumn):
     except AttributeError:
         return fulltable
 
-def get_WISE_catalog_entries(objectfile, localallwise="", localallsky=""):
+def get_WISE_catalog_entries(objectfile, localallwise="", localallsky="",
+                             missing_galaxies_error=True):
     '''Gets entries from objectfile and returns it as a table.
 	
     This function first gets the AllWISE data for the objects in objectfile,
@@ -195,7 +196,11 @@ def get_WISE_catalog_entries(objectfile, localallwise="", localallsky=""):
     specified file rather than queried from the server. This is because the
     server drops entries for no discernable reason. A more complete listing can
     be made by using the web interface once, and using that from now on. It
-    also has the added benefit of making things faster.'''
+    also has the added benefit of making things faster.
+    
+    If "missing_galaxies_error" is disabled, then instead of throwing an error,
+    this function will print the names of the missing galaxies, but continue
+    along its way.'''
     # Algorithm is to make a new table, and fill it by columns. So in this
     # case, let's join the tables, and build the new table by columns. This
     # will allow us to use the numpy machinery to get things done.
@@ -224,12 +229,13 @@ def get_WISE_catalog_entries(objectfile, localallwise="", localallsky=""):
 
     combinedtable = join(allwiseTable, allskyTable, join_type="outer",
                          table_names=["allwise", "allsky"], keys="objstr_01")
+    combinedtable = Table(combinedtable, masked=True)
 
     # This is the table we will eventually export.
     output_table = Table()
 
     # If an object is missing from the allwise catalog, take the object from
-    # the allsky catalog. This is why we fill the value with 0.
+    # the allsky catalog. This is why we fill the value with 1.
     sat_allwiseobjects  = (combinedtable["w1sat_allwise"] + 
                            combinedtable["w2sat_allwise"] + 
                            combinedtable["w3sat_allwise"] + 
@@ -260,8 +266,12 @@ def get_WISE_catalog_entries(objectfile, localallwise="", localallsky=""):
 
     # Finally test to see if all of the objects are present. If they are not,
     # then raise some kind of error.
-    if fullnames != set(output_table["objstr_01"]):
-        raise ValueError("Some objects were lost in the query.")
+    missing_galaxies = set(fullnames) - set(output_table["objstr_01"])
+    if missing_galaxies:
+        if missing_galaxies_error:
+            raise ValueError("Some objects were lost in the query.")
+        else:
+            print "Missing {0} from query".format(missing_galaxies)
 
     return output_table
 
@@ -335,13 +345,21 @@ def query_image(BASEDIR, objstr, survey, coaddID, ra, dec, size=600,
     # check if the images are up to date. If they aren't, then download them
     # using upgrade_images.
     if os.path.isdir(galaxydir):
-        if overwrite:
+        try:
+            # If this completes without an error, then there are WISE images in
+            # galaxydir.
+            is_current = check_galaxy_images_version(galaxydir)
+        except RuntimeError:
+            # This means that there are no WISE images in this folder.
             download_images(galaxydir, survey, coadddic, ra, dec, size)
-        elif upgrade and not check_galaxy_images_version(galaxydir):
-            print "Upgrading images for {0}".format(objstr)
-            upgrade_images(galaxydir, survey, coadddic, ra, dec, size)
-        else:
-            print "Skipping {0}: Folder exists.".format(objstr)
+        else: 
+            if overwrite:
+                download_images(galaxydir, survey, coadddic, ra, dec, size)
+            elif upgrade and not is_current:
+                print "Upgrading images for {0}".format(objstr)
+                upgrade_images(galaxydir, survey, coadddic, ra, dec, size)
+            else:
+                print "Skipping {0}: Folder exists.".format(objstr)
     # If the folder doesn't exist, make it and download the images into it.
     else:
         os.mkdir(galaxydir)
@@ -469,8 +487,8 @@ def check_galaxy_images_version(galaxydir):
     '''Checks if the WISE images are from the latest catalog.
 
     The code of the latest catalog is in the variable LATEST_WISE_CODE. The
-    codes of images in the folder will be checked against this. If they are not
-    more recent, then this function will return false.
+    codes of images in the folder will be checked against this. If they are 
+    not more recent, then this function will return false.
     '''
     image_name = os.path.split(phot.match_filter(galaxydir, "W1"))[-1]
     return get_version(image_name) >= LATEST_WISE_CODE

@@ -11,7 +11,7 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.stats import sigma_clip
-from astropy.table import Table, Column, join
+from astropy.table import Table, Column, join, vstack
 from astroquery.ned import Ned
 import numpy as np
 import aplpy
@@ -163,7 +163,7 @@ def build_pipeline(
         print "Making Masks..."
         masks.build_masks(BASEDIR, WISETable, threshold=maskthresh,
                           runbands=runbands, foregroundbase=foregroundbase,
-                          pixelmaskbase=foregroundbase, outputbase=maskbase, 
+                          pixelmaskbase=pixelmaskbase, outputbase=maskbase, 
                           maskconfig=maskconfig, overwrite=overwritemask,
                           ignore_exception=ignore_exceptions,
                           regionbase=regionbase)
@@ -188,6 +188,7 @@ def build_pipeline(
                         aperture_file=ellipseoutput, sky_coordinates=skycoord, 
                         sky_base=skybase, uncertainty_base=uncertaintybase, 
                         bands_written=runbands)
+    print "Done!"
 
 
 def fullphotometry(BASEDIR, WISE_Table):
@@ -629,6 +630,45 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
             else:
                 raise
 
+def get_ellipse_output_tables(
+        BASEDIR, galaxies, band, aperturebase="ellipse_aperture"):
+    '''Returns a table containing all ellipse outputs for objects in BASEDIR.
+
+    This routine basically loops through all of the given objects in BASEDIR,
+    and returns a concatenated table of all of the outputs of the ellipse
+    routine. This relies on the assumption that all of the STSDAS tables of
+    aperturebase have only one entry.
+    '''
+    tablelist = []
+    for gal in galaxies:
+        galaxydir = change_to_galaxy_dir(BASEDIR, gal)
+        aperturepath = format_band_dependence(
+            aperturebase, band, "tab", galaxydir)
+        ellipsetable = STSDAS_to_Astropy_Table(aperturepath)
+        tablelist.append(ellipsetable)
+    fulltable = vstack(tablelist)
+    try:
+        fulltable["objstr_01"] = galaxies
+    except ValueError:
+        print "Ellipse output tables have more than one row."
+        raise
+    return fulltable
+
+def get_masked_fractions(
+    BASEDIR, galaxies, band, aperturebase="ellipse_aperture"):
+    '''Returns an array containing the fraction of masked pixels for galaxies.
+
+    The output will probably not be exact, since the total number of pixels in
+    the ellipse, valid and invalid, is not included in the output of ellipse.
+    Therefore, the total area will be calculated from the area of the ellipse.
+    It's not guaranteed that this will be the same number. If needed,
+    additional investigations can occur.'''
+    aperture_output = get_ellipse_output_tables(BASEDIR, galaxies, band,
+                                                aperturebase)
+    fullareas = (math.pi * aperture_output["SMA"]**2 *
+        (1-aperture_output["ELLIP"]))
+    frac_areas = 1 - aperture_output["NPIX_E"] / fullareas
+    return frac_areas
 
 ##############################################################################
 # Deprecated functions? #
@@ -1399,7 +1439,7 @@ def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion",
         BASEDIR, WISEtable, writeregion, outputbase=outputbase, 
         parambase=parambase, runbands=runbands, ignore_exception=ignore_exception)
 
-def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
+def generateEllipseCutouts(BASEDIR, WISEtable, runbands=bands, 
         skyAperture=True, skyimage=False, skyprefix="sky_level",
         aperturefile="ellipse_aperture", ignore_exception=False,
         maskbase="mask", suffix="", sizescale=1.5):
@@ -1415,7 +1455,7 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS,
         maskbase=maskbase, suffix=suffix, sizescale=sizescale)
     matplotlib.use(current_backend)
 
-def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
+def createEllipseCutouts(BASEDIR, WISErow, runbands=bands, skyAperture=True,
         skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
         skymethod="adaptive", maskbase="mask", suffix="", sizescale=1.5):
     '''Creates a set of four cutouts with the aperture and sky ellipses
@@ -1442,8 +1482,8 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         imagehdu.data = np.ma.MaskedArray(
             imagehdu.data, mask=maskhdu.data).filled(np.nan)
         gc = aplpy.FITSFigure(imagehdu)
-        gc.show_grayscale()
-        gc.set_nan_color("b")
+        gc.show_grayscale(invert=True)
+        gc.set_nan_color("1.0")
         gc.refresh()
 
         px = getPixelScale(band)
@@ -1454,7 +1494,7 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         width = height * (1.0 - float(aperturepars["ELLIP"]))
         angle = float(aperturepars["PA"])
         gc.show_ellipses(Xval, Yval, width, height, angle=angle,
-            edgecolor="yellow")
+            edgecolor="red")
         # Now make the sky annulus:
         if skyAperture:
             drawSkyParams(galaxydir, band, gc, skyprefix=skyprefix,
@@ -1501,7 +1541,7 @@ def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive")
             float(skypars.meta["keywords"]["DANNULUS"]["value"]) * px / 
             3600.0)
         gc.show_circles([Xval]*2, [Yval]*2, [radius_in, radius_out],
-                edgecolor="cyan")
+                edgecolor="blue")
     elif method.lower() == "patch":
         skypars = Table.read(os.path.join(galaxydir,
             format_band_dependence("sky_level", band, "txt")),
@@ -1518,7 +1558,7 @@ def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive")
 
         gc.show_ellipses([Xval]*3, [Yval]*3, [minor_in, minor_mid, minor_out], 
                          [major_in, major_mid, major_out], angle=[angle]*3, 
-                         edgecolor="cyan")
+                         edgecolor="blue")
 
 def get_outer_sky_length(galaxydir, band, skyprefix="sky_level",
                          method="adaptive"):
@@ -1775,14 +1815,21 @@ def aperture_photometry_table(
                 "{0}. Detection may be marginal. Masking".format(galname))
                 measurements.append((-99.0, -99.0))
             except iraf.IrafError as e:
-                # Are exceptions truly exceptional now? Or just a sign that
-                # there is a missing value, which is to be expected?
-                if ignore_exception:
-                    print ("Pipeline problem for {0}. "
-                           "Masking.").format(galname)
+                galaxydir = change_to_galaxy_dir(BASEDIR, galname)
+                try:
+                    imagefiles = match_filter(galaxydir, band)
+                except RuntimeError:
+                    print ("{0} image not found for {1}").format(band, 
+                                                                 galname)
                     measurements.append((-99.0, -99.0))
-                else:
-                    raise
+                else: 
+                    if ignore_exception:
+                        print ("Pipeline problem for {0}. "
+                               "Masking.").format(galname)
+                        measurements.append((-99.0, -99.0))
+                    else:
+                        raise e
+
             
         # Add the measurements to photcolumns.
         for (photkey, errkey, measurement) in zip(photkeys, errkeys,
@@ -1828,7 +1875,8 @@ def deextinct_data(photometry_table, extinction="", runbands=bands):
     if extinction is not "":
         extinction_table = conv.get_extinction_table(extinction)
         extinction_table.rename_column("objname", "objstr_01")
-        extincted_table = join(photometry_table, extinction_table)
+        extincted_table = join_by_galaxy_name(photometry_table, 
+                                              extinction_table)
         for band in runbands:
             # Get the names of the photometry columns.
             ap_mag = name_photometry_column(band, error=False, category="ap")
@@ -1952,14 +2000,14 @@ def photometryOnBand(BASEDIR, objectnames, band,
     else: 
         return np.array(photOutput)
 
-def createDifferencePlot(xval, valtocompare, xerror, valerror, xlabel, ylabel,
-        title, label=''):
+def createDifferencePlot(xval, yval, valtocompare, yerror, valerror, xlabel, 
+                         ylabel, title, label=''):
     '''Plots the difference between two values against the value.
 
     This plot is used for illustrating how consistent two datasets are
     from each other.'''
-    difference, errors = calc_statistical_difference(valtocompare, xval, valerr,
-            xerror)
+    difference, errors = calc_statistical_difference(
+        valtocompare, yval, valerror, yerror)
     plt.errorbar(xval, difference, errors, fmt="o", label=label)
     plt.plot([min(xval)+0.01, max(xval)-0.01], [0, 0], 'k-')
     plt.xlabel(xlabel)
@@ -2066,7 +2114,6 @@ def calc_statistical_fraction_of_sums(allvalues, allerrs, nummask, denommask,
 
         anserr += errnum
     return answer, np.sqrt(anserr)
-
 
 def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror, 
         xlabel, ylabel, title, label=""):
@@ -2380,6 +2427,13 @@ def run_imcopy(original, destination):
 
     For simple image copying, this function should be simple enough.
     '''
+    # There's a logic tree here:
+    # Destination is a file (ends with .fits):
+    # - If destination exists, delete it, then proceed with the copy.
+    # - If destination doesn't exist, proceed with the copy
+    # - If the path to the file doesn't exist, make the path, and then copy.
+    # Destination is a directory (does not end with fits):
+    # - If destination exists, 
     if os.path.isfile(destination):
         os.remove(destination)
     elif os.path.isdir(destination):
@@ -2396,6 +2450,39 @@ def run_imcopy(original, destination):
             os.remove(destination_path)
         except OSError:
             pass
+    else:
+        # This spaghettifies the code logic a bit. But I don't want to spend
+        # too much time on redoing this code. If weird bugs come up, that time
+        # might be a little better spent.
+        # I basically want to create the path to destination if it doesn't 
+        # already exist.
+        if destination.endswith(".fits"):
+            parent = os.path.dirname(destination)
+            try:
+                os.makedirs(parent)
+            except OSError:
+                # This means that the parent directory exists already.
+                pass
+        else:
+            extension = ".fits"
+            basefile = os.path.basename(original)
+            filename = basefile[:basefile.index(extension)+len(extension)]
+            destination_path = os.path.join(destination, filename)
+            # In the corner case where the directory exists, but we haven't put a
+            # file in there yet, this will prevent failures to remove from causing
+            # major problems.
+            # If this doesn't work, simply do a os.path.isfile(destination_path)
+            # before removing.
+            try:
+                os.remove(destination_path)
+            except OSError:
+                pass
+            try:
+                os.makedirs(destination)
+            except OSError:
+                pass
+
+
 
 
     iraf.images()
@@ -2405,11 +2492,11 @@ def run_imcopy(original, destination):
 def Gil_de_Paz_Table_1_to_WISE_table(GdP_Table1):
     gdp1 = GdP_Table1
     objstr = gdp1["Name"]
+    decsigns = np.where(gdp1["DE-"] == "-", -1.0, 1.0)
     ra, dec = ((gdp1["RAh"].astype(float) + gdp1["RAm"].astype(float)/60.0 +
             gdp1["RAs"].astype(float)/60/60)*360/24,
-            (gdp1["DEd"].astype(float) + np.sign(gdp1["DEd"]) * 
-                gdp1["DEm"].astype(float)/60.0 + np.sign(gdp1["DEd"]) * 
-                gdp1["DEs"].astype(float)/60/60))
+            (gdp1["DEd"].astype(float) + gdp1["DEm"].astype(float)/60.0 +
+             gdp1["DEs"].astype(float)/60.0/60.0) * decsigns)
     nuvrsemi = fuvrsemi = gdp1["MajAxis"] / 2 * 60
     # There's gonna be some aliasing going along here. Be wary.
     gdp1["PA"].fill_value = 0.05
@@ -2539,6 +2626,26 @@ def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi,
             "w4rsemi", "w1pa", "w2pa", "w3pa", "w4pa", "w1ba", "w2ba", "w3ba", 
             "w4ba")
     return Table(fulltable , names=names)
+
+def calc_statistical_elliptical_mass_to_light_ratio(
+    W1, W2, W1err, W2err, retlog=True):
+    '''Turns a W1-W2 color to a mass-to-light ratio.
+
+    This function implements Equation 8 in Jarrett 2013. Note that it only
+    applies to early-type galaxies.'''
+
+    w1w2, w1w2err = calc_statistical_difference(W1, W2, W1err, W2err)
+
+    masslightlog = -0.31 + 3.42 * w1w2
+    masslightlogerr = 3.42 * w1w2err
+    
+    if retlog:
+        return masslightlog, masslightlogerr
+    else:
+        masslight = 10**(masslightlog)
+        masslighterr = np.log(10) * masslight * masslightlogerr
+
+        return masslight, masslighterr
 
 def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
                         join_type="inner"):
