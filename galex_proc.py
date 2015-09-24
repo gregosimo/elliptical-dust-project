@@ -127,21 +127,22 @@ def galex_tilename(MASTrow):
         tilename = "{0}_sg{1:02g}".format(base_tilename, subtile)
     return tilename
 
-def extract_GALEX_folder(tarfolder, extractedfolder):
+def extract_GALEX_folder(tarfolder, extractedfolder, pattern="Galex*.tar"):
     '''Extracts GALEX tar files into a folder.
 
-    The contents of the tar file is put into extractedfolder.
+    The contents of the tar file is put into extractedfolder. This function
+    will look for objects with the given glob pattern in the tarfolder.
     '''
     # We first want to go through all of the tar archives and extract them into
     # tempfolder. This will make a single location that contains all of the
     # tiles.
-    filelist = glob.glob(os.path.join(tarfolder, "Galex*.tar"))
+    filelist = glob.glob(os.path.join(tarfolder, pattern))
     for tarball in filelist:
         untar(tarball, extractedfolder)
 
 
 def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath, 
-        tempfolder="images", sidelength=1000, replacement_path=""):
+        tempfolder="images", sidelength=1500, replacement_path=""):
     """Processes a tarfile downloaded from GALEX using sortTable.
     
     BASEDIR is the directory where we want the image folders to be.

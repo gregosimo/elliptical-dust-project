@@ -12,6 +12,7 @@ import photometry as phot
 
 class MaskCMD(cmd.Cmd):
     def __init__(self, inputimage, outputimage, origimage, regionfile):
+        cmd.Cmd.__init__(self)
         # Set up the environment.
         self.target = outputimage
         self.ds9 = ds9()
@@ -24,9 +25,14 @@ class MaskCMD(cmd.Cmd):
         self.imagehdulist = fits.open(origimage)
         # Set up quantities for masking routines
         self.masknum = np.amax(self.maskhdulist[0].data)+1
-        cmd.Cmd.__init__(self)
+        # cmd.Cmd is still an old-stype class, so you can't use super() on it.
+        # That shouldn't  be a problem because we're not foraying into multiple
+        # inheritance anyway.
         self.load_image()
-        self.load_mask()
+        try:
+            self.load_mask()
+        except ValueError:
+            pass
 
     def do_cut(self, num):
         '''Removes the segment with the specified number.'''

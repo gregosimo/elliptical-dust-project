@@ -7,12 +7,17 @@ import photometry as phot
 import fsps
 
 MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ', 
-                   "markeredgewidth": 1.5},
-               1: {"marker": '^', "markerfacecolor": 'orange', "ls": ' '},
-               2: {"marker": 'o', "markerfacecolor": 'green', "ls": ' '},
-               3: {"marker": '*', "markerfacecolor": 'blue', "ls": ' '},
+                   "markeredgewidth": 1.5, 
+                   "ecolor": "black", "elinewidth": 0.7, "capthick": 1.0},
+               1: {"marker": '^', "markerfacecolor": 'orange', "ls": ' ',
+                   "ecolor": "orange", "elinewidth": 0.7, "capthick": 1.0},
+               2: {"marker": 'o', "markerfacecolor": 'green', "ls": ' ',
+                   "ecolor": "green", "elinewidth": 0.7, "capthick": 1.0},
+               3: {"marker": '*', "markerfacecolor": 'blue', "ls": ' ',
+                   "ecolor": "blue", "elinewidth": 0.7, "capthick": 1.0},
                4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
-                   "markeredgecolor": 'red', "markeredgewidth": 1.5}}
+                   "markeredgecolor": 'red', "markeredgewidth": 1.5, 
+                   "ecolor": "red", "elinewidth": 0.7, "capthick": 1.0}}
 
 
 def color_histogram_by_class(band1, band2, groupcol, xlabel, title, bins, 
@@ -33,7 +38,7 @@ def color_histogram_by_class(band1, band2, groupcol, xlabel, title, bins,
 
 def color_cumulative_histogram_by_class(
         band1, band2, groupcol, xlabel, title, bins, colrange=(-4, 4), 
-        classes=np.arange(0,5)):
+        classes=np.arange(0,5), loc="lower right"):
     '''Creates a histogam for colors for different classes.
     '''
     color = band1 - band2
@@ -46,7 +51,7 @@ def color_cumulative_histogram_by_class(
     plt.xlabel(xlabel)
     plt.ylabel("N")
     plt.title(title)
-    plt.legend()
+    plt.legend(loc=loc)
 
 def plot_color_PAH_flux_ratio(pahtable, magtable, title, colorlabel):
     '''Plots color vs a PAH flux ratio.'''

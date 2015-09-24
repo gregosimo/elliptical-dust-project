@@ -79,7 +79,7 @@ def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
     if fulltable is []:
         # With a later version of astropy, I could just use the unique 
         # function...
-        fulltable = vstack([rampazzo_table, atlas3d_table])
+        fulltable = vstack([rampazzo, atlas3d])
         groupedtable = fulltable.group_by('objstr_01')
         fulltable = Table(rows=groupedtable[0])
         for ix in xrange(1, len(groupedtable.groups)):
@@ -168,10 +168,21 @@ def create_W2_W3_histogram(table=rampazzo_table,
                            dest=build_filepath(FIGUREPATH, "w2w3hist")):
     '''Creates the histogram which plots all of the objects in W2-W3.'''
     xlabel = "W2-W3"
-    rp.color_histogram_by_class(rampazzo_table["w2unextmag"],
-                                rampazzo_table["w3unextmag"],
-                                rampazzo_table["MIR_class"], "W2-W3", 
+    rp.color_histogram_by_class(table["w2unextmag"],
+                                table["w3unextmag"],
+                                table["MIR_class"], "W2-W3", 
                                 "", 80, colrange=(-1.5, 2.5))
+    plt.savefig(dest)
+    plt.close()
+
+def create_W2_W3_cumulative_histogram(
+        table=rampazzo_table, dest=build_filepath(FIGUREPATH,
+                                                  "class023_cumhist")):
+    '''Cumulative histogram illustrating difference between Class 0 and 2/3.'''
+    xlabel = "W2-W3"
+    rp.color_cumulative_histogram_by_class(
+        table["w2unextmag"], table["w3unextmag"], table["MIR_class"], "W2-W3",
+        "", 80, colrange=(-1.5, 2.5), classes=[0, 2, 3])
     plt.savefig(dest)
     plt.close()
 
@@ -181,13 +192,13 @@ def create_W1W2_W2W3_MIR_plot(table=rampazzo_table,
     ylabel = "W1-W2"
     xlabel = "W2-W3"
 
-    w1 = rampazzo_table["w1unextmag"]
-    w2 = rampazzo_table["w2unextmag"]
-    w3 = rampazzo_table["w3unextmag"]
-    w1err = rampazzo_table["w1unexterr"]
-    w2err = rampazzo_table["w2unexterr"]
-    w3err = rampazzo_table["w3unexterr"]
-    MIR = rampazzo_table["MIR_class"]
+    w1 = table["w1unextmag"]
+    w2 = table["w2unextmag"]
+    w3 = table["w3unextmag"]
+    w1err = table["w1unexterr"]
+    w2err = table["w2unexterr"]
+    w3err = table["w3unexterr"]
+    MIR = table["MIR_class"]
 
     w1w2, w1w2err = phot.calc_statistical_difference(w1, w2, w1err, w2err)
     w2w3, w2w3err = phot.calc_statistical_difference(w2, w3, w2err, w3err)
@@ -203,13 +214,13 @@ def create_W2W3_W3W4_MIR_plot(table=rampazzo_table,
     ylabel = "W2-W3"
     xlabel = "W3-W4"
 
-    w2 = rampazzo_table["w2unextmag"]
-    w3 = rampazzo_table["w3unextmag"]
-    w4 = rampazzo_table["w4unextmag"]
-    w2err = rampazzo_table["w2unexterr"]
-    w3err = rampazzo_table["w3unexterr"]
-    w4err = rampazzo_table["w4unexterr"]
-    MIR = rampazzo_table["MIR_class"]
+    w2 = table["w2unextmag"]
+    w3 = table["w3unextmag"]
+    w4 = table["w4unextmag"]
+    w2err = table["w2unexterr"]
+    w3err = table["w3unexterr"]
+    w4err = table["w4unexterr"]
+    MIR = table["MIR_class"]
 
     w2w3, w2w3err = phot.calc_statistical_difference(w2, w3, w2err, w3err)
     w3w4, w3w4err = phot.calc_statistical_difference(w3, w4, w3err, w4err)
@@ -222,15 +233,15 @@ def create_W2W3_W3W4_MIR_plot(table=rampazzo_table,
 
 def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
     table=rampazzo_table, dest=build_filepath(FIGUREPATH, "dual_mir_plot")):
-    w1 = rampazzo_table["w1unextmag"]
-    w2 = rampazzo_table["w2unextmag"]
-    w3 = rampazzo_table["w3unextmag"]
-    w4 = rampazzo_table["w4unextmag"]
-    w1err = rampazzo_table["w1unexterr"]
-    w2err = rampazzo_table["w2unexterr"]
-    w3err = rampazzo_table["w3unexterr"]
-    w4err = rampazzo_table["w4unexterr"]
-    MIR = rampazzo_table["MIR_class"]
+    w1 = table["w1unextmag"]
+    w2 = table["w2unextmag"]
+    w3 = table["w3unextmag"]
+    w4 = table["w4unextmag"]
+    w1err = table["w1unexterr"]
+    w2err = table["w2unexterr"]
+    w3err = table["w3unexterr"]
+    w4err = table["w4unexterr"]
+    MIR = table["MIR_class"]
 
     w1w2, w1w2err = phot.calc_statistical_difference(w1, w2, w1err, w2err)
     w2w3, w2w3err = phot.calc_statistical_difference(w2, w3, w2err, w3err)
@@ -257,7 +268,7 @@ def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
 def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
        dest=os.path.join(FIGUREPATH, "shortpahs.pdf")):
     pahtable = read_Rampazzo_TableA1()
-    fulltable = phot.join_by_galaxy_name(rampazzo_table, pahtable,
+    fulltable = phot.join_by_galaxy_name(table, pahtable,
                                     names=("objstr_01", "Galaxy"))
 
     # Restrict to only Class 2 and Class 3 objects
@@ -288,7 +299,7 @@ def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
                                 dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
     pahtable = read_Rampazzo_TableA1()
-    fulltable = phot.join_by_galaxy_name(rampazzo_table, pahtable,
+    fulltable = phot.join_by_galaxy_name(table, pahtable,
                                     names=("objstr_01", "Galaxy"))
 
     # Restrict to only Class 2 and Class 3 objects
@@ -498,11 +509,78 @@ def read_Rampazzo_TableA2(tablepath=os.path.join(BASEPATH,
 def read_Cappellari11_Table_3(tablepath=os.path.join(ATLAS3DBASE,
                                                      "Cappellari11_Table_3.txt")):
     '''Reads in the third table from Cappellari 2011.'''
-    names = ["Galaxy", "RA", "DEC", "SBF", "NED-D", "Virgo", "VHel", "D",
-             "M_K", "A_B", "T-type", "log(Re)"]
-    atlas3dsample = Table.read(tablepath, format="ascii.no_header", data_start=3,
-                               names=names, guess=False)
+    atlas3dsample = Table.read(tablepath, format="ascii.fixed_width", 
+                               data_start=3, guess=False)
     return atlas3dsample
+
+def read_Cappellari13a_Table_1(
+    tablepath=os.path.join(ATLAS3DBASE, "Cappellari13_Table_1_XV.txt")):
+    '''Reads in the first table from Cappellari 2013 (ATLAS3D XV).'''
+    atlas3dsample = Table.read(tablepath, format="ascii.fixed_width",
+                               data_start=3, guess=False, 
+                               fill_values=[("", 0), ("--", 0)])
+    return atlas3dsample
+
+def read_Cappellari13b_Table_1(
+    tablepath=os.path.join(ATLAS3DBASE, "Cappellari13_Table_1_XX.txt")):
+    '''Reads in the first table from Cappellari 2013 (ATLAS3D XX).'''
+    atlas3dsample = Table.read(tablepath, format="ascii.fixed_width",
+                               data_start=3, guess=False,
+                               fill_values=[("",0), ("----", 0)])
+    return atlas3dsample
+
+def read_McDermid15_Table_3(
+    tablepath=os.path.join(ATLAS3DBASE, 
+                           "McDermid2015_Atlas3D_Paper30_Table3.txt")):
+    '''Reads in the third table from McDermid 2015.'''
+    atlas3dsample = Table.read(tablepath, format="ascii.fixed_width", 
+                               data_start=3, guess=False)
+    atlas3dsample = separate_errors_in_table(atlas3dsample)
+    return atlas3dsample
+
+def separate_errors_in_table(fulltable, seperator="+/-", suffix="_err",
+                             mask="--"):
+    '''Formats table to have separate error column.
+    
+    The separator acts as a delimiter between the value and the error. The
+    suffix is added to the end of the column name to create a new column.
+    This returns another table.
+    '''
+    newtable = Table(masked=True)
+    for colname in fulltable.colnames:
+        col = fulltable[colname]
+        if np.issubdtype(col.dtype, np.str):
+            splitcol = np.core.defchararray.split(col, sep=seperator)
+            if len(splitcol[0]) == 1:
+                newtable[colname] = collapse_list_nested_array(splitcol)
+            elif len(splitcol[0]) == 2:
+                # This takes advantage of the fact that supplying an array to
+                # "array" yields the same array of lists. While adding a list to 
+                # "array" yields a 2-d array.
+                combinedarray = np.array(list(splitcol))
+                maskedvalarray = np.core.defchararray.replace(
+                    combinedarray[:,0], mask, 'NaN')
+                floatvalarray = maskedvalarray.astype(np.float)
+                newtable[colname] = np.ma.masked_invalid(floatvalarray)
+                errcolname = "{0}{1}".format(colname, suffix)
+                maskederrarray = np.core.defchararray.replace(
+                    combinedarray[:,1], mask, 'NaN')
+                floaterrarray = maskederrarray.astype(np.float)
+                newtable[errcolname] = np.ma.masked_invalid(floaterrarray)
+            else:
+                raise ValueError("Can't parse errors in Table.")
+        else:
+            newtable[colname] = col
+    return newtable
+
+
+def collapse_list_nested_array(arr):
+    '''Collapses an array of singleton lists.
+
+    This will turn the array([1], [2], [3], [4], [5]) to array([1, 2, 3, 4,
+    5]).'''
+    return np.hstack(arr)
+
 
 def read_Diamond_Stanic_Table1(
     tablepath=os.path.join(BASEPATH, "Diamond_Stanic_Table1.txt")):
