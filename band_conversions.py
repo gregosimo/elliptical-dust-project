@@ -34,6 +34,17 @@ DN_TO_JANSKY_FACTOR = {"W1": 1.9350e-6, "W2": 2.7048e-06, "W3": 1.8326e-06,
 VEGA_TO_AB_CONVERSIONS = {"W1": 2.699, "W2": 3.339, "W3": 5.174, "W4": 6.620, 
                           "J": 0.91, "H": 1.39, "Ks": 1.85}
 
+# WISE bands and Ks are from Jarrett (2013).
+# J, H, and r are from Blanton 2007.
+SOLAR_ABSOLUTE_MAGNITUDES_VEGA = {"W1": 3.24, "W2": 3.27, "W3": 3.23, 
+                                  "W4": 3.25, "J": 3.65, "H": 3.32, "Ks": 3.29, 
+                                  "r": 4.49 }
+
+# WISE bands converted from Vega Mags.
+# J, H, Ks, and r are from Blanton (2007)
+SOLAR_ABSOLUTE_MAGNITUDES_AB = {"W1": 5.94, "W2": 6.61, "W3": 8.40, "W4": 9.87,
+                                "J": 4.56, "H": 4.71, "Ks": 5.14, "r": 4.64}
+
 COLOR_CORRECTIONS = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921, 
     1.0000, 1.0142, 1.0347]),
     "W2": np.array([1.0206, 1.0066, 0.9976, 0.9935, 0.9943, 1.0000, 1.0107,

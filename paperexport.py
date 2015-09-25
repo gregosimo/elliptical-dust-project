@@ -296,6 +296,20 @@ def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
     plt.savefig(dest)
     plt.close()
 
+def create_mass_to_light_ATLAS3D_comparison(
+        table=atlas3d_table, dest=os.path.join(FIGUREPATH, "masstolight.pdf")):
+    atlas3d_masstolight = read_Cappellari13b_Table_1()
+    joinedtable = phot.join_by_galaxy_name(
+        atlas3d_table, atlas3d_masstolight, ("objstr_01", "Galaxy"))
+    plt.plot(joinedtable["M/L"], joinedtable["logML_star"], 'b*')
+    # Not shown is PGC029321 all the way to the right.
+    plt.xlim([-1.5, 0.5])
+    plt.ylim([-0.5, 1.5])
+    plt.xlabel("Jarrett M/L")
+    plt.ylabel("ATLAS3D M/L")
+    plt.savefig(dest)
+    plt.close()
+
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
                                 dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
     pahtable = read_Rampazzo_TableA1()
