@@ -1,0 +1,37 @@
+Branch lookup
+
+join-galaxy-tables - Make a function whose purpose is to join together tables of galaxy lists. I imagine it having a function signature: join_galaxy_tables(table1, table2, names=("objstr_01", "objstr_01")). It will automatically remove spaces from all entries. It will also be flexible enough to perform the join on tables with different names (the final name will be determined by the first table).vim a
+
+galexmatch - Fix bugs in GALEX processing... WCS coordinates get off somehow.
+
+fullrampazzosample - Read in the MIR class of the full Rampazzo sample. This will have to be done at some point, why not have it be now?
+
+fixdownloads: Fix errors that come up when downloading images. Maybe this wasn't tested completely fully.
+
+paper-export - Functions to export values necessary for the paper to the paper directory. This includes automatically reading in tables values directly from papers as well as exporting useful parameters to the paper directory.
+
+AB-convert - Make converting between Vega and AB bi-directional. This will probably require bringing the AB conversion map out of the function and making it a static variable.
+
+rampazzo-plots - Move plots which have to do with MIR classes to a separate file. Also, make functions which generate useful figures for the Rampazzo section of the paper.
+
+fsps-plots - Automate code for generating fsps plots. This should basically make running ipython notebook plots easier.
+
+color-routines - Really easy. Write functions which generate colors given two magnitude arrays, and color errors given two magnitude arrays. This will also involve breaking up calc_statistical_difference into only adding by quadrature. Subtracting is trivial. Also, find where calc_statistical_difference is used and make appropriate 
+substitutions.
+
+extinction - Move de-extinction to the galaxy_photometry function rather than being done later on.
+
+galexmatch: Clean up code having to do with copying subimages.
+
+galcol - Change instances of "objstr_01" to use a keyword argument called galcol. This is to allow for tables which DON'T have the galaxy name as "objstr_01". NOTE: This will require uses of object_name_to_dir
+
+masci-sextractor - Set up SExtractor to use all of the parameters given on MASCI's web site:
+http://wise2.ipac.caltech.edu/staff/fmasci/SEx_WPhot.htmll
+
+out-of-bound-aperture - Function to detect when apertures in UV bands are located out of the bounds of the FOV. This will require checking if all of the pixels in the aperture lay within the valid pixel map... That might be interesting to implement...
+
+GALEX-override - Code to allow a list of tiles which will be excluded from the tile selection process. This will occur due to objects being within the chip boundaries, but outside of the FOV boundaries. Yes, this is annoying, but hopefully only occurs for a small portion of the time.
+
+NED_GdP - The branch which tracks changes which may cause the discrepancy between the Gil de Paz measurements and my measurements using the NED images.
+
+pipeline-construction - A set of routines focused on constructing pipelines from arbitrary sources. This will probably focus a bit more on the IPython notebook side than the actual python coding side.

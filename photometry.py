@@ -11,7 +11,7 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord
 from astropy.io import fits
 from astropy.stats import sigma_clip
-from astropy.table import Table, Column, join
+from astropy.table import Table, Column, join, vstack
 from astroquery.ned import Ned
 import numpy as np
 import aplpy
@@ -22,20 +22,13 @@ import scipy.stats.mstats
 import masks
 import queries as query
 import synthetic_photometry as synphot
-import WISE_conversions as conv
+import band_conversions as conv
 
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
 UVBANDS = bands[4:]
+TWOMASSBANDS = ["J", "H", "Ks"]
 MASKBANDS = ["W1", "NUV"]
-MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ', 
-                   "markeredgewidth": 1.5},
-               1: {"marker": '^', "markerfacecolor": 'orange', "ls": ' '},
-               2: {"marker": 'o', "markerfacecolor": 'green', "ls": ' '},
-               3: {"marker": '*', "markerfacecolor": 'blue', "ls": ' '},
-               4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
-                   "markeredgecolor": 'red', "markeredgewidth": 1.5}}
-
 #STSDAS_COLUMN = "/home/gregory/work/ellipse_columns.txt"
 STSDAS_COLUMN = "/home/regulus/simonian/year1/wise/ellipse_columns.txt"
 
@@ -86,7 +79,7 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
         useskybase="sky_level", skymethod="adaptive", 
         uncertaintybase="uncertainty", ZPuncertainty=True, brightness="AB",
-        errors=True, apertureCorrection=True, colorIndex=-2):
+        errors=True, apertureCorrection=True, colorIndex=-2, max_mag_err=0.3):
     '''Returns the elliptical aperture photometry-determined magnitude.
 
     This function requires that the adequate pipeline be constructed, where
@@ -103,6 +96,13 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
     skymethod is "skyfile", the suffix should be "tab" since the file should be
     the output of ellipse. "Adaptive" should adapt to the necessary sky
     measurement methods.
+
+    The max_mag_err keyword indicates how large the magnitude error should be
+    before the object is flagged as a non-detection. The way non-detections are
+    marked is by having a blank field for the magnitude, and putting the upper
+    magnitude limit in the magnitude error field. Although this is somewhat
+    counterintuitive, it will make sure that upper limits are not accidentally
+    plotted as actual values.
     '''
     galaxydir = os.path.join(BASEDIR, object_name_to_dir(name))
     DNflux = calc_DNflux(galaxydir, band, baseobjectfile, useskybase,
@@ -123,6 +123,16 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
                 photvalue = conv.DNflux2Vegamag(band, DNflux)
             err = conv.DN_err_to_mag_err(galaxydir, band, objectError,
                     DNflux, ZPunc=ZPuncertainty)
+            if err >= max_mag_err:
+                photvalue = np.nan
+                fluxupperlimit = 3.0 * objectError
+                # I don't want to duplicate this, but I don't feel like making
+                # a better logic. I think this entire function should be
+                # trimmed down to not return anything other than (photvalue,
+                # err) tuples.
+                if brightness is "AB":
+                    err = conv.DNflux2ABmag(band, fluxupperlimit)
+                else: err = conv.DNflux2Vegamag(band, fluxupperlimit)
         return (photvalue, err)
     else:
         if brightness is "flux":
@@ -170,7 +180,7 @@ def build_pipeline(
         print "Making Masks..."
         masks.build_masks(BASEDIR, WISETable, threshold=maskthresh,
                           runbands=runbands, foregroundbase=foregroundbase,
-                          pixelmaskbase=foregroundbase, outputbase=maskbase, 
+                          pixelmaskbase=pixelmaskbase, outputbase=maskbase, 
                           maskconfig=maskconfig, overwrite=overwritemask,
                           ignore_exception=ignore_exceptions,
                           regionbase=regionbase)
@@ -195,6 +205,7 @@ def build_pipeline(
                         aperture_file=ellipseoutput, sky_coordinates=skycoord, 
                         sky_base=skybase, uncertainty_base=uncertaintybase, 
                         bands_written=runbands)
+    print "Done!"
 
 
 def fullphotometry(BASEDIR, WISE_Table):
@@ -411,7 +422,13 @@ def get_sky_error(galaxydir, band, skybase="sky_level", method="adaptive"):
 
 def object_name_to_dir(objectname):
     '''Converts the object name with spaces to the directory name.'''
-    return objectname.replace(' ', "")
+    if isinstance(objectname, np.ndarray):
+        newobj = np.core.defchararray.replace(objectname, " ", "")
+    elif isinstance(objectname, str):
+        newobj = objectname.replace(' ', "")
+    else:
+        raise TypeError("Incorrect type passed to convert to directory.")
+    return newobj
 
 def change_to_galaxy_dir(BASEDIR, objectname):
     '''Returns the path of a galaxy's directory.
@@ -456,11 +473,17 @@ def filterTableforExistingObjects(BASEDIR, fulltable):
     '''Creates another table that only has the objects with images.'''
     return filterTable(BASEDIR, fulltable, objectHasImage)
 
-def filterTableforCompleteBands(
-        BASEDIR, fulltable, copy=True, completebands=bands):
+def filter_table_for_complete_bands(
+        BASEDIR, fulltable, copy=True, completebands=bands, galcol="objstr_01"):
     '''Returns a table that only has objects with complete observations'''
-    return filterTable(BASEDIR, fulltable, complete_for_bands, copy=True,
-                       checkbands=completebands)
+    return filterTableforCompleteBands(BASEDIR, fulltable, copy, completebands,
+                                       galcol)
+
+def filterTableforCompleteBands(
+        BASEDIR, fulltable, copy=True, galcol="objstr_01", completebands=bands):
+    '''Returns a table that only has objects with complete observations'''
+    return filterTable(BASEDIR, fulltable, complete_for_bands, copy=copy,
+                       checkbands=completebands, galcol=galcol)
 
 def match_filter(directory, band, fullpath=True, uncertainty=False, 
         sky=False):
@@ -589,15 +612,18 @@ def extract_subtable_from_column(table, column, selections):
     return table[indices]
 
 def filterTable(BASEDIR, fulltable, isTrue, **kwargs):
-    '''Filters a table based on a boolean method isTrue.'''
+    '''Filters a table based on a boolean method isTrue.
+    
+    isTrue should have a call signature of isTrue(BASEDIR, WISErow, **kwargs)'''
     try:
         copy = kwargs.pop("copy")
+        galcol = kwargs.pop("galcol")
     except KeyError:
         copy=True
     filteredTable = Table(fulltable, copy=copy, masked=False)
-    for i, object in enumerate(fulltable["objstr_01"]):
+    for i, object in enumerate(fulltable[galcol]):
         if not isTrue(BASEDIR, object, **kwargs):
-            filteredTable.remove_row(np.argwhere(filteredTable["objstr_01"] ==
+            filteredTable.remove_row(np.argwhere(filteredTable[galcol] ==
                     object)[0][0])
     return filteredTable
 
@@ -621,6 +647,45 @@ def runOnImages(BASEDIR, fulltable, func, **kwargs):
             else:
                 raise
 
+def get_ellipse_output_tables(
+        BASEDIR, galaxies, band, aperturebase="ellipse_aperture"):
+    '''Returns a table containing all ellipse outputs for objects in BASEDIR.
+
+    This routine basically loops through all of the given objects in BASEDIR,
+    and returns a concatenated table of all of the outputs of the ellipse
+    routine. This relies on the assumption that all of the STSDAS tables of
+    aperturebase have only one entry.
+    '''
+    tablelist = []
+    for gal in galaxies:
+        galaxydir = change_to_galaxy_dir(BASEDIR, gal)
+        aperturepath = format_band_dependence(
+            aperturebase, band, "tab", galaxydir)
+        ellipsetable = STSDAS_to_Astropy_Table(aperturepath)
+        tablelist.append(ellipsetable)
+    fulltable = vstack(tablelist)
+    try:
+        fulltable["objstr_01"] = galaxies
+    except ValueError:
+        print "Ellipse output tables have more than one row."
+        raise
+    return fulltable
+
+def get_masked_fractions(
+    BASEDIR, galaxies, band, aperturebase="ellipse_aperture"):
+    '''Returns an array containing the fraction of masked pixels for galaxies.
+
+    The output will probably not be exact, since the total number of pixels in
+    the ellipse, valid and invalid, is not included in the output of ellipse.
+    Therefore, the total area will be calculated from the area of the ellipse.
+    It's not guaranteed that this will be the same number. If needed,
+    additional investigations can occur.'''
+    aperture_output = get_ellipse_output_tables(BASEDIR, galaxies, band,
+                                                aperturebase)
+    fullareas = (math.pi * aperture_output["SMA"]**2 *
+        (1-aperture_output["ELLIP"]))
+    frac_areas = 1 - aperture_output["NPIX_E"] / fullareas
+    return frac_areas
 
 ##############################################################################
 # Deprecated functions? #
@@ -1391,10 +1456,10 @@ def generateRegions(BASEDIR, WISEtable, outputbase="ellipseregion",
         BASEDIR, WISEtable, writeregion, outputbase=outputbase, 
         parambase=parambase, runbands=runbands, ignore_exception=ignore_exception)
 
-def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS, 
+def generateEllipseCutouts(BASEDIR, WISEtable, runbands=bands, 
         skyAperture=True, skyimage=False, skyprefix="sky_level",
         aperturefile="ellipse_aperture", ignore_exception=False,
-        maskbase="mask"):
+        maskbase="mask", suffix="", sizescale=1.5):
     '''Runs through all objects and creates cutouts in their folder.
     '''
     current_backend = matplotlib.get_backend()
@@ -1404,12 +1469,12 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=IRBANDS,
         BASEDIR, WISEtable, createEllipseCutouts, runbands=runbands, 
         skyAperture=skyAperture, skyimage=skyimage, skyprefix=skyprefix, 
         aperturefile=aperturefile, ignore_exception=ignore_exception,
-        maskbase=maskbase)
+        maskbase=maskbase, suffix=suffix, sizescale=sizescale)
     matplotlib.use(current_backend)
 
-def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
+def createEllipseCutouts(BASEDIR, WISErow, runbands=bands, skyAperture=True,
         skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
-        skymethod="adaptive", maskbase="mask"):
+        skymethod="adaptive", maskbase="mask", suffix="", sizescale=1.5):
     '''Creates a set of four cutouts with the aperture and sky ellipses
 
     A cutout for each band will be created that contains the aperture
@@ -1434,30 +1499,39 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=IRBANDS, skyAperture=True,
         imagehdu.data = np.ma.MaskedArray(
             imagehdu.data, mask=maskhdu.data).filled(np.nan)
         gc = aplpy.FITSFigure(imagehdu)
-        gc.show_grayscale()
-        gc.set_nan_color("b")
+        gc.show_grayscale(invert=True)
+        gc.set_nan_color("1.0")
         gc.refresh()
 
         px = getPixelScale(band)
         # Make the ellipse indicating the aperture:
-        Xval, Yval = gc.pixel2world(aperturepars["X0"][0], aperturepars["Y0"][0])
+        Xval, Yval = gc.pixel2world(aperturepars["X0"][0], 
+                                    aperturepars["Y0"][0])
         height = 2 * px * aperturepars["SMA"] / 3600.0
         width = height * (1.0 - float(aperturepars["ELLIP"]))
         angle = float(aperturepars["PA"])
         gc.show_ellipses(Xval, Yval, width, height, angle=angle,
-            edgecolor="yellow")
+            edgecolor="red")
         # Now make the sky annulus:
         if skyAperture:
             drawSkyParams(galaxydir, band, gc, skyprefix=skyprefix,
                     method=skymethod)
+        outputbase = object_name_to_dir(WISErow["objstr_01"])
+        if suffix:
+            outputbase += "_" + suffix
         if skyimage:
             filename = format_band_dependence(
-                    object_name_to_dir(WISErow["objstr_01"]) + "_sky",
-                    band, "png", galaxydir)
+                    outputbase + "_sky", band, "png", galaxydir)
         else:
             filename = format_band_dependence(
-                    object_name_to_dir(WISErow["objstr_01"]),
-                    band, "png", galaxydir)
+                    outputbase, band, "png", galaxydir)
+        outerlength = get_outer_sky_length(galaxydir, band, skyprefix,
+                                           skymethod)
+        gc.recenter(
+            Xval, Yval, radius=sizescale * outerlength)
+        gc.refresh()
+        #print outerlength
+
         gc.save(filename)
         gc.close()
         plt.close("all")
@@ -1484,25 +1558,44 @@ def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive")
             float(skypars.meta["keywords"]["DANNULUS"]["value"]) * px / 
             3600.0)
         gc.show_circles([Xval]*2, [Yval]*2, [radius_in, radius_out],
-                edgecolor="cyan")
+                edgecolor="blue")
     elif method.lower() == "patch":
         skypars = Table.read(os.path.join(galaxydir,
             format_band_dependence("sky_level", band, "txt")),
             format="ascii.basic")
         Xval, Yval = gc.pixel2world(skypars["X0"][0], 
                 skypars["Y0"][0])
-        semimajor_in = 2 * skypars["A0"] * px / 3600.0
-        semiminor_in = 2 * skypars["B0"] * px / 3600.0
-        semimajor_mid = 2 * skypars["A1"] * px / 3600.0
-        semiminor_mid = 2 * skypars["B1"] * px / 3600.0
-        semimajor_out = 2 * skypars["A2"] * px / 3600.0
-        semiminor_out = 2 * skypars["B2"] * px / 3600.0
+        major_in = 2 * skypars["A0"] * px / 3600.0
+        minor_in = 2 * skypars["B0"] * px / 3600.0
+        major_mid = 2 * skypars["A1"] * px / 3600.0
+        minor_mid = 2 * skypars["B1"] * px / 3600.0
+        major_out = 2 * skypars["A2"] * px / 3600.0
+        minor_out = 2 * skypars["B2"] * px / 3600.0
         angle=skypars["PA"]
 
-        gc.show_ellipses([Xval]*3, [Yval]*3, [semiminor_in, semiminor_mid,
-            semiminor_out], [semimajor_in, semimajor_mid, semimajor_out],
-            angle=[angle]*3, edgecolor="cyan")
+        gc.show_ellipses([Xval]*3, [Yval]*3, [minor_in, minor_mid, minor_out], 
+                         [major_in, major_mid, major_out], angle=[angle]*3, 
+                         edgecolor="blue")
 
+def get_outer_sky_length(galaxydir, band, skyprefix="sky_level",
+                         method="adaptive"):
+    '''Retrieves the outmost length of the sky measurement in pixels.'''
+    px = getPixelScale(band)
+
+    if method.lower() == "adaptive":
+        method = adaptive_background[band]
+    if method.lower() == "annulus":
+        skypars = Table.read(
+            format_band_dependence(skyprefix, band, "txt", galaxydir), 
+            format="ascii.daophot")
+        outer_dim = (float(skypars.meta["keywords"]["ANNULUS"]["value"]) +
+                       float(skypars.meta["keywords"]["DANNULUS"]["value"]))
+    elif method.lower() == "patch":
+        skypars = Table.read(
+            format_band_dependence(skyprefix, band, "txt", galaxydir), 
+            format="ascii.basic")
+        outer_dim = skypars["A2"]
+    return (outer_dim * px / 3600.0)
 
 
 def generatePixelMasks(galaxydir, masterfile="foreground.reg",
@@ -1707,8 +1800,8 @@ def aperture_photometry_table(
     #
     # This section is about setting up the table outline with a dictionary.
     photcolumns = {"objstr_01": []}
-    photkeys = [name_photometry_column(band) for band in runbands]
-    errkeys = [name_photometry_column(band, error=True) for band in runbands]
+    photkeys = [name_photometry_column(band, category="ap") for band in runbands]
+    errkeys = [name_photometry_column(band, category="ap", error=True) for band in runbands]
     for photkey, photerr in zip(photkeys, errkeys):
         photcolumns[photkey] = []
         photcolumns[photerr] = []
@@ -1731,16 +1824,29 @@ def aperture_photometry_table(
                     apertureCorrection=apertureCorrection, 
                     colorIndex=colorIndex))
             except ValueError as e:
-                if ignore_exception:
-                    print ("Likely encountered negative flux for "
-                    "{0}. Masking".format(galname))
-                    # This -99 value will only be used internally to this
-                    # function to specify where we need to mask the array.
-                    # Outside users of the API will not need to bother
-                    # themselves with this.
+                # This -99 value will only be used internally to this
+                # function to specify where we need to mask the array.
+                # Outside users of the API will not need to bother
+                # themselves with this.
+                print ("Likely encountered negative flux for "
+                "{0}. Detection may be marginal. Masking".format(galname))
+                measurements.append((-99.0, -99.0))
+            except iraf.IrafError as e:
+                galaxydir = change_to_galaxy_dir(BASEDIR, galname)
+                try:
+                    imagefiles = match_filter(galaxydir, band)
+                except RuntimeError:
+                    print ("{0} image not found for {1}").format(band, 
+                                                                 galname)
                     measurements.append((-99.0, -99.0))
-                else:
-                    raise
+                else: 
+                    if ignore_exception:
+                        print ("Pipeline problem for {0}. "
+                               "Masking.").format(galname)
+                        measurements.append((-99.0, -99.0))
+                    else:
+                        raise e
+
             
         # Add the measurements to photcolumns.
         for (photkey, errkey, measurement) in zip(photkeys, errkeys,
@@ -1761,17 +1867,21 @@ def aperture_photometry_table(
         photcol = photometry_table[photkey]
         errcol = photometry_table[errkey]
 
-        photcol.mask = photcol < 0
-        errcol.mask = errcol < 0
+        # Galaxy_photometry returns NaN values if the error on an object is too
+        # large. When this is the case, we want to replace NaN values with
+        # -99.0, so that they will be masked later on.
+        photcol.mask = np.logical_or(photcol < 0, np.isnan(photcol))
+        errcol.mask = np.logical_or(errcol < 0, np.isnan(errcol))
 
     # Now deal with extinction.
     photometry_table = deextinct_data(photometry_table,
-                                      extinction=deextinction)
+                                      extinction=deextinction, 
+                                      runbands=runbands)
 
     return photometry_table
 
 
-def deextinct_data(photometry_table, extinction=""):
+def deextinct_data(photometry_table, extinction="", runbands=bands):
     '''Uses the IRSA dust map to de-extinct data.
 
     A photometry table with the usual photometric entries should be provided.
@@ -1785,8 +1895,9 @@ def deextinct_data(photometry_table, extinction=""):
     if extinction is not "":
         extinction_table = conv.get_extinction_table(extinction)
         extinction_table.rename_column("objname", "objstr_01")
-        extincted_table = join(photometry_table, extinction_table)
-        for band in UVBANDS:
+        extincted_table = join_by_galaxy_name(photometry_table, 
+                                              extinction_table)
+        for band in runbands:
             # Get the names of the photometry columns.
             ap_mag = name_photometry_column(band, error=False, category="ap")
             ap_err = name_photometry_column(band, error=True, category="ap")
@@ -1800,23 +1911,33 @@ def deextinct_data(photometry_table, extinction=""):
             # time. When I move de-exinction to galaxy_photometry, this will be
             # a moot point!
             try:
-                extincted_table[unext_mag] = conv.extinction_correction(
-                    band, extincted_table[ap_mag], 
-                    extincted_table["E_B_V_SandF"])
-                extincted_table[unext_err] = np.sqrt(
-                    extincted_table[ap_err]**2 +
-                    extincted_table["stdev_E_B_V_SandF"]**2)
+                unextmags, unexterrs = conv.extinction_correction(band,
+                    extincted_table[ap_mag], extincted_table["E_B_V_SFD"],
+                    extincted_table[ap_err], extincted_table["stdev_E_B_V_SFD"], 
+                    deredden=True)
+                extincted_table[unext_mag] = unextmags
+                extincted_table[unext_err] = unexterrs
             except KeyError:
-                pass
+                extincted_table[unext_mag] = extincted_table[ap_mag]
+                extincted_table[unext_err] = extincted_table[ap_err]
         return extincted_table
+    else:
+        return photometry_table
 
 
 
+def unpack_bands_from_table(table, extractbands=bands, category="unext"):
+    '''Returns a tuple containing extracted magnitudes and errors.
 
-
+    This is a convenience function to automatically extract the magnitudes and
+    errors that are stored in the table. It will be an N-tuple of 2-tuples,
+    where N is the length of extractbands, which should be a list of bands we
+    want to extract.
+    '''
+    pass
 
             
-def name_photometry_column(band, error=False, category="ap"):
+def name_photometry_column(band, error=False, category="unext"):
     '''Generates the names of photometry columns in the photometry table.
 
     Photometry columns are the columns which will be returned in the aperture
@@ -1830,20 +1951,32 @@ def name_photometry_column(band, error=False, category="ap"):
     The "unext" category is for magnitudes which have been corrected for
     extinction. 
     '''
-    if error:
-        suffix = "err"
+    # Separate case for 2MASS colors because they are not done via photometry,
+    # but ONLY through catalog entries.
+    if band in TWOMASSBANDS:
+        stringtemplate = "{0}_m{1}_k20fe"
+        if error:
+            errstring="sig"
+        else:
+            errstring=""
+        # We take the first index of band because only the first character is
+        # used in the column name.
+        colname = stringtemplate.format(band[0].lower(), errstring)
     else:
-        suffix = "mag"
+        if error:
+            suffix = "err"
+        else:
+            suffix = "mag"
 
-    if category not in ["ap", "unext"]:
-        raise ValueError("Can not understand photometry category")
+        if category not in ["ap", "unext"]:
+            raise ValueError("Can not understand photometry category")
 
-    if band in IRBANDS:
-        prefix = band.lower()
-    else:
-        prefix = band
+        if band in IRBANDS:
+            prefix = band.lower()
+        else:
+            prefix = band
 
-    colname = prefix + category + suffix
+        colname = prefix + category + suffix
 
     return colname
 
@@ -1887,14 +2020,14 @@ def photometryOnBand(BASEDIR, objectnames, band,
     else: 
         return np.array(photOutput)
 
-def createDifferencePlot(xval, valtocompare, xerror, valerror, xlabel, ylabel,
-        title, label=''):
+def createDifferencePlot(xval, yval, valtocompare, yerror, valerror, xlabel, 
+                         ylabel, title, label=''):
     '''Plots the difference between two values against the value.
 
     This plot is used for illustrating how consistent two datasets are
     from each other.'''
-    difference, errors = calc_statistical_difference(valtocompare, xval, valerr,
-            xerror)
+    difference, errors = calc_statistical_difference(
+        valtocompare, yval, valerror, yerror)
     plt.errorbar(xval, difference, errors, fmt="o", label=label)
     plt.plot([min(xval)+0.01, max(xval)-0.01], [0, 0], 'k-')
     plt.xlabel(xlabel)
@@ -1951,6 +2084,57 @@ def calc_statistical_difference(minuend, subtrahend, minuerr, subtraerr):
     meanerrs = np.sqrt(minuerr**2 + subtraerr**2)
     return means, meanerrs
 
+def calc_statistical_quotient(dividend, divisor, dividenderr, divisorerr):
+    '''Returns the statistically divided quotient of two arrays.
+
+    This function takes two arrays involving two measurements with errors. It
+    then returns a 2-tuple. The first is simply the ratio of the numbers. The
+    second is the error of that ratio.'''
+    quotient = dividend / divisor
+    quoterrs = np.sqrt(quotient**2 * ((dividenderr / dividend)**2 + 
+                                      (divisorerr / divisor)**2))
+    return quotient, quoterrs
+
+def calc_statistical_fraction_of_sums(allvalues, allerrs, nummask, denommask,
+                                      propagate=False):
+    r'''Return statistically summed and divided quotient of many arrays.
+
+    Allvalues and allerrs should be sequences of some given length. Nummask and
+    denommask should be boolean (or boolean-like) arrays which indicate the
+    values to be included in the numerator and the denominator.
+
+    The form of this is:
+    \sum_k \left[ \frac{\sum_i \left(a_k b_i - b_k a_i\right) x_i}
+    {\left(\sum_i b_i x_i\right)^2\right]**2 \sigma_k**2
+    '''
+    valarray = np.ma.array(allvalues, dtype=np.float)
+    errarray = np.ma.array(allerrs, dtype=np.float)
+    if propagate:
+        valarray = valarray.filled(np.nan)
+        errarray = errarray.filled(np.nan)
+    numindicator = np.array(nummask, 
+                            dtype=np.int).reshape((valarray.shape[0], 1))
+    denomindicator = np.array(denommask, 
+                              dtype=np.int).reshape((valarray.shape[0],1))
+    answer = np.sum(numindicator * valarray, axis=0) / np.sum(denomindicator * 
+        valarray, axis=0)
+    anserr = 0
+    denomsum = np.sum(denomindicator * valarray, axis=0)
+    for k in xrange(valarray.shape[0]):
+        numindex = numindicator[k]
+        denomindex = denomindicator[k]
+        errindex = allerrs[k]
+
+        # This represents the a_k b_i - b_k a_i
+        indicatordiff = (numindex * denomindicator - denomindex * numindicator)
+        # Finish off the part inside the brackets
+        bracket = np.sum(indicatordiff * valarray, axis=0) / denomsum**2
+        # Now multiply by sigma squared.
+        errnum = bracket**2 * errindex**2
+
+        anserr += errnum
+    return answer, np.sqrt(anserr)
+
 def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror, 
         xlabel, ylabel, title, label=""):
     '''Plots the fractional difference between two values against one value.
@@ -1968,18 +2152,6 @@ def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror,
     plt.ylabel(ylabel)
     plt.title(title)
 
-def ColorHistogramByClass(band1, band2, groups, xlabel, title, bins, xrange=(-4,
-    4)):
-    '''Creates a histogam for colors for different classes.
-    '''
-    color = band1 - band2
-    colorgroup = color.group_by(groups)
-    plt.hist(colorgroup.groups, bins, range=xrange, label=["Class {0}".format(i)
-        for i in range(5)], color=["black", "yellow", "green", "blue", "red"], histtype="bar")
-    plt.xlabel(xlabel)
-    plt.ylabel("N")
-    plt.title(title)
-    plt.legend()
 
 def makePlots(BASEDIR, w1mags, w2mags, w3mags, w1apmags, w2apmags, w3apmags):
     '''Plots the WISE photometry versus aperture photometry.
@@ -1993,210 +2165,6 @@ def makePlots(BASEDIR, w1mags, w2mags, w3mags, w1apmags, w2apmags, w3apmags):
     plt.title("Magnitude matches")
     plt.legend(loc="upper left")
 
-def MIRplot(x, y, groupkey, xlabel='', ylabel='', title='', loc='upper right'):
-    '''Makes a plot that automatically differentiates between MIR classes.
-
-    The x and y data need to be columns which have the same length as 
-    groupkey. Groupkey should be the list of MIR classes which are in the same
-    order as x and y. Labels can also be added as desired.
-    '''
-    xgroup = x.group_by(groupkey)
-    ygroup = y.group_by(groupkey)
-
-    for MIRclass in xgroup.groups.keys:
-        plt.plot(xgroup.groups[MIRclass], ygroup.groups[MIRclass], 
-        label="Class {0}".format(MIRclass), **MIR_Symbols[MIRclass])
-
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.title(title)
-    plt.legend(loc=loc)
-
-def generateCMDs(magtable):
-    '''Generates permutations of Color-Magnitude Diagrams.
-
-    The diagrams that are generated should be considered "sensible",
-    which means a color between UV and IR, with a magnitude that's 
-    either UV or IR.'''
-    MIRclass = magtable["MIR class"]
-    W1 = magtable["w1apmag"]
-    W2 = magtable["w2apmag"]
-    W3 = magtable["w3apmag"]
-    FUV = magtable["FUVapmags"]
-    NUV = magtable["NUVapmags"]
-    F1color = FUV - W1
-    F2color = FUV - W2
-    F3color = FUV - W3
-    N1color = NUV - W1
-    N2color = NUV - W2
-    N3color = NUV - W3
-
-    title = "WISE CMD"
-    plt.figure()
-    MIRplot(W1, F1color, MIRclass, "W1", "FUV-W1", title, loc="lower left")
-    plt.figure()
-    MIRplot(W2, F2color, MIRclass, "W2", "FUV-W2", title, loc="lower left")
-    plt.figure()
-    MIRplot(W3, F3color, MIRclass, "W3", "FUV-W3", title)
-    plt.figure()
-    MIRplot(W1, N1color, MIRclass, "W1", "NUV-W1", title, loc="lower left")
-    plt.figure()
-    MIRplot(W2, N2color, MIRclass, "W2", "NUV-W2", title, loc="lower left")
-    plt.figure()
-    MIRplot(W3, N3color, MIRclass, "W3", "NUV-W3", title)
-
-def generateColorColors2MASS(magtable):
-    '''Generates permutations of Color-Color Diagrams.
-  
-    The produced diagrams considered sensible involve a cross-band
-    with a intra-band color. For example, a UV-IR vs. an IR-IR color.
-    '''
-    MIRclass = magtable["MIR class"]
-    W1 = magtable["j_m_k20fe"]
-    W2 = magtable["h_m_k20fe"]
-    W3 = magtable["k_m_k20fe"]
-    FUV = magtable["FUVapmags"]
-    NUV = magtable["NUVapmags"]
-    F1color = FUV - W1
-    F2color = FUV - W2
-    F3color = FUV - W3
-    N1color = NUV - W1
-    N2color = NUV - W2
-    N3color = NUV - W3
-    W12color = W1-W2
-    W23color = W2-W3
-    FNcolor = FUV - NUV
-
-    title = "2MASS CMD"
-    plt.figure()
-    MIRplot(F1color, W12color, MIRclass, "FUV-J", "J-H", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(F1color, W23color, MIRclass, "FUV-J", "H-K", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(F1color, FNcolor, MIRclass, "FUV-J", "FUV-NUV", title,
-            loc="left")
-    plt.figure()
-    MIRplot(F2color, W12color, MIRclass, "FUV-H", "J-H", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(F2color, W23color, MIRclass, "FUV-H", "H-K", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(F2color, FNcolor, MIRclass, "FUV-H", "FUV-NUV", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(F3color, W12color, MIRclass, "FUV-K", "J-H", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(F3color, W23color, MIRclass, "FUV-K", "H-K", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(F3color, FNcolor, MIRclass, "FUV-K", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N1color, W12color, MIRclass, "NUV-J", "J-H", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(N1color, W23color, MIRclass, "NUV-J", "H-K", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(N1color, FNcolor, MIRclass, "NUV-J", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N2color, W12color, MIRclass, "NUV-H", "J-H", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(N2color, W23color, MIRclass, "NUV-H", "H-K", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(N2color, FNcolor, MIRclass, "NUV-H", "FUV-NUV", title,
-            loc="upper right")
-    plt.figure()
-    MIRplot(N3color, W12color, MIRclass, "NUV-K", "J-H", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(N3color, W23color, MIRclass, "NUV-K", "H-K", title, 
-            loc="upper left")
-    plt.figure()
-    MIRplot(N3color, FNcolor, MIRclass, "NUV-K", "FUV-NUV", title, 
-    loc="lower left")
-
-def generateColorColors(magtable):
-    '''Generates permutations of Color-Color Diagrams.
-  
-    The produced diagrams considered sensible involve a cross-band
-    with a intra-band color. For example, a UV-IR vs. an IR-IR color.
-    '''
-    MIRclass = magtable["MIR class"]
-    W1 = magtable["w1apmag"]
-    W2 = magtable["w2apmag"]
-    W3 = magtable["w3apmag"]
-    FUV = magtable["FUVapmags"]
-    NUV = magtable["NUVapmags"]
-    F1color = FUV - W1
-    F2color = FUV - W2
-    F3color = FUV - W3
-    N1color = NUV - W1
-    N2color = NUV - W2
-    N3color = NUV - W3
-    W12color = W1-W2
-    W23color = W2-W3
-    FNcolor = FUV - NUV
-
-    title = "WISE CMD"
-    plt.figure()
-    MIRplot(F1color, W12color, MIRclass, "FUV-W1", "W1-W2", title)
-    plt.figure()
-    MIRplot(F1color, W23color, MIRclass, "FUV-W1", "W2-W3", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(F1color, FNcolor, MIRclass, "FUV-W1", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(F2color, W12color, MIRclass, "FUV-W2", "W1-W2", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(F2color, W23color, MIRclass, "FUV-W2", "W2-W3", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(F2color, FNcolor, MIRclass, "FUV-W2", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(F3color, W12color, MIRclass, "FUV-W3", "W1-W2", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(F3color, W23color, MIRclass, "FUV-W3", "W2-W3", title,
-            loc="lower right")
-    plt.figure()
-    MIRplot(F3color, FNcolor, MIRclass, "FUV-W3", "FUV-NUV", title)
-    plt.figure()
-    MIRplot(N1color, W12color, MIRclass, "NUV-W1", "W1-W2", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N1color, W23color, MIRclass, "NUV-W1", "W2-W3", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(N1color, FNcolor, MIRclass, "NUV-W1", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N2color, W12color, MIRclass, "NUV-W2", "W1-W2", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N2color, W23color, MIRclass, "NUV-W2", "W2-W3", title,
-            loc="lower left")
-    plt.figure()
-    MIRplot(N2color, FNcolor, MIRclass, "NUV-W2", "FUV-NUV", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N3color, W12color, MIRclass, "NUV-W3", "W1-W2", title,
-            loc="upper left")
-    plt.figure()
-    MIRplot(N3color, W23color, MIRclass, "NUV-W3", "W2-W3", title, 
-            loc="lower right")
-    plt.figure()
-    MIRplot(N3color, FNcolor, MIRclass, "NUV-W3", "FUV-NUV", title)
     
 def plotWithVerticalLines(xvalues, yvalues, specialx, xlabel="", ylabel="",
         title=""):
@@ -2479,6 +2447,13 @@ def run_imcopy(original, destination):
 
     For simple image copying, this function should be simple enough.
     '''
+    # There's a logic tree here:
+    # Destination is a file (ends with .fits):
+    # - If destination exists, delete it, then proceed with the copy.
+    # - If destination doesn't exist, proceed with the copy
+    # - If the path to the file doesn't exist, make the path, and then copy.
+    # Destination is a directory (does not end with fits):
+    # - If destination exists, 
     if os.path.isfile(destination):
         os.remove(destination)
     elif os.path.isdir(destination):
@@ -2495,6 +2470,39 @@ def run_imcopy(original, destination):
             os.remove(destination_path)
         except OSError:
             pass
+    else:
+        # This spaghettifies the code logic a bit. But I don't want to spend
+        # too much time on redoing this code. If weird bugs come up, that time
+        # might be a little better spent.
+        # I basically want to create the path to destination if it doesn't 
+        # already exist.
+        if destination.endswith(".fits"):
+            parent = os.path.dirname(destination)
+            try:
+                os.makedirs(parent)
+            except OSError:
+                # This means that the parent directory exists already.
+                pass
+        else:
+            extension = ".fits"
+            basefile = os.path.basename(original)
+            filename = basefile[:basefile.index(extension)+len(extension)]
+            destination_path = os.path.join(destination, filename)
+            # In the corner case where the directory exists, but we haven't put a
+            # file in there yet, this will prevent failures to remove from causing
+            # major problems.
+            # If this doesn't work, simply do a os.path.isfile(destination_path)
+            # before removing.
+            try:
+                os.remove(destination_path)
+            except OSError:
+                pass
+            try:
+                os.makedirs(destination)
+            except OSError:
+                pass
+
+
 
 
     iraf.images()
@@ -2504,11 +2512,11 @@ def run_imcopy(original, destination):
 def Gil_de_Paz_Table_1_to_WISE_table(GdP_Table1):
     gdp1 = GdP_Table1
     objstr = gdp1["Name"]
+    decsigns = np.where(gdp1["DE-"] == "-", -1.0, 1.0)
     ra, dec = ((gdp1["RAh"].astype(float) + gdp1["RAm"].astype(float)/60.0 +
             gdp1["RAs"].astype(float)/60/60)*360/24,
-            (gdp1["DEd"].astype(float) + np.sign(gdp1["DEd"]) * 
-                gdp1["DEm"].astype(float)/60.0 + np.sign(gdp1["DEd"]) * 
-                gdp1["DEs"].astype(float)/60/60))
+            (gdp1["DEd"].astype(float) + gdp1["DEm"].astype(float)/60.0 +
+             gdp1["DEs"].astype(float)/60.0/60.0) * decsigns)
     nuvrsemi = fuvrsemi = gdp1["MajAxis"] / 2 * 60
     # There's gonna be some aliasing going along here. Be wary.
     gdp1["PA"].fill_value = 0.05
@@ -2638,6 +2646,78 @@ def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi,
             "w4rsemi", "w1pa", "w2pa", "w3pa", "w4pa", "w1ba", "w2ba", "w3ba", 
             "w4ba")
     return Table(fulltable , names=names)
+
+def calc_statistical_elliptical_mass_to_light_ratio(
+    W1, W2, W1err, W2err, retlog=True):
+    '''Turns a W1-W2 color to a mass-to-light ratio.
+
+    This function implements Equation 8 in Jarrett 2013. Note that it only
+    applies to early-type galaxies.'''
+
+    w1w2, w1w2err = calc_statistical_difference(W1, W2, W1err, W2err)
+
+    masslightlog = -0.31 + 3.42 * w1w2
+    masslightlogerr = 3.42 * w1w2err
+    
+    if retlog:
+        return masslightlog, masslightlogerr
+    else:
+        masslight = 10**(masslightlog)
+        masslighterr = np.log(10) * masslight * masslightlogerr
+
+        return masslight, masslighterr
+
+def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
+                        join_type="inner"):
+    '''Joins two tables by the provided name columns. 
+
+    By default, both columns should be called "objstr_01", in which, if both
+    columns are in folder form (without a space), it will behave like a regular
+    join. If the columns are not in folder form, this function will reduce both
+    columns to be in folder form before performing the join. It will also be
+    capable of performing joins where the galaxy names are in differently-named
+    columns. In this case, the galaxy name of the output column will be decided
+    by whichever table is passed first to table1.
+    '''
+    # Here are a list of corner cases that I can come up with:
+    # 1) names are different and name2 does not have a different column with
+    #   name1
+    # 2) Names are the same, in which case a temporary copy of column 2 should
+    #   be restored at the end of the operation.
+    # 3) Names are different, but column 2 already has a column with name1. I
+    # don't know how to deal with that off the top of my head.
+    name1, name2 = names
+    # Saving table columns in temporary variables. Make sure to put them back!
+    tempcol1 = table1[name1]
+    tempcol2 = table2[name2]
+    # Now format them to be in folder form.
+    table1[name1] = object_name_to_dir(table1[name1])
+    table2[name1] = object_name_to_dir(table2[name2])
+    # Now join them.
+    newtable = join(table1, table2, keys=[name1], join_type=join_type)
+    # Set columns back.
+    table1[name1] = tempcol1
+    return newtable
+
+def multijoin_by_galaxy_name(*tables, **kwargs):
+    '''Joins multiple tables by the provided name columns.
+
+    This function joins an arbitrarily large number of tables together by a
+    sequence of names provided in the names tuple. The length of the names list
+    should correspond to the number of tables. It will return one large table.
+    I haven't dealt with collisions yet...
+    '''
+    # Maybe add in a mechanism to deal with multiple join types. But I don't
+    # think it's worth the thought at this point.
+    names = kwargs["names"]
+    if len(names) != len(tables):
+        raise ValueError("Names and Tables have different lengths")
+    temptable = tables[0]
+    finalname = names[0]
+    for (newtab, newname) in zip(tables[1:], names[1:]):
+        temptable = join_by_galaxy_name(temptable, newtab, names=(finalname,
+                                                                  newname))
+    return temptable
 
 def write_pipeline_file(filename, **kwargs):
     '''Writes keyword arguments to a file.'''

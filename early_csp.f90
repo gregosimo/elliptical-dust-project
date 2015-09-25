@@ -35,7 +35,7 @@
 
   imf_type  = 0             !define the IMF (1=Chabrier 2003)
                             !see sps_vars.f90 for details of this var
-  pset%zmet = 20            !define the metallicity (see the manual)
+  pset%zmet = 11            !define the metallicity (see the manual)
                             !20 = solar metallacity
   add_agb_dust_model = 0    !Toggle the Villaume dust model. Good to determine
                             !how much of the changes we see are caused by dust.
@@ -47,11 +47,11 @@
 
 
   !These are parameters for the delayed-tau model.
-  pset%sfh      = 1     !set SFH to delayed-tau
+  pset%sfh      = 0     !set SFH to SSP
   pset%tau      = 0.1   !Timescale for the suppression of star formation
   pset%const    = 0.0
   pset%sf_start = 0.0   !When 
-  !pset%tburst   = 11.0  !When the additional burst of star formation occurs.
+  pset%tburst   = 5.0  !When the additional burst of star formation occurs.
   pset%fburst   = 0.1   ! CHANGE: Set some fraction of stars to form later.
 
   !define the parameter set.  These are the default values, specified 
@@ -66,23 +66,15 @@
   pset%sbss  = 0.0   !specific frequency of BS stars
 
   !compute the CSP
-  DO i=1,14
-    pset%tburst = i
-    ! Input is the parameter set (pset)
-    ! Outputs are the time-dependent mass, bolometric luminosity, and spectra.
-    CALL SSP_GEN(pset,mass_ssp,lbol_ssp,spec_ssp)
-    !compute mags and write out mags and spec for SSP
-    ! Compute the composite stellar population given a star-formation history, and
-    ! write out the magnitudes.
-    ! NOTE: WHEN CHANGING THE FILENAME, CHANGE THE LENGTH OF THE FORMAT!!!
-    WRITE (file1, "(A25,I0.2)") "tburst_change/noagbdust_t", i
-    CALL COMPSP(3,1,file1,mass_ssp,lbol_ssp,spec_ssp,pset,ocompsp)
-  END DO
-
-  ! Now make an SSP for comparison.
-  pset%sfh  = 0 
+  ! Input is the parameter set (pset)
+  ! Outputs are the time-dependent mass, bolometric luminosity, and spectra.
   CALL SSP_GEN(pset,mass_ssp,lbol_ssp,spec_ssp)
-  file2 = "tburst_change/ssp"
-  CALL COMPSP(3,1,file2,mass_ssp,lbol_ssp,spec_ssp,pset,ocompsp)
+  !compute mags and write out mags and spec for SSP
+  ! Compute the composite stellar population given a star-formation history, and
+  ! write out the magnitudes.
+  ! NOTE: WHEN CHANGING THE FILENAME, CHANGE THE LENGTH OF THE FORMAT!!!
+  !WRITE (file1, "(A25,I0.2)") "tburst_change/noagbdust_t", i
+  file1 = "toggle_dust_met_bounds/nodust_lowmet"
+  CALL COMPSP(3,1,file1,mass_ssp,lbol_ssp,spec_ssp,pset,ocompsp)
 
  END PROGRAM EARLY_CSP

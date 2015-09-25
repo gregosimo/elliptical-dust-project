@@ -24,21 +24,6 @@ def create_upload_file(ids, ras, decs, output):
     relevantTable = Table([ids, ras, decs], names=("ID", "RA", "DEC"))
     relevantTable.write(output, format="ascii.csv")
 
-def create_HYPERLEDA_upload_file(ids, output):
-    '''Creates a file that can be uploaded to HYPERLEDA.
-
-    The file will only contain object names without any columns in a way that
-    can be immediately parseable by HYPERLEDA.'''
-    # I'm a very naughty boy for doing this.
-    # We don't want a header because that will cause problems with HYPERLEDA.
-    # However, using the ascii.no_header writer will enclose the object names in
-    # quotes, which also causes problems with HYPERLEDA. Therefore, the
-    # workaround I've arrived at is to use a newline as the column name. When
-    # writing the column name, it will instead make it into a blank line, which
-    # is ignored by HYPERLEDA. It would be nice to have it actually be
-    # configurable, though.
-    hypertable = Table([ids], names=("\n",))
-    hypertable.write(output, format="ascii.tab")
 
 def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
         blocklist="bad_images.csv"):
@@ -114,7 +99,7 @@ def select_best_surveys(inputfile, output_dir, keytable="sorttable.csv",
                 print "Did not have NUV exposure."
             if topfuv["fuv_exptime"] <= 0:
                 print "Did not have FUV exposure."
-            skipped_objects += topfuv["uploadID"]
+            skipped_objects.append(topfuv["uploadID"])
             
     for survey in surveys: 
         tab = surveytables[survey]
@@ -142,21 +127,22 @@ def galex_tilename(MASTrow):
         tilename = "{0}_sg{1:02g}".format(base_tilename, subtile)
     return tilename
 
-def extract_GALEX_folder(tarfolder, extractedfolder):
+def extract_GALEX_folder(tarfolder, extractedfolder, pattern="Galex*.tar"):
     '''Extracts GALEX tar files into a folder.
 
-    The contents of the tar file is put into extractedfolder.
+    The contents of the tar file is put into extractedfolder. This function
+    will look for objects with the given glob pattern in the tarfolder.
     '''
     # We first want to go through all of the tar archives and extract them into
     # tempfolder. This will make a single location that contains all of the
     # tiles.
-    filelist = glob.glob(os.path.join(tarfolder, "Galex*.tar"))
+    filelist = glob.glob(os.path.join(tarfolder, pattern))
     for tarball in filelist:
         untar(tarball, extractedfolder)
 
 
 def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath, 
-        tempfolder="images", sidelength=1000, replacement_path=""):
+        tempfolder="images", sidelength=1500, replacement_path=""):
     """Processes a tarfile downloaded from GALEX using sortTable.
     
     BASEDIR is the directory where we want the image folders to be.
@@ -204,14 +190,16 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
                 # directory didn't exist, and we'd like to change that.
                 try:
                     try:
-                        extract_image_with_coordinates(
+                        extract_cutout_with_coordinates(
                             extractedimage, ra, dec, sidelength, sidelength, 
-                            galaxydir)
-                    except iraf.IrafError:
+                            os.path.join(galaxydir,
+                                         os.path.basename(extractedimage)))
+                    except OSError:
                         os.mkdir(galaxydir)
-                        extract_image_with_coordinates(
+                        extract_cutout_with_coordinates(
                             extractedimage, ra, dec, sidelength, sidelength, 
-                            galaxydir)
+                            os.path.join(galaxydir,
+                                         os.path.basename(extractedimage)))
                 # If an IOError is thrown, that means there was something
                 # strange that occurred with the extraction and I'd like to
                 # look into it.
@@ -223,20 +211,22 @@ def process_GALEX_tarfile(BASEDIR, workfolder, sortTablepath,
                 # the GALEX portion, not this portion.
 
                 
-def extract_image_with_coordinates(original, centerra, centerdec, arcsecwidth,
+def extract_cutout_with_coordinates(original, centerra, centerdec, arcsecwidth,
         arcsecheight, destination, band="NUV"):
     '''Copies a part of an image to a destination file.
 
     The coordinates will be given in celestial coordinates. Note that the actual
-    computation is done on physical coordinates, so for particularl distortion
+    computation is done on physical coordinates, so for particularly distorted 
     portions of the image, weird geometries may occur.
     '''
     centerx, centery = phot.getpixelcoords(original, centerra, centerdec)
     width = arcsecwidth / phot.getPixelScale(band)
     height = arcsecheight / phot.getPixelScale(band)
 
+#    phot.copy_subimage_from_file_with_height_width(original, centerx, centery, 
+#                                                   height, width, destination)
     extract_from_image_with_height_width(original, centerx, centery, height,
-            width, destination)
+                                         width, destination)
 
 def extract_from_image_with_height_width(original, centerx, centery, height,
         width, destination):
@@ -268,7 +258,7 @@ def extract_from_image_with_bounds(original, lowerx, upperx, lowery, uppery,
     uppery = phot.fix_to_within_bounds(int(uppery), ysize, 0)+1
     subimage = "{0}[{1}:{2},{3}:{4}]".format(
         original, lowerx, upperx, lowery, uppery)
-    run_imcopy(subimage, destination)
+    phot.run_imcopy(subimage, destination)
 
 def folder_matchstring(filetile):
     '''Creates an approprite matchstring for a folder from a file tile.

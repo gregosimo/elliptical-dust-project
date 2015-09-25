@@ -47,7 +47,7 @@ def build_masks(
         phot.allMasks(BASEDIR, WISETable, maskband, threshold=threshold, 
                       outputbase=outputbase, overwrite=overwrite,
                       ignore_exception=ignore_exception, regionbase=regionbase,
-                      pixelmaskbase=pixelmaskbase)
+                      pixelmaskbase=pixelmaskbase, maskconfig=maskconfig)
 
 def zero_all_masks(BASEDIR, WISEtable, outputmaskbase="nomask", runbands=None):
     '''See zero_masks'''
@@ -85,6 +85,7 @@ def run_sextractor(image, config, **options):
     specified as additional keyword arguments.
     '''
     command = ["sex", image, "-c", config]
+    print config
     # If I can't get rid of the threshold parameter, then I need to just delete
     # a nonsensical parameter.
     try:
@@ -95,7 +96,8 @@ def run_sextractor(image, config, **options):
     for key, value in options.iteritems():
         command.append("-"+key)
         command.append(str(value))
-        returncode = subprocess.call(command)
+    print "Running command: {0}".format(command)
+    returncode = subprocess.call(command)
     if returncode:
         print returncode
         print "Could not run ''{0}''".format(' '.join(command))
@@ -177,7 +179,7 @@ def sextractor_mask(image, config, **sexargs):
     run_sextractor(image, config, **sexargs)
 
 def mask_algorithm(
-        BASEDIR, WISErow, maskband="W1", threshold=50, 
+        BASEDIR, WISErow, maskband="W1", threshold=0, 
         foregroundbase="foreground", pixelmaskbase="bad_pixels", 
         outputbase="mask", ellipsebase="ellipsepars", 
         regionbase="ellipseregions", spreadpix=5, maskconfig="", 
@@ -213,7 +215,7 @@ def mask_algorithm(
         mask_elliptical_galaxy(galaxydir, maskband, objectcoords, 
                                threshold=threshold, maskfile=foregroundfile, 
                                ellipsebase=ellipsebase, spreadpix=5, 
-                               maskconfig="", overwrite=overwrite, 
+                               maskconfig=maskconfig, overwrite=overwrite, 
                                regionbase=regionbase)
 
         if maskband not in phot.IRBANDS and pixelmaskbase:
@@ -250,7 +252,7 @@ def mask_elliptical_galaxy(
     regionpath = phot.format_band_dependence(
         regionbase, maskband, "reg", galaxydir)
     if not maskconfig:
-        maskconfig = select_sextractor_config(SEXTRACTOR_DIR, maskband)
+        maskconfig = select_sextractor_config(SEXTRACTOR_DIR, maskband, image)
     masked_image = os.path.join(galaxydir, segment)
     fullmask = os.path.join(galaxydir, maskfile)
     galaxy_removed = os.path.join(galaxydir, clearedsegment)
@@ -309,6 +311,47 @@ def combinemasks(basefile, additionfile):
     run_imcalc([basefile, additionfile], basefile, 'im1 || im2')
     os.remove(additionfile)
     return basefile
+
+def mask_check(BASEDIR, WISEtable, sigstart, sigend, sigstep, maskband="W1",
+               maskbase="mask", skybase="sky_level", 
+               ellipseoutput="ellipse_aperture", uncertaintybase="uncertainty",
+               readonly=False):
+
+    sigs = np.arange(sigstart, sigend, sigstep)
+    mags = np.zeros(sigs.shape)
+    errs = np.zeros(sigs.shape)
+
+    for i,sig in enumerate(np.arange(sigstart, sigend, sigstep)):
+        newmaskbase = sigify(maskbase, sig)
+        newellipseaperture = sigify(ellipseoutput, sig)
+        newskybase = sigify(skybase, sig)
+        newuncertaintybase = sigify(uncertaintybase, sig)
+        if not readonly:
+            phot.build_pipeline(
+                BASEDIR, WISEtable, maskthresh=sig, maskbase=newmaskbase, 
+                skipmask=False, overwritemask=True, 
+                ellipseoutput=newellipseaperture, skybase=newskybase,
+                uncertaintybase=newuncertaintybase, runbands=[maskband], 
+                ignore_exceptions=False)
+            phot.generateEllipseCutouts(
+                BASEDIR, WISEtable, runbands=[maskband], skyprefix=newskybase,
+                aperturefile=newellipseaperture, maskbase=newmaskbase,
+                suffix="{0}".format(sig))
+        magtable = phot.aperture_photometry_table(
+            BASEDIR, WISEtable["objstr_01"], runbands=[maskband],
+            ellipseoutput=newellipseaperture, skybase=newskybase,
+            uncertaintybase=newuncertaintybase, brightness="AB")
+        mags[i] = magtable[
+            phot.name_photometry_column(maskband, category="ap")][0]
+        errs[i] = magtable[
+            phot.name_photometry_column(
+                maskband, error=True, category="ap")][0]
+
+    return sigs, mags, errs
+
+def sigify(basename, sig):
+    '''Turns a basename into one which corresponds to a sigma value.'''
+    return "{0}_{1}sig".format(basename, sig)
 
 def subtractw3fromw1(config, w1image, w3image, w1output_nobackground, 
         w3output_nobackground, w3output_scaled, w1output_convolved, 
@@ -687,14 +730,17 @@ def run_immean(input):
     meanvalue = iraf.immean.getParam("mean")
     return meanvalue
 
-def select_sextractor_config(SEXTRACTOR_PATH, band):
+def select_sextractor_config(SEXTRACTOR_PATH, band, imgname):
     '''Picks a sextractor config file for the appropriate band.
 
     There are different sextractor configs for images from different
     instruments, so this method selects the most appropriate config file.
     '''
     if band in phot.UVBANDS:
-        configname = "UV.sex"
+        if os.path.basename(imgname).startswith("MIS"):
+            configname = "MIS.sex"
+        else:
+            configname = "UV.sex"
     elif band in phot.IRBANDS:
         configname = "WISE.sex"
     else:

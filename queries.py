@@ -10,12 +10,13 @@ import gzip
 
 import requests
 import astropy
-from astropy.table import Table, vstack
+from astropy.table import Table, vstack, join
 from astroquery.ned import Ned
 from astroquery.irsa import Irsa
 import numpy as np
 
 import photometry as phot
+import band_conversions as conv
 
 # This is the entry point for the catalog.
 CATALOG_BASE = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query"
@@ -145,7 +146,7 @@ def batch_download_images(BASEDIR, objects, ras, decs, surveys, size=600,
 
 def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE, 
         catalog=CATALOG_NAMES["AllWISE"], radius=10, 
-        cols=['ra', 'dec', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
+        cols=['ra', 'dec', 'xscprox', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
         'w1sat', 'w2rsemi', 'w2ba', 'w2pa', 'w2gmag', 'w2sat', 'w3rsemi', 
         'w3ba', 'w3pa', 'w3gmag', 'w3sat', 'w4rsemi', 'w4ba', 'w4pa', 
         'w4gmag', 'w4sat'], clearentries=[]):
@@ -169,6 +170,12 @@ def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE,
     ##########################################################################
     # Uncomment the line below in order in order to upgrade to astropy 1.0.0.
     #ipac_table = Table.read(ipac_output.content, format="ascii.ipac")
+    #
+    # The removal of invalid entries occurs because oftentimes, some galaxies
+    # will have spurious duplicate entries where all of the meaningful
+    # parameters are masked. This has the slight problem of removing galaxies
+    # with legitimate entry at all from this table. I think it's a sacrifice
+    # I'm willing to make.
     for colname in clearentries:
         ipac_table = clear_invalid_entries(ipac_table, ipac_table[colname])
     ipac_table["cat"] = INVERTED_CATALOG_NAMES[catalog]
@@ -185,40 +192,116 @@ def clear_invalid_entries(fulltable, indexcolumn):
     except AttributeError:
         return fulltable
 
-def get_WISE_catalog_entries(objectfile):
+def get_WISE_catalog_entries(objectfile, localallwise="", localallsky="",
+                             missing_galaxies_error=True):
     '''Gets entries from objectfile and returns it as a table.
 	
     This function first gets the AllWISE data for the objects in objectfile,
     and then gets the WISE All-Sky data for the objects in objectfile. For 
     objects which are saturated in the AllWISE data, it will replace them 
     with objects in the All-Sky data, thereby decreasing the effects of 
-    saturation.'''
-    allwiseTable = query_WISE_catalog_file_upload(objectfile, 
-            catalog=CATALOG_NAMES["AllWISE"], clearentries=["w1rsemi"])
-    allskyTable = query_WISE_catalog_file_upload(objectfile, 
-            catalog=CATALOG_NAMES["All-Sky"], clearentries=["w1rsemi"])
-    satobjects  = (allwiseTable["w1sat"] + allwiseTable["w2sat"] +
-            allwiseTable["w3sat"] + allwiseTable["w4sat"])
-    # I'm hoping there's a better way to iterate through lists, because we're
-    # not guaranteed that there will be a correct number of valid entries. Some
-    # weird poblems could occur where this is not the case.
-    # I'd rather do something like joining and then processing or just
-    # processing by objstr rather than index.
-    for i, satpixels in enumerate(satobjects):
-        if satpixels != 0:
-            allwiseTable[i] = allskyTable[i]
-    return allwiseTable
+    saturation.
+    
+    If the local* keywords are specified, the catalog entries are read from the
+    specified file rather than queried from the server. This is because the
+    server drops entries for no discernable reason. A more complete listing can
+    be made by using the web interface once, and using that from now on. It
+    also has the added benefit of making things faster.
+    
+    If "missing_galaxies_error" is disabled, then instead of throwing an error,
+    this function will print the names of the missing galaxies, but continue
+    along its way.'''
+    # Algorithm is to make a new table, and fill it by columns. So in this
+    # case, let's join the tables, and build the new table by columns. This
+    # will allow us to use the numpy machinery to get things done.
+    # * Join both of the tables and separate into fields which end with
+    #   *_allwise and *_allsky.
+    # * Go through original columns and move the column from the combined table
+    # to the new table. If that column isn't found, that likely means there was
+    # a conflict. Then make a new column based on the saturation, and add that
+    # to the new table.
+    # * There is a corner case for when rows are missing from fullsample...
+    # Throw an error for now.
+    fullsample = Table.read(objectfile, format="ascii.ipac")
+    fullnames = set(fullsample["objstr"])
 
-def get_2MASS_catalog_entries(objectfile):
+    if localallwise:
+        allwiseTable = Table.read(localallwise, format="ascii.ipac")
+    else:
+        allwiseTable = query_WISE_catalog_file_upload(objectfile, 
+                catalog=CATALOG_NAMES["AllWISE"], clearentries=["w1rsemi"])
+
+    if localallsky:
+        allskyTable = Table.read(localallwise, format="ascii.ipac")
+    else:
+        allskyTable = query_WISE_catalog_file_upload(objectfile, 
+                catalog=CATALOG_NAMES["All-Sky"], clearentries=["w1rsemi"])
+
+    combinedtable = join(allwiseTable, allskyTable, join_type="outer",
+                         table_names=["allwise", "allsky"], keys="objstr_01")
+    combinedtable = Table(combinedtable, masked=True)
+
+    # This is the table we will eventually export.
+    output_table = Table()
+
+    # If an object is missing from the allwise catalog, take the object from
+    # the allsky catalog. This is why we fill the value with 1.
+    sat_allwiseobjects  = (combinedtable["w1sat_allwise"] + 
+                           combinedtable["w2sat_allwise"] + 
+                           combinedtable["w3sat_allwise"] + 
+                           combinedtable["w4sat_allwise"]).filled(1)
+
+    # Get all of the colnames we desire to move to the new Table.
+    allwisecols = set(allwiseTable.colnames)
+    allskycols = set(allskyTable.colnames)
+    fullcols = allwisecols.union(allskycols)
+
+    for colname in fullcols:
+        # Make the common case fast, and the fast case common. So avoid the
+        # exception unless you encounter the rare case.
+        colname_allwise = "{0}_{1}".format(colname, "allwise")
+        colname_allsky = "{0}_{1}".format(colname, "allsky")
+        try:
+            # If there is saturation, pick from allsky, otherwise, pick from
+            # allwise.
+            newcolumn = np.ma.where(
+                sat_allwiseobjects, combinedtable[colname_allsky],
+                combinedtable[colname_allwise])
+        except KeyError:
+            # This means that there was no conflict, so just add colname.
+            # If this throws an error, something is weird and I would like to
+            # know.
+            newcolumn = combinedtable[colname]
+        output_table[colname] = newcolumn
+
+    # Finally test to see if all of the objects are present. If they are not,
+    # then raise some kind of error.
+    missing_galaxies = set(fullnames) - set(output_table["objstr_01"])
+    if missing_galaxies:
+        if missing_galaxies_error:
+            raise ValueError("Some objects were lost in the query.")
+        else:
+            print "Missing {0} from query".format(missing_galaxies)
+
+    return output_table
+
+def get_2MASS_catalog_entries(objectfile, mags="AB"):
     '''Gets the catalog entries from objectfile and returns it as a table.
 
     This function queries the 2MASS All-Sky Extended Source Catalog for objects
     in the objectfile.
+
+    The mags specifies whether the 2MASS entries should be in Vega magnitudes
+    or AB magnitudes. By default, they will be converted to AB.
     '''
     twomassTable = query_WISE_catalog_file_upload(objectfile,
             catalog=CATALOG_NAMES["2MASS"], cols=("ra", "dec", "j_m_k20fe",
             "j_msig_k20fe", "h_m_k20fe", "h_msig_k20fe", "k_m_k20fe",
-            "k_msig_k20fe"), clearentries=[])
+            "k_msig_k20fe", "j_m_fe", "j_msig_fe", "h_m_fe", "h_msig_fe",
+            "k_m_fe", "k_msig_fe", "j_m_ext", "j_msig_ext", "h_m_ext", 
+            "h_msig_ext", "k_m_ext", "k_msig_ext"), clearentries=[])
+    if mags == "AB":
+        conv.convert_2MASS_table_to_AB(twomassTable)
     return twomassTable
 
 def query_metadata(ra, dec, survey):
@@ -272,13 +355,21 @@ def query_image(BASEDIR, objstr, survey, coaddID, ra, dec, size=600,
     # check if the images are up to date. If they aren't, then download them
     # using upgrade_images.
     if os.path.isdir(galaxydir):
-        if overwrite:
+        try:
+            # If this completes without an error, then there are WISE images in
+            # galaxydir.
+            is_current = check_galaxy_images_version(galaxydir)
+        except RuntimeError:
+            # This means that there are no WISE images in this folder.
             download_images(galaxydir, survey, coadddic, ra, dec, size)
-        elif upgrade and not check_galaxy_images_version(galaxydir):
-            print "Upgrading images for {0}".format(objstr)
-            upgrade_images(galaxydir, survey, coadddic, ra, dec, size)
-        else:
-            print "Skipping {0}: Folder exists.".format(objstr)
+        else: 
+            if overwrite:
+                download_images(galaxydir, survey, coadddic, ra, dec, size)
+            elif upgrade and not is_current:
+                print "Upgrading images for {0}".format(objstr)
+                upgrade_images(galaxydir, survey, coadddic, ra, dec, size)
+            else:
+                print "Skipping {0}: Folder exists.".format(objstr)
     # If the folder doesn't exist, make it and download the images into it.
     else:
         os.mkdir(galaxydir)
@@ -406,8 +497,8 @@ def check_galaxy_images_version(galaxydir):
     '''Checks if the WISE images are from the latest catalog.
 
     The code of the latest catalog is in the variable LATEST_WISE_CODE. The
-    codes of images in the folder will be checked against this. If they are not
-    more recent, then this function will return false.
+    codes of images in the folder will be checked against this. If they are 
+    not more recent, then this function will return false.
     '''
     image_name = os.path.split(phot.match_filter(galaxydir, "W1"))[-1]
     return get_version(image_name) >= LATEST_WISE_CODE
@@ -472,3 +563,33 @@ def expand_IPAC_table(inputfile, outputfile):
     # work around the fact that I can't use them as keyword args.
     run_stilts("tcopy", ifmt="ipac", ofmt="ipac", **{"in": inputfile, 
         "out": outputfile})
+
+def create_HYPERLEDA_upload_file(ids, output):
+    '''Creates a file that can be uploaded to HYPERLEDA.
+
+    The file will only contain object names without any columns in a way that
+    can be immediately parseable by HYPERLEDA.'''
+    # I'm a very naughty boy for doing this.
+    # We don't want a header because that will cause problems with HYPERLEDA.
+    # However, using the ascii.no_header writer will enclose the object names in
+    # quotes, which also causes problems with HYPERLEDA. Therefore, the
+    # workaround I've arrived at is to use a newline as the column name. When
+    # writing the column name, it will instead make it into a blank line, which
+    # is ignored by HYPERLEDA. It would be nice to have it actually be
+    # configurable, though.
+    hypertable = Table([ids], names=("\n",))
+    hypertable.write(output, format="ascii.tab")
+
+def read_HYPERLEDA_output(outputfile):
+    '''Reads the output of a HYPERLEDA query.
+
+    This is basically a wrapper around Table.read which makes the appropriate
+    delimiter of "|" and comment of "!".
+    '''
+    hypertable = Table.read(outputfile, format="ascii.basic", delimiter="|",
+                            comment="\s*!")
+    emptycols = filter(lambda s: s.startswith("col"), hypertable.colnames)
+    assert len(emptycols) == 1
+    del hypertable[emptycols[0]]
+
+    return hypertable
