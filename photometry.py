@@ -32,6 +32,13 @@ MASKBANDS = ["W1", "NUV"]
 #STSDAS_COLUMN = "/home/gregory/work/ellipse_columns.txt"
 STSDAS_COLUMN = "/home/regulus/simonian/year1/wise/ellipse_columns.txt"
 
+UPPER_LIMIT_SYMBOL = 'u'
+LOWER_LIMIT_SYMBOL = 'l'
+DATA_POINT_SYMBOL = '0'
+UPPER = UPPER_LIMIT_SYMBOL
+LOWER = LOWER_LIMIT_SYMBOL
+DETECTION = DATA_POINT_SYMBOL
+
 ###############################################################################
 # Aperture Photometry Routines                                                #
 ###############################################################################
@@ -124,15 +131,16 @@ def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture",
             err = conv.DN_err_to_mag_err(galaxydir, band, objectError,
                     DNflux, ZPunc=ZPuncertainty)
             if err >= max_mag_err:
-                photvalue = np.nan
                 fluxupperlimit = 3.0 * objectError
+                err = np.nan
                 # I don't want to duplicate this, but I don't feel like making
                 # a better logic. I think this entire function should be
                 # trimmed down to not return anything other than (photvalue,
                 # err) tuples.
                 if brightness is "AB":
-                    err = conv.DNflux2ABmag(band, fluxupperlimit)
-                else: err = conv.DNflux2Vegamag(band, fluxupperlimit)
+                    photvalue = conv.DNflux2ABmag(band, fluxupperlimit)
+                else: 
+                    photvalue = conv.DNflux2Vegamag(band, fluxupperlimit)
         return (photvalue, err)
     else:
         if brightness is "flux":
@@ -1801,10 +1809,15 @@ def aperture_photometry_table(
     # This section is about setting up the table outline with a dictionary.
     photcolumns = {"objstr_01": []}
     photkeys = [name_photometry_column(band, category="ap") for band in runbands]
-    errkeys = [name_photometry_column(band, category="ap", error=True) for band in runbands]
-    for photkey, photerr in zip(photkeys, errkeys):
+    errkeys = [name_photometry_column(band, category="ap", error=True) for band 
+               in runbands]
+    # This column was added so that upper limits could be kept track of.
+    limkeys = [name_photometry_column(band, category="ap", limit=True) for band
+               in runbands]
+    for photkey, photerr, limkey in zip(photkeys, errkeys, limkeys):
         photcolumns[photkey] = []
         photcolumns[photerr] = []
+        photcolumns[limkey] = []
 
     if colorIndices is None:
         colorIndices = [-2] * len(objectnames)
@@ -1849,11 +1862,28 @@ def aperture_photometry_table(
 
             
         # Add the measurements to photcolumns.
-        for (photkey, errkey, measurement) in zip(photkeys, errkeys,
-                                                  measurements):
+        for (photkey, errkey, limkey, measurement) in zip(photkeys, errkeys,
+                                                          limkeys, measurements):
             phot, err = measurement
             photcolumns[photkey].append(phot)
             photcolumns[errkey].append(err)
+            # All of this is to ensure that our limits are taken care of.
+            # Even doing just (phot is np.nan) shouldn't trigger on missing
+            # images because those should be set to -99.0 instead. But, let's
+            # be explicit and not have weird cases that weren't kept track of
+            # from popping up.
+            if (phot is not np.nan) and (err is np.nan):
+                # A non-detection is an upper limit on flux.
+                if brightness is "flux":
+                    photcolumns[limkey].append(UPPER)
+                # A non-detection is a lower limit on magnitudes.
+                elif (brightness is "AB") or (brightness is "Vega"):
+                    photcolumns[limkey].append(LOWER)
+                else:
+                    raise ValueError("Don't recognize {0}".format(brightness))
+            else:
+                photcolumns[limkey].append(DETECTION)
+
 
         photcolumns["objstr_01"].append(galname)
     
@@ -1936,13 +1966,21 @@ def unpack_bands_from_table(table, extractbands=bands, category="unext"):
     '''
     pass
 
+def flip_limits(limarray):
+    '''Inverts limits on limarray.'''
+    upindices = np.where(limarray == UPPER)
+    lowindices = np.where(limarray == LOWER)
+
+    limarray[upindices] = LOWER
+    limarray[lowindices] = UPPER
+    return limarray
             
-def name_photometry_column(band, error=False, category="unext"):
+def name_photometry_column(band, error=False, category="unext", limit=False):
     '''Generates the names of photometry columns in the photometry table.
 
     Photometry columns are the columns which will be returned in the aperture
-    photometry table. Currently there will be two main categories: each with a
-    "mag" and "err" ending.
+    photometry table. Currently there are three main categories: each with a
+    "mag", "err", and "lim" ending.
 
     The "ap" category is for magnitudes straight from aperture photometry.
     There may be slight instrumental corrections added on, such as aperture
@@ -1965,6 +2003,8 @@ def name_photometry_column(band, error=False, category="unext"):
     else:
         if error:
             suffix = "err"
+        elif limit:
+            suffix = "lim"
         else:
             suffix = "mag"
 
