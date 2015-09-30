@@ -296,6 +296,51 @@ def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
     plt.savefig(dest)
     plt.close()
 
+def create_stellar_mass_ATLAS3D_comparison(
+        table=atlas3d_table, dest=os.path.join(FIGUREPATH, "stellarmass.pdf")):
+    atlas3d_params = read_Cappellari11_Table_3()
+    atlas3d_lums = read_Cappellari13a_Table_1()
+    atlas3d_masstolight = read_Cappellari13b_Table_1()
+    joinedtable = phot.multijoin_by_galaxy_name(
+        atlas3d_table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
+        names=("objstr_01", "Galaxy", "Galaxy", "Galaxy"))
+    absmag_w1 = joinedtable["w1unextmag"] - (5 *
+        np.log10(joinedtable["D"]*1e6/10))
+    logluminosity_w1 = -0.4 * (
+        absmag_w1 - conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"])
+    mass_jarrett = 10**(joinedtable["logML_W1"] + logluminosity_w1)
+    mass_atlas3d = 10**(joinedtable["logML_star"] + joinedtable["logLum"])
+    plt.loglog(mass_jarrett, mass_atlas3d, 'b*')
+    plt.xlabel("Jarrett M* (Msun)")
+    plt.ylabel("ATLAS3D M* (Msun)")
+    plt.savefig(dest)
+    plt.close()
+
+def create_mass_to_light_ATLAS3D_comparison(
+        table=atlas3d_table, dest=os.path.join(FIGUREPATH, "masstolight.pdf")):
+    atlas3d_params = read_Cappellari11_Table_3()
+    atlas3d_lums = read_Cappellari13a_Table_1()
+    atlas3d_masstolight = read_Cappellari13b_Table_1()
+    joinedtable = phot.multijoin_by_galaxy_name(
+        atlas3d_table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
+        names=("objstr_01", "Galaxy", "Galaxy", "Galaxy"))
+    absmag_w1 = joinedtable["w1unextmag"] - (5 *
+        np.log10(joinedtable["D"]*1e6/10))
+    # This is the Jarrett Mass-to-light ratio translated to r-band.
+    jarrett_ml_r = (
+        joinedtable["logML_W1"] - 
+        0.4 * (absmag_w1 - conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"]) -
+        joinedtable["logLum"])
+    plt.plot(jarrett_ml_r, joinedtable["logML_star"], 'b*')
+    plt.xlabel("Jarrett M/L (r-band)")
+    plt.ylabel("ATLAS3D (M/L)_stars (r-band)")
+    # Not shown is PGC029321 all the way to the right.
+    plt.xlim([-1.5, 0.5])
+    plt.ylim([-0.5, 1.5])
+    plt.savefig(dest)
+    plt.close()
+
+
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
                                 dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
     pahtable = read_Rampazzo_TableA1()

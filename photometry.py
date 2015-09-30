@@ -2654,16 +2654,19 @@ def calc_statistical_elliptical_mass_to_light_ratio(
     This function implements Equation 8 in Jarrett 2013. Note that it only
     applies to early-type galaxies.'''
 
-    w1w2, w1w2err = calc_statistical_difference(W1, W2, W1err, W2err)
+    w1w2, w1w2err = calc_statistical_difference(
+        conv.AB2Vegamag('W1', W1), conv.AB2Vegamag('W2', W2), W1err, W2err)
 
-    masslightlog = -0.31 + 3.42 * w1w2
+    # I'm adding two terms: one for conversion from [3.6] to W1, and another
+    # for conversion from W1 Vega to r-band AB.
+    masslightlog = -0.31 + 3.42 * w1w2  + np.log10(1.06) + (3.24 - 4.64) / 2.5
     masslightlogerr = 3.42 * w1w2err
     
     if retlog:
         return masslightlog, masslightlogerr
     else:
         masslight = 10**(masslightlog)
-        masslighterr = np.log(10) * masslight * masslightlogerr
+        masslighterr = np.log10(10) * masslight * masslightlogerr
 
         return masslight, masslighterr
 
@@ -2695,6 +2698,8 @@ def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
     table2[name1] = object_name_to_dir(table2[name2])
     # Now join them.
     newtable = join(table1, table2, keys=[name1], join_type=join_type)
+    if name1 != name2:
+        del(newtable[name2])
     # Set columns back.
     table1[name1] = tempcol1
     return newtable
