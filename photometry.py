@@ -2983,6 +2983,8 @@ def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
     table2[name1] = object_name_to_dir(table2[name2])
     # Now join them.
     newtable = join(table1, table2, keys=[name1], join_type=join_type)
+    if name1 != name2:
+        del(newtable[name2])
     # Set columns back.
     table1[name1] = tempcol1
     return newtable
