@@ -2659,8 +2659,8 @@ def calc_statistical_elliptical_mass_to_light_ratio(
 
     # I'm adding two terms: one for conversion from [3.6] to W1, and another
     # for conversion from W1 Vega to r-band AB.
-    masslightlog = -0.31 + 3.42 * w1w2  + np.log10(1.06) + (3.24 - 4.64) / 2.5
-    masslightlogerr = 3.42 * w1w2err
+    masslightlog = 0.04 + 3.98 * w1w2
+    masslightlogerr = 0
     
     if retlog:
         return masslightlog, masslightlogerr
