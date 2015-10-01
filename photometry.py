@@ -2065,7 +2065,7 @@ def aperture_photometry_table(
         photcolumns[limkey] = []
 
     if colorIndices is None:
-        colorIndices = [-2] * len(objectnames)
+        colorIndices = [2] * len(objectnames)
     if len(colorIndices) != len(objectnames):
         raise ValueError("Need same number of color indices and objects.")
 
