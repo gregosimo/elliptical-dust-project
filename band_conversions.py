@@ -12,9 +12,11 @@ WAVELENGTHS = {"W1": 3.4e-6, "W2": 4.6e-6, "W3": 12e-6, "W4": 22e-6, "J":
 
 # Dictionaries of Zero-points for bands
 ZERO_POINT_FLUXES = {"W1": 306.682, "W2": 170.663, "W3": 29.0448, "W4": 8.2839, 
-                     "NUV": 3810, "FUV": 3620}
+                     "NUV": 3810, "FUV": 3620, "[3.6]": 280.9, "[4.5]": 179.7}
 ZERO_POINT_FLUX_UNCERTAINTIES = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124, 
                                  "NUV": 0, "FUV": 0}
+# NOTE: These magnitues are for going from data numbers to magnitudes. They are
+# not related to Janskys at all.
 # Unfortunately, magnitudes are given in either Vega or AB. And WISE does
 # both while GALEX only does AB. In my mind, it's more pure to include these
 # zero-points, and then do the conversions as desired.
@@ -37,7 +39,7 @@ VEGA_TO_AB_CONVERSIONS = {"W1": 2.699, "W2": 3.339, "W3": 5.174, "W4": 6.620,
 # J, H, and r are from Blanton 2007.
 SOLAR_ABSOLUTE_MAGNITUDES_VEGA = {"W1": 3.24, "W2": 3.27, "W3": 3.23, 
                                   "W4": 3.25, "J": 3.65, "H": 3.32, "Ks": 3.29, 
-                                  "r": 4.49 }
+                                  "r": 4.49, "[3.6]": 3.24, "[4.5]": 3.27}
 
 # WISE bands converted from Vega Mags.
 # J, H, Ks, and r are from Blanton (2007)
@@ -54,7 +56,10 @@ COLOR_CORRECTIONS = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921,
         1.0319]),
     # The UV doesn't have tabulated color-correction tables.
     "NUV": np.ones(8),
-    "FUV": np.ones(8)}
+    "FUV": np.ones(8),
+    # Neither does Spitzer (as far as I know)
+    "[3.6]": np.ones(8),
+    "[4.5]": np.ones(8)}
 
 ###############################################################################
 # Generic conversion routines
@@ -244,44 +249,41 @@ def WISEflux2IRACflux(band, wiseflux):
                 IRAC_TO_WISE_FACTOR[IRAC_CORRESPONDING_WISE_BAND[band]])
     return iracflux
 
-def IRAC2WISEmag(iracband, iracmag, system="AB"):
+def IRAC2WISEmag(iracband, iracmag, wisesystem="Vega"):
     '''Converts an IRAC magnitude to a WISE magnitude.
 
-    Currently, this is only available for [3.6] to W1, and [4.5] to W2.
+    Currently, this is only available for [3.6] to W1, and [4.5] to W2. I
+    currently don't have conversions between Vega and AB magnitudes for IRAC
+    bands. So it's assumed that all IRAC magnitudes will be presented in the
+    Vega system.
     '''
     wiseband = IRAC_CORRESPONDING_WISE_BAND[iracband]
-    if system is "AB":
-        toJansky = ABmag2Jansky
-        fromJansky = Jansky2ABmag
-    elif system is "Vega":
-        toJansky = Vegamag2Jansky
-        fromJansky = Jansky2Vegamag
-    else:
-        raise ValueError("Don't understand system: {0}.".format(system))
 
-    iracflux = toJansky(iracband, iracmag)
+    iracflux = Vegamag2Jansky(iracband, iracmag)
     wiseflux = IRACflux2WISEflux(iracband, iracflux)
-    wisemag = fromJansky(wiseband, wiseflux)
+    if wisesystem is "AB":
+        wisemag = Jansky2ABmag(wiseband, wiseflux)
+    elif wisesystem is "Vega":
+        wisemag = Jansky2Vegamag(wiseband, wiseflux)
+    else:
+        raise ValueError("Don't understand system: {0}.".format(wisesystem))
     return wisemag
 
-def WISE2IRACmag(wiseband, wisemag, system="AB"):
+def WISE2IRACmag(wiseband, wisemag, wisesystem="Vega"):
     '''Converts an IRAC magnitude to a WISE magnitude.
 
     Currently, this is only available for [3.6] to W1, and [4.5] to W2.
     '''
     iracband = IRAC_CORRESPONDING_WISE_BAND[wiseband]
-    if system is "AB":
-        toJansky = ABmag2Jansky
-        fromJansky = Jansky2ABmag
-    elif system is "Vega":
-        toJansky = Vegamag2Jansky
-        fromJansky = Jansky2Vegamag
-    else:
-        raise ValueError("Don't understand system: {0}.".format(system))
 
-    wiseflux = toJansky(wiseband, wisemag)
+    if wisesystem is "AB":
+        wiseflux = ABmag2Jansky(wiseband, wisemag)
+    elif wisesystem is "Vega":
+        wiseflux = Vegamag2Jansky(wiseband, wisemag)
+    else:
+        raise ValueError("Don't understand system: {0}.".format(wisesystem))
     iracflux = IRACflux2WISEflux(wiseband, wiseflux)
-    iracmag = fromJansky(iracband, iracflux)
+    iracmag = Jansky2Vegamag(iracband, iracflux)
     return iracmag
 
 ###############################################################################
