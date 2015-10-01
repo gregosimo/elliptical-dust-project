@@ -4,6 +4,7 @@ from scipy.interpolate import interp1d
 
 WISE_bands = ["W1", "W2", "W3", "W4"]
 TWOMASS_bands = ["J", "H", "Ks"]
+IRAC_bands = ["[3.6]", "[4.5]"]
 GALEX_bands = ["NUV", "FUV"]
 
 # Isophotal wavelengths of the bands:
@@ -283,7 +284,7 @@ def WISE2IRACmag(wiseband, wisemag, wisesystem="Vega"):
         wiseflux = Vegamag2Jansky(wiseband, wisemag)
     else:
         raise ValueError("Don't understand system: {0}.".format(wisesystem))
-    iracflux = IRACflux2WISEflux(wiseband, wiseflux)
+    iracflux = WISEflux2IRACflux(wiseband, wiseflux)
     iracmag = Jansky2Vegamag(iracband, iracflux)
     return iracmag
 
@@ -298,19 +299,18 @@ def Jansky2Vegamag(band, flux, colorIndex=-2):
     Note that GALEX UV observations can't be expressed in Vega magnitudes, so
     attempting to convert a UV flux to Vega magnitudes will result in a
     ValueError.'''
-    if band in WISE_bands:
-        mag = flux2mag(flux, get_zero_point_flux_level(band, colorIndex), 0)
-    elif band in GALEX_bands:
+    if band in GALEX_bands:
         raise ValueError("Could not convert GALEX band to Vega system.")
+    mag = flux2mag(flux, get_zero_point_flux_level(band, colorIndex), 0)
     return mag
 
 def Jansky2ABmag(band, flux, colorIndex=-2):
     '''Converts a flux in Janskys to an AB magnitude.'''
     basemag = flux2mag(flux, get_zero_point_flux_level(band, colorIndex), 0)
-    if band in WISE_bands:
-        mag = Vega2ABmag(band, basemag)
-    elif band in GALEX_bands:
+    if band not in GALEX_bands:
         mag = basemag
+    else:
+        mag = Vega2ABmag(band, basemag)
     return mag
 
 def Jansky_err_to_mag_err(band, flux, fluxerr, invert=False):
@@ -333,10 +333,9 @@ def Jansky_err_to_mag_err(band, flux, fluxerr, invert=False):
 
 def Vegamag2Jansky(band, mag, colorIndex=-2):
     '''Converts a Vega magnitude into Janskys.'''
-    if band in WISE_bands:
-        flux = mag2flux(mag, 0, get_zero_point_flux_level(band))
-    elif band in GALEX_bands:
+    if band in GALEX_bands:
         raise ValueError("Could not convert GALEX band to Vega system.")
+    flux = mag2flux(mag, 0, get_zero_point_flux_level(band))
     return flux
 
 def ABmag2Jansky(band, mag, colorIndex=-2):
@@ -425,7 +424,7 @@ def color_correction(band, index):
 
     Note that now index can be a numpy array!
     '''
-    if band in GALEX_bands:
+    if band not in WISE_bands:
         return 1.0
     return fluxcorrection[band][3-index]
 
