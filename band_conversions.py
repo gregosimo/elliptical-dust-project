@@ -219,6 +219,73 @@ def AB2Vegamag(band, ABmag):
         raise ValueError("Could not convert GALEX BAND to Vega system.")
 
 ###############################################################################
+# WISE to IRAC conversions
+###############################################################################
+
+IRAC_TO_WISE_FACTOR = {"[3.6]": 1.06, "[4.5]": 0.94}
+IRAC_CORRESPONDING_WISE_BAND = {"W1": "[3.6]", "W2": "[4.5]", "[3.6]": "W1",
+                                "[4.5]": "W2"}
+
+def IRACflux2WISEflux(band, iracflux):
+    '''Converts an IRAC flux to a WISE flux.
+
+    This relation is only valid for early-type galaxies as asserted by Jarrett
+    (2013). This only works for bands "[3.6]" and "[4.5]".
+    '''
+    wiseflux = iracflux * IRAC_TO_WISE_FACTOR[band]
+    return wiseflux
+
+def WISEflux2IRACflux(band, wiseflux):
+    '''Converts a WISE flux to an IRAC flux.
+
+    This relation is only valid for early-type galaxies as asserted by Jarrett
+    (2013). This only works for bands "W1", and "W2".
+    '''
+    iracflux = (wiseflux / 
+                IRAC_TO_WISE_FACTOR[IRAC_CORRESPONDING_WISE_BAND[band]])
+    return iracflux
+
+def IRAC2WISEmag(iracband, iracmag, system="AB"):
+    '''Converts an IRAC magnitude to a WISE magnitude.
+
+    Currently, this is only available for [3.6] to W1, and [4.5] to W2.
+    '''
+    wiseband = IRAC_CORRESPONDING_WISE_BAND[iracband]
+    if system is "AB":
+        toJansky = ABmag2Jansky
+        fromJansky = Jansky2ABmag
+    elif system is "Vega":
+        toJansky = Vegamag2Jansky
+        fromJansky = Jansky2Vegamag
+    else:
+        raise ValueError("Don't understand system: {0}.".format(system))
+
+    iracflux = toJansky(iracband, iracmag)
+    wiseflux = IRACflux2WISEflux(iracband, iracflux)
+    wisemag = fromJansky(wiseband, wiseflux)
+    return wisemag
+
+def WISE2IRACmag(wiseband, wisemag, system="AB"):
+    '''Converts an IRAC magnitude to a WISE magnitude.
+
+    Currently, this is only available for [3.6] to W1, and [4.5] to W2.
+    '''
+    iracband = IRAC_CORRESPONDING_WISE_BAND[wiseband]
+    if system is "AB":
+        toJansky = ABmag2Jansky
+        fromJansky = Jansky2ABmag
+    elif system is "Vega":
+        toJansky = Vegamag2Jansky
+        fromJansky = Jansky2Vegamag
+    else:
+        raise ValueError("Don't understand system: {0}.".format(system))
+
+    wiseflux = toJansky(wiseband, wisemag)
+    iracflux = IRACflux2WISEflux(wiseband, wiseflux)
+    iracmag = fromJansky(iracband, iracflux)
+    return iracmag
+
+###############################################################################
 # Flux-Magnitude Conversions
 ###############################################################################
 
