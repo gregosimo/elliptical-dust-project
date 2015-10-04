@@ -646,6 +646,56 @@ def read_Diamond_Stanic_Table1(
              "[Ne II]", "[Ne II] err", "H2 S(3)", "H2 S(3) err"]
     dstable = Table.read
 
+def generate_ATLAS3D_distance_errors(atlas3d_table_3=None):
+    '''Creates a Column of ATLAS3D distance errors.
+
+    It will take an instance of Table 3 from Cappellari et al (2011). However,
+    if none is provided, it will read it on its own.
+    '''
+    at3 = atlas3d_table_3
+    if at3 is None:
+        at3 = read_Cappellari11_Table_3()
+    # These galaxies are going to be ordered from most-to-least precise
+    # distance determinations
+    at3_group = at3.group_by("SBF")
+    # When SBF=2, then the distances come from Mei et al (2007)
+    meigals = at3_group.groups[2][["Galaxy", "D"]]
+    meigals["D_err"] = 0.03 * meigals["D"]
+    # Next precise is for galaxies which are in Virgo, so we'll make a table
+    # for the non-Mei galaxies
+    nonacs = at3_group.groups[0:2]
+    nonacs_group = nonacs.group_by("Virgo")
+    # When SBF=0 and NED-D=0, then if the galaxy is in Virgo, it gets the
+    # distance to Virgo.
+    virgogals = nonacs_group.groups[1]
+    virgogals["D_err"] = 0.07 * virgogals["D"]
+    # Next up is the Tonry et al (2001) paper, which is signified by SBF=1.
+    nonvirgo = nonacs_group.groups[0]
+    nonvirgo_group = nonvirgo.group_by("SBF")
+    # The Tonry et al (2001) galaxies are the ones where SBF=1
+    tonrygals = nonvirgo_group.groups[1][["Galaxy", "D"]]
+    tonrygals["D_err"] = 0.10 * tonrygals["D"]
+    # When SBF=0, we have multiple cases.
+    nonSBF = nonvirgo_group.groups[0]
+    nonSBF_group = nonSBF.group_by("NED-D")
+    # When SBF=0 and NED-D > 0, then distance was taken from NED-D catalog.
+    # There are two sets of methods which are good to ~10 percent, an <~20
+    # percent. I'm gonna choose 15 percent just for current simplicity's sake.
+    NEDgals = nonSBF_group.groups[1:][["Galaxy", "D"]]
+    NEDgals["D_err"] = 0.15 * NEDgals["D"]
+    # We took care of the 5 cases. Now for the rest which are only avaialble
+    # through cosmic flow velocities.
+    nonNEDgals = nonSBF_group.groups[0][["Galaxy", "D"]]
+    nonNEDgals["D_err"] = 0.21 * nonNEDgals["D"]
+
+    distance_error_table = vstack([meigals, virgogals, tonrygals, NEDgals,
+                                   nonNEDgals])
+    full_table = phot.join_by_galaxy_name(
+        at3, distance_error_table, names=("Galaxy", "Galaxy"), join_type="left")
+    return full_table
+
+
+
 def rampazzo_sample_list(table1=os.path.join(BASEPATH, "Rampazzo_Table1.csv"), 
                          table2=os.path.join(BASEPATH, "Rampazzo_Table2.csv"),
                          destination=os.path.join(PAPERPATH, 
