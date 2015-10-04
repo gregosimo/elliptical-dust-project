@@ -519,9 +519,23 @@ def extinction_correction(band, truemag, EB_V, magerr=None, EBVerr=None, Rv=3.1,
             raise
 
     if deredden:
-        extincted_mag = truemag - A
+        try:
+            extincted_mag, extinctederr = phot.calc_statistical_difference(
+                truemag, A, magerr, EXTINCTION_RATIO[band]*EBVerr)
+        except TypeError:
+            if magerr is None and EBVerr is None:
+                return truemag - A
+            else:
+                raise
     else:
-        extincted_mag = truemag + A
+        try:
+            extincted_mag, extinctederr = phot.calc_statistical_sum(
+                truemag, A, magerr, EXTINCTION_RATIO[band]*EBVerr)
+        except TypeError:
+            if magerr is None and EBVerr is None:
+                return truemag + A
+            else:
+                raise
 
     if magerr is None and EBVerr is None:
         return extincted_mag

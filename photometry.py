@@ -2117,13 +2117,30 @@ def plotSED(bands, mags, errs, modelx=[], modely=[], modellabels=[],
     plt.ylabel(ylabel)
     plt.legend()
 
-def calc_statistical_difference(minuend, subtrahend, minuerr, subtraerr):
+def generate_limit(testlim, length):
+    '''If testlim is None, generate an array of default limits with length.
+
+    If testlim is valid, then it will be returned.
+    '''
+    if testlim is None:
+        testlim = np.array([DETECTION]*length)
+    return testlim
+
+def calc_statistical_difference(minuend, subtrahend, minuerr, subtraerr,
+                                minulim=None, subtralim=None):
     '''Returns statistically subtracted value of two arrays.
 
-    This function takes two arrays involving two measurements with errors. It
-    then returns a 2-tuple. The first is simply the difference of the mean. The
-    second is the errors of the differences.
+    This function takes two arrays involving two measurements with errors which
+    may be upper or lower limits. It then returns a 3-tuple. The first element
+    is simply the difference of the values. The second is the error of the 
+    difference. And the third represents whether the differences are limits or
+    not.
+
+    If limits are not given, then the third element will simply be limits
+    indicating all data points are valid.
     '''
+    minulim = generate_limit(minulim, len(minuend))
+    subtralim = generate_limit(subtralim, len(subtrahend))
     difference, differr = calc_statistical_sum(
         minuend, -subtrahend, minuerr, subtraerr)
     return (difference, differr)
