@@ -45,8 +45,10 @@ STSDAS_COLUMN = "/home/regulus/simonian/year1/wise/ellipse_columns.txt"
 UPPER_LIMIT_SYMBOL = 'u'
 LOWER_LIMIT_SYMBOL = 'l'
 DATA_POINT_SYMBOL = '0'
+NO_LIMIT_SYMBOL = 'n'
 UPPER = UPPER_LIMIT_SYMBOL
 LOWER = LOWER_LIMIT_SYMBOL
+NA = NO_LIMIT_SYMBOL
 DETECTION = DATA_POINT_SYMBOL
 
 ###############################################################################
@@ -2181,6 +2183,8 @@ def deextinct_data(photometry_table, extinction="", runbands=bands):
             unext_mag = name_photometry_column(band, error=False,
                                              category=category)
             unext_err = name_photometry_column(band, error=True,
+                                               category=category)
+            unext_lim = name_photometry_column(band, limit=True,
                                                category=category)
             # Just in case both UVBANDS are not passed through at the same
             # time. When I move de-exinction to galaxy_photometry, this will be
