@@ -109,9 +109,13 @@ def create_Rampazzo_sample_table(table=rampazzo_table,
     (1) galaxy name; (2) Morphological type; (3) Distance; (4) MIR Class.
     References can be found as \citet{Rampazzo13}.
     \label{tab:rampazzosample}"""
-    columns = ["objstr_01", "RSA_morph_type", "D", "MIR_class"]
-    names = ["Galaxy", "Morph.", "Distance", "MIR Class"]
-    units = {"Distance", "Mpc"}
+    columns = ["objstr_01", "RSA_morph_type", "D", "MIR_class", "w1rsemi",
+               "w1ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
+    names = ["Galaxy", "Morph.", "Distance", "MIR Class", "Semimajor Axis",
+             "Axis Ratio", "Position Angle", "WISE Catalog", "NUV Tile", 
+             "FUV Tile"]
+    units = {"Distance": "Mpc", "Semimajor Axis": "''", "Position Angle": 
+             r"\(^\ocirc\)"}
     table1 = table[columns]
 #    table1.write(dest, format="ascii.latex", names=names)
     table1.write(dest, format="ascii.aastex", names=names,
@@ -120,13 +124,20 @@ def create_Rampazzo_sample_table(table=rampazzo_table,
 def create_ATLAS3D_sample_table(table=atlas3d_table,
                                 dest=os.path.join(TABLEPATH,
                                                   "atlas3dtbl.tex")):
+    atlas3dprops = read_Cappellari11_Table_3()
+    joinedtable = phot.multijoin_by_galaxy_name(
+        table, atlas3dprops, names=("objstr_01", "Galaxy"))
     caption = r"""Properties of galaxies in the \ATLAS{} sample.
     \label{tab:atlas3dsample}"""
-    columns = ["objstr_01", "type", "D", "Age_SSP", "[Z/H]_SSP"]
-    names = ["Galaxy", "Morph.", "Distance", "SSP Age", "SSP [Z/H]"]
-    table1 = table[columns]
+    columns = ["objstr_01", "type", "D", "w1rsemi",
+               "w1ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
+    names = ["Galaxy", "Morph", "Distance", "Semimajor Axis", "Axis Ratio", 
+               "Position Angle", "WISE Catalog", "NUV Tile", "FUV Tile"]
+    table1 = joinedtable[columns]
     table1.write(dest, format="ascii.aastex", names=names,
-                 latexdict={"caption": caption})
+                 latexdict={"caption": caption},
+                 formats={"NUV Tile": format_GALEX_tile, "FUV Tile":
+                          format_GALEX_tile})
 
 def create_param_table(table=fulltable, dest=os.path.join(TABLEPATH,
                                                           "params.tex")):
@@ -295,6 +306,51 @@ def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
     plt.ylim([0, 6])
     plt.savefig(dest)
     plt.close()
+
+def create_stellar_mass_ATLAS3D_comparison(
+        table=atlas3d_table, dest=os.path.join(FIGUREPATH, "stellarmass.pdf")):
+    atlas3d_params = read_Cappellari11_Table_3()
+    atlas3d_lums = read_Cappellari13a_Table_1()
+    atlas3d_masstolight = read_Cappellari13b_Table_1()
+    joinedtable = phot.multijoin_by_galaxy_name(
+        atlas3d_table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
+        names=("objstr_01", "Galaxy", "Galaxy", "Galaxy"))
+    absmag_w1 = joinedtable["w1unextmag"] - (5 *
+        np.log10(joinedtable["D"]*1e6/10))
+    logluminosity_w1 = -0.4 * (
+        absmag_w1 - conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"])
+    mass_jarrett = 10**(joinedtable["logML_W1"] + logluminosity_w1)
+    mass_atlas3d = 10**(joinedtable["logML_star"] + joinedtable["logLum"])
+    plt.loglog(mass_jarrett, mass_atlas3d, 'b*')
+    plt.xlabel("Jarrett M* (Msun)")
+    plt.ylabel("ATLAS3D M* (Msun)")
+    plt.savefig(dest)
+    plt.close()
+
+def create_mass_to_light_ATLAS3D_comparison(
+        table=atlas3d_table, dest=os.path.join(FIGUREPATH, "masstolight.pdf")):
+    atlas3d_params = read_Cappellari11_Table_3()
+    atlas3d_lums = read_Cappellari13a_Table_1()
+    atlas3d_masstolight = read_Cappellari13b_Table_1()
+    joinedtable = phot.multijoin_by_galaxy_name(
+        atlas3d_table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
+        names=("objstr_01", "Galaxy", "Galaxy", "Galaxy"))
+    absmag_w1 = joinedtable["w1unextmag"] - (5 *
+        np.log10(joinedtable["D"]*1e6/10))
+    # This is the Jarrett Mass-to-light ratio translated to r-band.
+    jarrett_ml_r = (
+        joinedtable["logML_W1"] - 
+        0.4 * (absmag_w1 - conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"]) -
+        joinedtable["logLum"])
+    plt.plot(jarrett_ml_r, joinedtable["logML_star"], 'b*')
+    plt.xlabel("Jarrett M/L (r-band)")
+    plt.ylabel("ATLAS3D (M/L)_stars (r-band)")
+    # Not shown is PGC029321 all the way to the right.
+    plt.xlim([-1.5, 0.5])
+    plt.ylim([-0.5, 1.5])
+    plt.savefig(dest)
+    plt.close()
+
 
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
                                 dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
@@ -590,6 +646,56 @@ def read_Diamond_Stanic_Table1(
              "[Ne II]", "[Ne II] err", "H2 S(3)", "H2 S(3) err"]
     dstable = Table.read
 
+def generate_ATLAS3D_distance_errors(atlas3d_table_3=None):
+    '''Creates a Column of ATLAS3D distance errors.
+
+    It will take an instance of Table 3 from Cappellari et al (2011). However,
+    if none is provided, it will read it on its own.
+    '''
+    at3 = atlas3d_table_3
+    if at3 is None:
+        at3 = read_Cappellari11_Table_3()
+    # These galaxies are going to be ordered from most-to-least precise
+    # distance determinations
+    at3_group = at3.group_by("SBF")
+    # When SBF=2, then the distances come from Mei et al (2007)
+    meigals = at3_group.groups[2][["Galaxy", "D"]]
+    meigals["D_err"] = 0.03 * meigals["D"]
+    # Next precise is for galaxies which are in Virgo, so we'll make a table
+    # for the non-Mei galaxies
+    nonacs = at3_group.groups[0:2]
+    nonacs_group = nonacs.group_by("Virgo")
+    # When SBF=0 and NED-D=0, then if the galaxy is in Virgo, it gets the
+    # distance to Virgo.
+    virgogals = nonacs_group.groups[1]
+    virgogals["D_err"] = 0.07 * virgogals["D"]
+    # Next up is the Tonry et al (2001) paper, which is signified by SBF=1.
+    nonvirgo = nonacs_group.groups[0]
+    nonvirgo_group = nonvirgo.group_by("SBF")
+    # The Tonry et al (2001) galaxies are the ones where SBF=1
+    tonrygals = nonvirgo_group.groups[1][["Galaxy", "D"]]
+    tonrygals["D_err"] = 0.10 * tonrygals["D"]
+    # When SBF=0, we have multiple cases.
+    nonSBF = nonvirgo_group.groups[0]
+    nonSBF_group = nonSBF.group_by("NED-D")
+    # When SBF=0 and NED-D > 0, then distance was taken from NED-D catalog.
+    # There are two sets of methods which are good to ~10 percent, an <~20
+    # percent. I'm gonna choose 15 percent just for current simplicity's sake.
+    NEDgals = nonSBF_group.groups[1:][["Galaxy", "D"]]
+    NEDgals["D_err"] = 0.15 * NEDgals["D"]
+    # We took care of the 5 cases. Now for the rest which are only avaialble
+    # through cosmic flow velocities.
+    nonNEDgals = nonSBF_group.groups[0][["Galaxy", "D"]]
+    nonNEDgals["D_err"] = 0.21 * nonNEDgals["D"]
+
+    distance_error_table = vstack([meigals, virgogals, tonrygals, NEDgals,
+                                   nonNEDgals])
+    full_table = phot.join_by_galaxy_name(
+        at3, distance_error_table, names=("Galaxy", "Galaxy"), join_type="left")
+    return full_table
+
+
+
 def rampazzo_sample_list(table1=os.path.join(BASEPATH, "Rampazzo_Table1.csv"), 
                          table2=os.path.join(BASEPATH, "Rampazzo_Table2.csv"),
                          destination=os.path.join(PAPERPATH, 
@@ -606,6 +712,15 @@ def rampazzo_sample_list(table1=os.path.join(BASEPATH, "Rampazzo_Table1.csv"),
     sampletable = phot.filterTableforCompleteBands(RAMPAZZOBASE, fulltable)
 
     sampletable.write(destination, format="ascii.csv", delimiter=":")
+
+def format_GALEX_tile(tilename):
+    '''Tilenames contain underscores which cause errors in LaTeX.
+
+    This function will escape the underscores.
+    '''
+    if tilename is None:
+        return "--"
+    return tilename.replace("_", r"\_")
 
 def format_mag(mag):
     '''Format magnitudes so that they can be displayed on a table.

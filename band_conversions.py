@@ -4,6 +4,7 @@ from scipy.interpolate import interp1d
 
 WISE_bands = ["W1", "W2", "W3", "W4"]
 TWOMASS_bands = ["J", "H", "Ks"]
+IRAC_bands = ["[3.6]", "[4.5]"]
 GALEX_bands = ["NUV", "FUV"]
 
 # Isophotal wavelengths of the bands:
@@ -13,9 +14,11 @@ WAVELENGTHS = {"W1": 3.4e-6, "W2": 4.6e-6, "W3": 12e-6, "W4": 22e-6, "J":
 
 # Dictionaries of Zero-points for bands
 ZERO_POINT_FLUXES = {"W1": 306.682, "W2": 170.663, "W3": 29.0448, "W4": 8.2839, 
-                     "NUV": 3810, "FUV": 3620}
+                     "NUV": 3810, "FUV": 3620, "[3.6]": 280.9, "[4.5]": 179.7}
 ZERO_POINT_FLUX_UNCERTAINTIES = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124, 
                                  "NUV": 0, "FUV": 0}
+# NOTE: These magnitues are for going from data numbers to magnitudes. They are
+# not related to Janskys at all.
 # Unfortunately, magnitudes are given in either Vega or AB. And WISE does
 # both while GALEX only does AB. In my mind, it's more pure to include these
 # zero-points, and then do the conversions as desired.
@@ -34,6 +37,17 @@ DN_TO_JANSKY_FACTOR = {"W1": 1.9350e-6, "W2": 2.7048e-06, "W3": 1.8326e-06,
 VEGA_TO_AB_CONVERSIONS = {"W1": 2.699, "W2": 3.339, "W3": 5.174, "W4": 6.620, 
                           "J": 0.91, "H": 1.39, "Ks": 1.85}
 
+# WISE bands and Ks are from Jarrett (2013).
+# J, H, and r are from Blanton 2007.
+SOLAR_ABSOLUTE_MAGNITUDES_VEGA = {"W1": 3.24, "W2": 3.27, "W3": 3.23, 
+                                  "W4": 3.25, "J": 3.65, "H": 3.32, "Ks": 3.29, 
+                                  "r": 4.49, "[3.6]": 3.24, "[4.5]": 3.27}
+
+# WISE bands converted from Vega Mags.
+# J, H, Ks, and r are from Blanton (2007)
+SOLAR_ABSOLUTE_MAGNITUDES_AB = {"W1": 5.94, "W2": 6.61, "W3": 8.40, "W4": 9.87,
+                                "J": 4.56, "H": 4.71, "Ks": 5.14, "r": 4.64}
+
 COLOR_CORRECTIONS = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921, 
     1.0000, 1.0142, 1.0347]),
     "W2": np.array([1.0206, 1.0066, 0.9976, 0.9935, 0.9943, 1.0000, 1.0107,
@@ -44,7 +58,10 @@ COLOR_CORRECTIONS = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921,
         1.0319]),
     # The UV doesn't have tabulated color-correction tables.
     "NUV": np.ones(8),
-    "FUV": np.ones(8)}
+    "FUV": np.ones(8),
+    # Neither does Spitzer (as far as I know)
+    "[3.6]": np.ones(8),
+    "[4.5]": np.ones(8)}
 
 ###############################################################################
 # Generic conversion routines
@@ -208,6 +225,70 @@ def AB2Vegamag(band, ABmag):
         raise ValueError("Could not convert GALEX BAND to Vega system.")
 
 ###############################################################################
+# WISE to IRAC conversions
+###############################################################################
+
+IRAC_TO_WISE_FACTOR = {"[3.6]": 1.06, "[4.5]": 0.94}
+IRAC_CORRESPONDING_WISE_BAND = {"W1": "[3.6]", "W2": "[4.5]", "[3.6]": "W1",
+                                "[4.5]": "W2"}
+
+def IRACflux2WISEflux(band, iracflux):
+    '''Converts an IRAC flux to a WISE flux.
+
+    This relation is only valid for early-type galaxies as asserted by Jarrett
+    (2013). This only works for bands "[3.6]" and "[4.5]".
+    '''
+    wiseflux = iracflux * IRAC_TO_WISE_FACTOR[band]
+    return wiseflux
+
+def WISEflux2IRACflux(band, wiseflux):
+    '''Converts a WISE flux to an IRAC flux.
+
+    This relation is only valid for early-type galaxies as asserted by Jarrett
+    (2013). This only works for bands "W1", and "W2".
+    '''
+    iracflux = (wiseflux / 
+                IRAC_TO_WISE_FACTOR[IRAC_CORRESPONDING_WISE_BAND[band]])
+    return iracflux
+
+def IRAC2WISEmag(iracband, iracmag, wisesystem="Vega"):
+    '''Converts an IRAC magnitude to a WISE magnitude.
+
+    Currently, this is only available for [3.6] to W1, and [4.5] to W2. I
+    currently don't have conversions between Vega and AB magnitudes for IRAC
+    bands. So it's assumed that all IRAC magnitudes will be presented in the
+    Vega system.
+    '''
+    wiseband = IRAC_CORRESPONDING_WISE_BAND[iracband]
+
+    iracflux = Vegamag2Jansky(iracband, iracmag)
+    wiseflux = IRACflux2WISEflux(iracband, iracflux)
+    if wisesystem is "AB":
+        wisemag = Jansky2ABmag(wiseband, wiseflux)
+    elif wisesystem is "Vega":
+        wisemag = Jansky2Vegamag(wiseband, wiseflux)
+    else:
+        raise ValueError("Don't understand system: {0}.".format(wisesystem))
+    return wisemag
+
+def WISE2IRACmag(wiseband, wisemag, wisesystem="Vega"):
+    '''Converts an IRAC magnitude to a WISE magnitude.
+
+    Currently, this is only available for [3.6] to W1, and [4.5] to W2.
+    '''
+    iracband = IRAC_CORRESPONDING_WISE_BAND[wiseband]
+
+    if wisesystem is "AB":
+        wiseflux = ABmag2Jansky(wiseband, wisemag)
+    elif wisesystem is "Vega":
+        wiseflux = Vegamag2Jansky(wiseband, wisemag)
+    else:
+        raise ValueError("Don't understand system: {0}.".format(wisesystem))
+    iracflux = WISEflux2IRACflux(wiseband, wiseflux)
+    iracmag = Jansky2Vegamag(iracband, iracflux)
+    return iracmag
+
+###############################################################################
 # Flux-Magnitude Conversions
 ###############################################################################
 
@@ -218,19 +299,18 @@ def Jansky2Vegamag(band, flux, colorIndex=-2):
     Note that GALEX UV observations can't be expressed in Vega magnitudes, so
     attempting to convert a UV flux to Vega magnitudes will result in a
     ValueError.'''
-    if band in WISE_bands:
-        mag = flux2mag(flux, get_zero_point_flux_level(band, colorIndex), 0)
-    elif band in GALEX_bands:
+    if band in GALEX_bands:
         raise ValueError("Could not convert GALEX band to Vega system.")
+    mag = flux2mag(flux, get_zero_point_flux_level(band, colorIndex), 0)
     return mag
 
 def Jansky2ABmag(band, flux, colorIndex=-2):
     '''Converts a flux in Janskys to an AB magnitude.'''
     basemag = flux2mag(flux, get_zero_point_flux_level(band, colorIndex), 0)
-    if band in WISE_bands:
-        mag = Vega2ABmag(band, basemag)
-    elif band in GALEX_bands:
+    if band not in GALEX_bands:
         mag = basemag
+    else:
+        mag = Vega2ABmag(band, basemag)
     return mag
 
 def Jansky_err_to_mag_err(band, flux, fluxerr, invert=False):
@@ -253,10 +333,9 @@ def Jansky_err_to_mag_err(band, flux, fluxerr, invert=False):
 
 def Vegamag2Jansky(band, mag, colorIndex=-2):
     '''Converts a Vega magnitude into Janskys.'''
-    if band in WISE_bands:
-        flux = mag2flux(mag, 0, get_zero_point_flux_level(band))
-    elif band in GALEX_bands:
+    if band in GALEX_bands:
         raise ValueError("Could not convert GALEX band to Vega system.")
+    flux = mag2flux(mag, 0, get_zero_point_flux_level(band))
     return flux
 
 def ABmag2Jansky(band, mag, colorIndex=-2):
@@ -345,7 +424,7 @@ def color_correction(band, index):
 
     Note that now index can be a numpy array!
     '''
-    if band in GALEX_bands:
+    if band not in WISE_bands:
         return 1.0
     return fluxcorrection[band][3-index]
 
