@@ -109,9 +109,13 @@ def create_Rampazzo_sample_table(table=rampazzo_table,
     (1) galaxy name; (2) Morphological type; (3) Distance; (4) MIR Class.
     References can be found as \citet{Rampazzo13}.
     \label{tab:rampazzosample}"""
-    columns = ["objstr_01", "RSA_morph_type", "D", "MIR_class"]
-    names = ["Galaxy", "Morph.", "Distance", "MIR Class"]
-    units = {"Distance", "Mpc"}
+    columns = ["objstr_01", "RSA_morph_type", "D", "MIR_class", "w1rsemi",
+               "w1ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
+    names = ["Galaxy", "Morph.", "Distance", "MIR Class", "Semimajor Axis",
+             "Axis Ratio", "Position Angle", "WISE Catalog", "NUV Tile", 
+             "FUV Tile"]
+    units = {"Distance": "Mpc", "Semimajor Axis": "''", "Position Angle": 
+             r"\(^\ocirc\)"}
     table1 = table[columns]
 #    table1.write(dest, format="ascii.latex", names=names)
     table1.write(dest, format="ascii.aastex", names=names,
@@ -120,13 +124,20 @@ def create_Rampazzo_sample_table(table=rampazzo_table,
 def create_ATLAS3D_sample_table(table=atlas3d_table,
                                 dest=os.path.join(TABLEPATH,
                                                   "atlas3dtbl.tex")):
+    atlas3dprops = read_Cappellari11_Table_3()
+    joinedtable = phot.multijoin_by_galaxy_name(
+        table, atlas3dprops, names=("objstr_01", "Galaxy"))
     caption = r"""Properties of galaxies in the \ATLAS{} sample.
     \label{tab:atlas3dsample}"""
-    columns = ["objstr_01", "type", "D", "Age_SSP", "[Z/H]_SSP"]
-    names = ["Galaxy", "Morph.", "Distance", "SSP Age", "SSP [Z/H]"]
-    table1 = table[columns]
+    columns = ["objstr_01", "type", "D", "w1rsemi",
+               "w1ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
+    names = ["Galaxy", "Morph", "Distance", "Semimajor Axis", "Axis Ratio", 
+               "Position Angle", "WISE Catalog", "NUV Tile", "FUV Tile"]
+    table1 = joinedtable[columns]
     table1.write(dest, format="ascii.aastex", names=names,
-                 latexdict={"caption": caption})
+                 latexdict={"caption": caption},
+                 formats={"NUV Tile": format_GALEX_tile, "FUV Tile":
+                          format_GALEX_tile})
 
 def create_param_table(table=fulltable, dest=os.path.join(TABLEPATH,
                                                           "params.tex")):
@@ -651,6 +662,15 @@ def rampazzo_sample_list(table1=os.path.join(BASEPATH, "Rampazzo_Table1.csv"),
     sampletable = phot.filterTableforCompleteBands(RAMPAZZOBASE, fulltable)
 
     sampletable.write(destination, format="ascii.csv", delimiter=":")
+
+def format_GALEX_tile(tilename):
+    '''Tilenames contain underscores which cause errors in LaTeX.
+
+    This function will escape the underscores.
+    '''
+    if tilename is None:
+        return "--"
+    return tilename.replace("_", r"\_")
 
 def format_mag(mag):
     '''Format magnitudes so that they can be displayed on a table.
