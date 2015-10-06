@@ -2126,6 +2126,76 @@ def generate_limit(testlim, length):
         testlim = np.array([DETECTION]*length)
     return testlim
 
+def invert_limits(limits):
+    '''Toggles between upper and lower limits.
+
+    UPPER and LOWER limits will switch, while valid/unconstrained values will
+    remain as they were.
+    '''
+    newlimits = np.copy(limits)
+    upperindices = np.where(limits == UPPER)
+    lowerindices = np.where(limits == LOWER)
+    newlimits[upperindices] = LOWER
+    newlimits[lowerindices] = UPPER
+    return newlimits
+
+def combine_limits(lim1, lim2):
+    '''Combines arrays of limits according to combine_limit.
+
+    See combine_limit for the algebra
+    '''
+    return np.array([combine_limit(v1, v2) for (v1, v2) in zip(lim1, lim2)])
+
+def combine_limit(lim1, lim2):
+    '''Combines limits in a logically valid way.
+
+    The set of rules which govern limits are:
+    u + u -> u
+    u + l -> n
+    u + 0 -> u
+    u + n -> n
+    l + u -> n
+    l + l -> l
+    l + 0 -> l
+    l + n -> n
+    0 + u -> u
+    0 + l -> l
+    0 + 0 -> 0
+    0 + n -> n
+    n + u -> n
+    n + l -> n
+    n + 0 -> n
+    n + n -> n
+    '''
+    # Implementation details. 
+    # Utilizing the symmetric property of these will only require cases for:
+    ## u + u -> u
+    ## u + l -> n
+    ## u + 0 -> u
+    ## u + n -> n
+    ## l + l -> l
+    ## l + 0 -> l
+    ## l + n -> n
+    ## 0 + 0 -> 0
+    ## 0 + n -> n
+    ## n + n -> n
+    # This makes 10 relations
+    # One easy thing to program is
+    if lim2 == NA:
+        return NA
+    # 6 left
+    elif lim1 == lim2:
+        return lim1
+    # 3 left
+    elif lim2 == DETECTION:
+        return lim1
+    # 1 left
+    elif lim1 == UPPER and lim2 == LOWER:
+        return NA
+    else:
+        return combine_limit(lim2, lim1)
+    
+
 def calc_statistical_difference(minuend, subtrahend, minuerr, subtraerr,
                                 minulim=None, subtralim=None):
     '''Returns statistically subtracted value of two arrays.
@@ -2141,49 +2211,62 @@ def calc_statistical_difference(minuend, subtrahend, minuerr, subtraerr,
     '''
     minulim = generate_limit(minulim, len(minuend))
     subtralim = generate_limit(subtralim, len(subtrahend))
-    difference, differr = calc_statistical_sum(
-        minuend, -subtrahend, minuerr, subtraerr)
-    return (difference, differr)
+    difference, differr, difflim = calc_statistical_sum(
+        minuend, -subtrahend, minuerr, subtraerr, minulim,
+        invert_limits(subtralim))
+    return (difference, differr, difflim)
 
-def calc_statistical_sum(augend, addend, augerr, adderr):
+def calc_statistical_sum(augend, addend, augerr, adderr, auglim=None,
+                         addlim=None):
     '''Returns the statistically summed value of two arrays.
 
     This function takes two arrays involving two measurements with errors. It
     then returns a 2-tuple. The first value is simply the sum, and the second
     is the error on the sum.
     '''
+    auglim = generate_limit(auglim, len(augend))
+    addlim = generate_limit(alim, len(addend))
     sums = augend + addend
-    sumerrs = np.sqrt(augerr**2 + adderr**2)
-    return (sums, sumerrs)
+    sumerr = np.sqrt(augerr**2 + adderr**2)
+    sumlim = combine_limits(auglim, addlim)
+    return (sums, sumerr, sumlim)
 
 
-def calc_statistical_quotient(dividend, divisor, dividenderr, divisorerr):
+def calc_statistical_quotient(dividend, divisor, dividenderr, divisorerr,
+                              dividendlim=None, divisorlim=None):
     '''Returns the statistically divided quotient of two arrays.
 
     This function takes two arrays involving two measurements with errors. It
     then returns a 2-tuple. The first is simply the ratio of the numbers. The
     second is the error of that ratio.'''
+    dividendlim = generate_limit(dividendlim, len(dividend))
+    divisorlim = generate_limit(divisorlim, len(divisor))
     quotient = dividend / divisor
     # This is more robust to the dividend being equal to zero. If the divisor
     # is equal to zero, we will still have problems.
     quoterrs = np.sqrt(
         (dividenderr / divisor)**2 + (dividend * divisorerr / divisor**2)**2)
-    return quotient, quoterrs
+    quotlims = combine_limits(dividendlim, invert_limits(divisorlim))
+    return quotient, quoterrs, quotlims
 
 def calc_statistical_product(multiplicand, multiplier, multiplicerr,
-                             multiplierr):
+                             multiplierr, multipliclim=None, 
+                             multiplilim=None):
     '''Returns the statistically multiplied product of two arrays.
 
     This function takes two arrays involving two measurements with errors. It
     returns a 2-tuple. The first value of the tuple is the product; the second
     is the error of that product.
     '''
-    product = multiplicand + multiplier
+    multipliclim = generate_limit(multipliclim, len(multiplicand))
+    multiplilim = generate_limit(multiplilim, len(multiplier))
+    product = multiplicand * multiplier
     # I could do this the fancy way, but the fancy way fails if either of the
     # multiplicand or multiplier are zero. So let's not.
     producterr = np.sqrt(
         (multiplier * multiplicerr)**2 + (multiplicand * multipliererr)**2)
-    return product, producterr
+    productlim = combine_limits(multipliclim, multiplilim)
+    return product, producterr, productlim
 
 
 def calc_statistical_fraction_of_sums(allvalues, allerrs, nummask, denommask,
