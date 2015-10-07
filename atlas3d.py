@@ -185,6 +185,14 @@ def read_McDermid_Table_3(
     #    data_start=0)
     return mcdermid_table
 
+def read_MGE_model(modelfolder, galname, galcol="Galaxy"):
+    '''Reads an MGE model file from Scott et al 2013.
+
+    The structure of this file can be found in Table 2. This function will
+    return the table, with the galaxy name given under the column of "galcol".
+    '''
+    
+
 def read_McDermid_Table_4(
         URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
              "McDermid2015_Atlas3D_Paper30_Table4.txt")):
