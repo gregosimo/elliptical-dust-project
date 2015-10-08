@@ -1,6 +1,7 @@
 import os
+from itertools import izip
 
-from astropy.table import Table
+from astropy.table import Table, vstack
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -191,7 +192,86 @@ def read_MGE_model(modelfolder, galname, galcol="Galaxy"):
     The structure of this file can be found in Table 2. This function will
     return the table, with the galaxy name given under the column of "galcol".
     '''
-    
+    modelpath = os.path.join(
+        modelfolder, "mge_{0}.txt".format(phot.object_name_to_dir(galname)))
+    modeltable = Table.read(
+        modelpath, format="ascii.no_header", names=("Ij", "sigj", "qj"),
+        data_start=1)
+    modeltable[galcol] = galname
+    ordered_mt = modeltable[galcol, "Ij", "sigj", "qj"]
+    return ordered_mt
+
+def read_MGE_models(BASEDIR, galnames, galcol="Galaxy", 
+                    modelfolder="mge_parameters_atlas3d"):
+    '''Reads in the MGE models for the objects in galnames.
+
+    This function will return an astropy table with the model parameters, and a
+    column labeled "galcol", which will have the name of the galaxy
+    corresponding to each model parameter. The utility of this approach lies in
+    the astropy.table.Table.group_by() method, where subtables corresponding to
+    each galaxy can be separated.
+    '''
+    modelfolderpath = os.path.join(BASEDIR, modelfolder)
+    # Since vstack accepts a sequece of tables, we'll just use a list
+    # comprehension to get a bunch of tables.
+    modellist = [read_MGE_model(modelfolderpath, galname, galcol) for galname
+                 in galnames]
+    fullmodeltable = vstack(modellist)
+    return fullmodeltable
+
+def integrate_MGE_gaussians(mgetable, D=None, Derr=None):
+    '''Takes a table with MGE parameters and calculates fluxes.
+
+    This involves using Equation (1) from Scott et al. (2013). Due to the
+    ambiguity of the equation, this function will either return a flux or a
+    luminosity. In order to get a luminosity, distances will be required.
+    Specify the distance in the D argument in Mpc. Derr will be used to
+    calculate the error in the luminosity.
+    '''
+    gauss_sum = np.sum(2 * np.pi * mgetable["Ij"] * mgetable["sigj"]**2 *
+                       mgetable["qj"])
+    logflux = np.log10(gauss_sum/4/np.pi)
+    logfluxerr = 0.1 / np.log(10) # Flux errors are around 10 percent.
+    if D is not None and Derr is not None:
+        loglum = logflux + np.log10(4*np.pi) + np.log10(D*1e6)
+        loglumerr = np.sqrt(logfluxerr**2 + Derr/D/np.log(10))
+        return loglum, loglumerr
+    elif D is None and Derr is None:
+        return logflux, logfluxerr
+    else:
+        raise ValueError("D and Derr need to either both be specified, or "
+                         "not.")
+
+def integrate_MGE_gaussian_table(
+        mgetable, distancetable, galnames=("Galaxy", "Galaxy")):
+    '''Integrates the MGE gaussians for all given objects.
+
+    MGEtable should be a large table containing all of the MGE expansion
+    parameters. There should also be a column containing the galaxy name
+    corresponding to each of the gaussians, so you know which one goes with
+    which.
+
+    Distancetable should be a table containing the galaxy name and the distance
+    and distance errors under "D" and "D_err".
+
+    Galnames shoul be a tuple containing the label for the galaxy column for
+    both the mgetable and the distancetable, respectively.
+    '''
+    mgelums = []
+    mgelumerrs = []
+    mge_grouped = mgetable.group_by(galnames[0])
+    # Iterate over all of the galaxy tables.
+    for key, group in izip(mge_grouped.groups.keys, mge_grouped.groups):
+        distancerow = distancetable[np.where(
+            distancetable[galnames[1]] == key[galnames[0]])]
+        d, derr = distancerow["D"], distancerow["D_err"]
+        lum, lumerr = integrate_MGE_gaussians(group, d, derr)
+        mgelums.append(lum)
+        mgelumerrs.append(lumerr)
+    lumtable = Table(distancetable[galnames[1]], mgelums, mgelumerrs,
+                     names=(galnames[0], "logL", "logL_err"))
+    return lumtable
+
 
 def read_McDermid_Table_4(
         URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
