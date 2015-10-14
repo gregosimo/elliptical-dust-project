@@ -2124,6 +2124,37 @@ def calc_statistical_product(multiplicand, multiplier, multiplicerr,
         (multiplier * multiplicerr)**2 + (multiplicand * multipliererr)**2)
     return product, producterr
 
+def calc_statistical_fractional_difference(num, denom, numerr, denomerr):
+    '''Returns the fractional difference between num and denom.
+
+    This equation takes the fractional difference (denom-num)/denom. It returns
+    a 2-tuple. The first value of the tuple is the fraction, and the second is
+    the error on that fraction.
+    '''
+    frac, fracerr = calc_statistical_quotient(num, denom, numerr, denomerr)
+    fracdiff = 1 - frac
+    return fracdiff, fracerr
+
+def calc_statistical_exponentiation(power, powerr, base=10):
+    '''Returns the exponentiation of the given exponent.
+
+    Base can be given as any base. It returns a 2-tuple. The first value of the
+    tuple is the exponentiation, and the second is the error on that
+    exponentiation.
+    '''
+    logarithm = base**power
+    logerr = logarithm * np.log(base) * powerr
+    return logarithm, logerr
+
+def calc_statistical_logarithm(num, numerr, base=10):
+    '''Returns the logarithm of the given number.
+
+    Base can be given as any base. It returns a 2-tuple. The first value of the
+    tuple is the logarithm, and the second is the error on the logarithm.
+    '''
+    exponent = np.log(num) / np.log(base)
+    experr = numerr / num / np.log(base)
+    return exponent, experr
 
 def calc_statistical_fraction_of_sums(allvalues, allerrs, nummask, denommask,
                                       propagate=False):
@@ -2699,6 +2730,10 @@ def calc_statistical_elliptical_mass_to_light_ratio(
         masslighterr = np.log10(10) * masslight * masslightlogerr
 
         return masslight, masslighterr
+
+def check_if_column(seq):
+    '''Verifies that the sequence is an Astropy Column.'''
+    return isInstance(seq, Column)
 
 def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
                         join_type="inner"):

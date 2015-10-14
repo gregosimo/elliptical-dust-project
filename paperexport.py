@@ -659,7 +659,7 @@ def generate_ATLAS3D_distance_errors(atlas3d_table_3=None):
     # distance determinations
     at3_group = at3.group_by("SBF")
     # When SBF=2, then the distances come from Mei et al (2007)
-    meigals = at3_group.groups[2][["Galaxy", "D"]]
+    meigals = at3_group.groups[2]
     meigals["D_err"] = 0.03 * meigals["D"]
     # Next precise is for galaxies which are in Virgo, so we'll make a table
     # for the non-Mei galaxies
@@ -673,7 +673,7 @@ def generate_ATLAS3D_distance_errors(atlas3d_table_3=None):
     nonvirgo = nonacs_group.groups[0]
     nonvirgo_group = nonvirgo.group_by("SBF")
     # The Tonry et al (2001) galaxies are the ones where SBF=1
-    tonrygals = nonvirgo_group.groups[1][["Galaxy", "D"]]
+    tonrygals = nonvirgo_group.groups[1]
     tonrygals["D_err"] = 0.10 * tonrygals["D"]
     # When SBF=0, we have multiple cases.
     nonSBF = nonvirgo_group.groups[0]
@@ -681,15 +681,16 @@ def generate_ATLAS3D_distance_errors(atlas3d_table_3=None):
     # When SBF=0 and NED-D > 0, then distance was taken from NED-D catalog.
     # There are two sets of methods which are good to ~10 percent, an <~20
     # percent. I'm gonna choose 15 percent just for current simplicity's sake.
-    NEDgals = nonSBF_group.groups[1:][["Galaxy", "D"]]
+    NEDgals = nonSBF_group.groups[1:]
     NEDgals["D_err"] = 0.15 * NEDgals["D"]
     # We took care of the 5 cases. Now for the rest which are only avaialble
     # through cosmic flow velocities.
-    nonNEDgals = nonSBF_group.groups[0][["Galaxy", "D"]]
+    nonNEDgals = nonSBF_group.groups[0]
     nonNEDgals["D_err"] = 0.21 * nonNEDgals["D"]
 
     distance_error_table = vstack([meigals, virgogals, tonrygals, NEDgals,
-                                   nonNEDgals])
+                                   nonNEDgals])[["Galaxy", "D_err"]]
+    print distance_error_table
     full_table = phot.join_by_galaxy_name(
         at3, distance_error_table, names=("Galaxy", "Galaxy"), join_type="left")
     return full_table
