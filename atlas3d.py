@@ -232,7 +232,7 @@ def read_MGE_models(BASEDIR, galnames, galcol="Galaxy",
     fullmodeltable = vstack(modellist)
     return fullmodeltable
 
-def integrate_MGE_gaussians(mgetable, D=None, Derr=None):
+def integrate_MGE_gaussians(mgetable, D=None, Derr=None, lastgaussianweight=1):
     '''Takes a table with MGE parameters and calculates fluxes.
 
     This involves using Equation (1) from Scott et al. (2013). Due to the
@@ -241,13 +241,16 @@ def integrate_MGE_gaussians(mgetable, D=None, Derr=None):
     Specify the distance in the D argument in Mpc. Derr will be used to
     calculate the error in the luminosity.
     '''
-    gauss_sum = np.sum(2 * np.pi * mgetable["Ij"] * mgetable["sigj"]**2 *
-                       mgetable["qj"])
+    gauss_sum = np.sum(2 * np.pi * mgetable["Ij"] * 
+            (mgetable["sigj"]/206265)**2 * mgetable["qj"])
+    gauss_sum -= (2 * np.pi * mgetable["Ij"][-1] *
+            (mgetable["sigj"][-1]/206265)**2 * 
+            mgetable["qj"][-1]) * (1 - lastgaussianweight)
     logflux = np.log10(gauss_sum/4/np.pi)
     logfluxerr = 0.1 / np.log(10) # Flux errors are around 10 percent.
     if D is not None and Derr is not None:
-        loglum = logflux + np.log10(4*np.pi) + np.log10(D*1e6)
-        loglumerr = np.sqrt(logfluxerr**2 + Derr/D/np.log(10))
+        loglum = logflux + np.log10(4*np.pi) + 2 * np.log10(D*1e6)
+        loglumerr = np.sqrt(logfluxerr**2 + (2*Derr/D/np.log(10))**2)
         return loglum, loglumerr
     elif D is None and Derr is None:
         return logflux, logfluxerr
@@ -256,7 +259,8 @@ def integrate_MGE_gaussians(mgetable, D=None, Derr=None):
                          "not.")
 
 def integrate_MGE_gaussian_table(
-        mgetable, distancetable, galnames=("Galaxy", "Galaxy"), leaveoff=0):
+        mgetable, distancetable, galnames=("Galaxy", "Galaxy"),
+        lastgaussianweight=1):
     '''Integrates the MGE gaussians for all given objects.
 
     MGEtable should be a large table containing all of the MGE expansion
@@ -270,9 +274,13 @@ def integrate_MGE_gaussian_table(
     Galnames should be a tuple containing the label for the galaxy column for
     both the mgetable and the distancetable, respectively.
 
-    Leaveoff is a parameter for how many of the widest gaussians to exclude
-    from the integration. 0 would not exclude any. 1 would exclude the last
-    one. And so on.
+    Lastgaussianweight is the factor by which the largest gaussian is weighted.
+    This is supposed to simulate the fact that the aperture size for the galaxy
+    will probably be determined by the largest gaussian. Therefore, all of the
+    flux inside the aperture will be included, while the flux outside the
+    gaussian will not. Unfortunately, I don't have an automatic way to simply
+    use the size of the aperture in terms of sigma for the outer aperture yet.
+    But that will replace this keyword.
     '''
     mgelums = []
     mgelumerrs = []
@@ -282,9 +290,9 @@ def integrate_MGE_gaussian_table(
     for key, group in izip(mge_grouped.groups.keys, mge_grouped.groups):
         distancerow = distancetable[np.where(
             distancetable[galnames[1]] == key[galnames[0]])]
-        d, derr = distancerow["D"], distancerow["D_err"]
+        d, derr = distancerow["D"][0], distancerow["D_err"][0]
         lum, lumerr = integrate_MGE_gaussians(
-                group[:len(group)-leaveoff], d, derr)
+                group, d, derr, lastgaussianweight=lastgaussianweight)
         mgelums.append(lum)
         mgelumerrs.append(lumerr)
         mgegalname.append(key[galnames[0]])
@@ -313,6 +321,7 @@ def get_largest_gaussian(
         mgesigs.append(largest_row[signame])
     sigtable = Table([mgegals, mgesigs], names=(galname, signame))
     return sigtable
+
 def read_McDermid_Table_4(
         URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
              "McDermid2015_Atlas3D_Paper30_Table4.txt")):
