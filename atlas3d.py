@@ -4,6 +4,7 @@ from itertools import izip
 from astropy.table import Table, vstack
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.special
 
 import photometry as phot
 import band_conversions as conv
@@ -232,20 +233,30 @@ def read_MGE_models(BASEDIR, galnames, galcol="Galaxy",
     fullmodeltable = vstack(modellist)
     return fullmodeltable
 
-def integrate_MGE_gaussians(mgetable, D=None, Derr=None, lastgaussianweight=1):
+def integrate_MGE_gaussians(mgetable, D=None, Derr=None, aperturesize=np.inf):
     '''Takes a table with MGE parameters and calculates fluxes.
 
     This involves using Equation (1) from Scott et al. (2013). Due to the
     ambiguity of the equation, this function will either return a flux or a
-    luminosity. In order to get a luminosity, distances will be required.
+    luminosity. 
+    
+    In order to get a luminosity, distances will be required.
     Specify the distance in the D argument in Mpc. Derr will be used to
-    calculate the error in the luminosity.
+    calculate the error in the luminosity. The luminosity will be returned in
+    terms of the log of the luminosity in solar luminosity units. Fluxes will
+    be returned in terms of the log of the luminosity in solar luminosities per
+    square parsec.
+
+    The aperturesize parameter allows an elliptical aperture to be used of the
+    same shape as the galaxy with a given semimajor axis. The default value is
+    the numpy floating-point value for Infinity, in which case all flux will be
+    included. The value of aperturesize should be given in arcseconds.
     '''
+    # The sqrt(2) takes into account the fact that erf is defined as the
+    # integral of e**t**2 rather than e**(t**2/2).
+    apweights = scipy.special.erf(aperturesize/mgetable["sigj"]/np.sqrt(2))
     gauss_sum = np.sum(2 * np.pi * mgetable["Ij"] * 
-            (mgetable["sigj"]/206265)**2 * mgetable["qj"])
-    gauss_sum -= (2 * np.pi * mgetable["Ij"][-1] *
-            (mgetable["sigj"][-1]/206265)**2 * 
-            mgetable["qj"][-1]) * (1 - lastgaussianweight)
+            (mgetable["sigj"]/206265)**2 * mgetable["qj"] * apweights)
     logflux = np.log10(gauss_sum/4/np.pi)
     logfluxerr = 0.1 / np.log(10) # Flux errors are around 10 percent.
     if D is not None and Derr is not None:
@@ -260,7 +271,7 @@ def integrate_MGE_gaussians(mgetable, D=None, Derr=None, lastgaussianweight=1):
 
 def integrate_MGE_gaussian_table(
         mgetable, distancetable, galnames=("Galaxy", "Galaxy"),
-        lastgaussianweight=1):
+        lastgaussianscale=np.inf):
     '''Integrates the MGE gaussians for all given objects.
 
     MGEtable should be a large table containing all of the MGE expansion
@@ -274,13 +285,12 @@ def integrate_MGE_gaussian_table(
     Galnames should be a tuple containing the label for the galaxy column for
     both the mgetable and the distancetable, respectively.
 
-    Lastgaussianweight is the factor by which the largest gaussian is weighted.
-    This is supposed to simulate the fact that the aperture size for the galaxy
-    will probably be determined by the largest gaussian. Therefore, all of the
-    flux inside the aperture will be included, while the flux outside the
-    gaussian will not. Unfortunately, I don't have an automatic way to simply
-    use the size of the aperture in terms of sigma for the outer aperture yet.
-    But that will replace this keyword.
+
+    Lastgaussianscale is the factor which determines the aperture size for each
+    object. The aperture size will be lastgaussianscale*max(sigj). In other
+    words, the size of the aperture will be lastgaussianscale sigma of the
+    largest Gaussian making up the MGE model. The default value is to have an
+    infinitely large aperture.
     '''
     mgelums = []
     mgelumerrs = []
@@ -291,8 +301,9 @@ def integrate_MGE_gaussian_table(
         distancerow = distancetable[np.where(
             distancetable[galnames[1]] == key[galnames[0]])]
         d, derr = distancerow["D"][0], distancerow["D_err"][0]
+        largest_gaussian = max(group["sigj"])
         lum, lumerr = integrate_MGE_gaussians(
-                group, d, derr, lastgaussianweight=lastgaussianweight)
+                group, d, derr, aperturesize=lastgaussianscale*largest_gaussian)
         mgelums.append(lum)
         mgelumerrs.append(lumerr)
         mgegalname.append(key[galnames[0]])
