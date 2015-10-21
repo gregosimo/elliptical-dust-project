@@ -1807,7 +1807,7 @@ def aperture_photometry_table(
         photcolumns[photerr] = []
 
     if colorIndices is None:
-        colorIndices = [-2] * len(objectnames)
+        colorIndices = [2] * len(objectnames)
     if len(colorIndices) != len(objectnames):
         raise ValueError("Need same number of color indices and objects.")
 
@@ -2080,9 +2080,21 @@ def calc_statistical_difference(minuend, subtrahend, minuerr, subtraerr):
     then returns a 2-tuple. The first is simply the difference of the mean. The
     second is the errors of the differences.
     '''
-    means = minuend - subtrahend
-    meanerrs = np.sqrt(minuerr**2 + subtraerr**2)
-    return means, meanerrs
+    difference, differr = calc_statistical_sum(
+        minuend, -subtrahend, minuerr, subtraerr)
+    return (difference, differr)
+
+def calc_statistical_sum(augend, addend, augerr, adderr):
+    '''Returns the statistically summed value of two arrays.
+
+    This function takes two arrays involving two measurements with errors. It
+    then returns a 2-tuple. The first value is simply the sum, and the second
+    is the error on the sum.
+    '''
+    sums = augend + addend
+    sumerrs = np.sqrt(augerr**2 + adderr**2)
+    return (sums, sumerrs)
+
 
 def calc_statistical_quotient(dividend, divisor, dividenderr, divisorerr):
     '''Returns the statistically divided quotient of two arrays.
@@ -2091,9 +2103,58 @@ def calc_statistical_quotient(dividend, divisor, dividenderr, divisorerr):
     then returns a 2-tuple. The first is simply the ratio of the numbers. The
     second is the error of that ratio.'''
     quotient = dividend / divisor
-    quoterrs = np.sqrt(quotient**2 * ((dividenderr / dividend)**2 + 
-                                      (divisorerr / divisor)**2))
+    # This is more robust to the dividend being equal to zero. If the divisor
+    # is equal to zero, we will still have problems.
+    quoterrs = np.sqrt(
+        (dividenderr / divisor)**2 + (dividend * divisorerr / divisor**2)**2)
     return quotient, quoterrs
+
+def calc_statistical_product(multiplicand, multiplier, multiplicerr,
+                             multiplierr):
+    '''Returns the statistically multiplied product of two arrays.
+
+    This function takes two arrays involving two measurements with errors. It
+    returns a 2-tuple. The first value of the tuple is the product; the second
+    is the error of that product.
+    '''
+    product = multiplicand + multiplier
+    # I could do this the fancy way, but the fancy way fails if either of the
+    # multiplicand or multiplier are zero. So let's not.
+    producterr = np.sqrt(
+        (multiplier * multiplicerr)**2 + (multiplicand * multipliererr)**2)
+    return product, producterr
+
+def calc_statistical_fractional_difference(num, denom, numerr, denomerr):
+    '''Returns the fractional difference between num and denom.
+
+    This equation takes the fractional difference (denom-num)/denom. It returns
+    a 2-tuple. The first value of the tuple is the fraction, and the second is
+    the error on that fraction.
+    '''
+    frac, fracerr = calc_statistical_quotient(num, denom, numerr, denomerr)
+    fracdiff = 1 - frac
+    return fracdiff, fracerr
+
+def calc_statistical_exponentiation(power, powerr, base=10):
+    '''Returns the exponentiation of the given exponent.
+
+    Base can be given as any base. It returns a 2-tuple. The first value of the
+    tuple is the exponentiation, and the second is the error on that
+    exponentiation.
+    '''
+    logarithm = base**power
+    logerr = logarithm * np.log(base) * powerr
+    return logarithm, logerr
+
+def calc_statistical_logarithm(num, numerr, base=10):
+    '''Returns the logarithm of the given number.
+
+    Base can be given as any base. It returns a 2-tuple. The first value of the
+    tuple is the logarithm, and the second is the error on the logarithm.
+    '''
+    exponent = np.log(num) / np.log(base)
+    experr = numerr / num / np.log(base)
+    return exponent, experr
 
 def calc_statistical_fraction_of_sums(allvalues, allerrs, nummask, denommask,
                                       propagate=False):
@@ -2654,18 +2715,25 @@ def calc_statistical_elliptical_mass_to_light_ratio(
     This function implements Equation 8 in Jarrett 2013. Note that it only
     applies to early-type galaxies.'''
 
-    w1w2, w1w2err = calc_statistical_difference(W1, W2, W1err, W2err)
+    w1w2, w1w2err = calc_statistical_difference(
+        conv.AB2Vegamag('W1', W1), conv.AB2Vegamag('W2', W2), W1err, W2err)
 
-    masslightlog = -0.31 + 3.42 * w1w2
-    masslightlogerr = 3.42 * w1w2err
+    # I'm adding two terms: one for conversion from [3.6] to W1, and another
+    # for conversion from W1 Vega to r-band AB.
+    masslightlog = 0.04 + 3.98 * w1w2
+    masslightlogerr = 0
     
     if retlog:
         return masslightlog, masslightlogerr
     else:
         masslight = 10**(masslightlog)
-        masslighterr = np.log(10) * masslight * masslightlogerr
+        masslighterr = np.log10(10) * masslight * masslightlogerr
 
         return masslight, masslighterr
+
+def check_if_column(seq):
+    '''Verifies that the sequence is an Astropy Column.'''
+    return isInstance(seq, Column)
 
 def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
                         join_type="inner"):
@@ -2695,6 +2763,8 @@ def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
     table2[name1] = object_name_to_dir(table2[name2])
     # Now join them.
     newtable = join(table1, table2, keys=[name1], join_type=join_type)
+    if name1 != name2:
+        del(newtable[name2])
     # Set columns back.
     table1[name1] = tempcol1
     return newtable

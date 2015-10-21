@@ -1,6 +1,7 @@
 import os
+from itertools import izip
 
-from astropy.table import Table
+from astropy.table import Table, vstack
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -184,6 +185,142 @@ def read_McDermid_Table_3(
     #    URL, format="ascii.commented_header", guess=False, header_start=-4, 
     #    data_start=0)
     return mcdermid_table
+
+def read_MGE_model(modelfolder, galname, galcol="Galaxy"):
+    '''Reads an MGE model file from Scott et al 2013.
+
+    The structure of this file can be found in Table 2. This function will
+    return the table, with the galaxy name given under the column of "galcol".
+    '''
+    modelpath = os.path.join(
+        modelfolder, "mge_{0}.txt".format(phot.object_name_to_dir(galname)))
+    modeltable = Table.read(
+        modelpath, format="ascii.no_header", names=("Ij", "sigj", "qj"),
+        data_start=1, guess=False)
+    modeltable[galcol] = galname
+    ordered_mt = modeltable[galcol, "Ij", "sigj", "qj"]
+    return ordered_mt
+
+def read_MGE_models(BASEDIR, galnames, galcol="Galaxy", 
+                    modelfolder="mge_parameters_atlas3d"):
+    '''Reads in the MGE models for the objects in galnames.
+
+    This function will return an astropy table with the model parameters, and a
+    column labeled "galcol", which will have the name of the galaxy
+    corresponding to each model parameter. The utility of this approach lies in
+    the astropy.table.Table.group_by() method, where subtables corresponding to
+    each galaxy can be separated.
+    '''
+    modelfolderpath = os.path.join(BASEDIR, modelfolder)
+    # Since vstack accepts a sequece of tables, we'll just make our own list.
+    # We're not using a list comprehension for the sake of exception handling. 
+    modellist = []
+    for galname in galnames:
+        try:
+            mgemodel = read_MGE_model(
+                    modelfolderpath, galname, galcol)
+        except IOError:
+            # This means that there isn't an MGE model for this galaxy. So
+            # ignore it.
+            continue
+        except Exception:
+            if not phot.check_if_column(galnames):
+                raise ValueError("Galnames is not an Astropy Column")
+            else:
+                raise
+        modellist.append(mgemodel)
+    fullmodeltable = vstack(modellist)
+    return fullmodeltable
+
+def integrate_MGE_gaussians(mgetable, D=None, Derr=None, lastgaussianweight=1):
+    '''Takes a table with MGE parameters and calculates fluxes.
+
+    This involves using Equation (1) from Scott et al. (2013). Due to the
+    ambiguity of the equation, this function will either return a flux or a
+    luminosity. In order to get a luminosity, distances will be required.
+    Specify the distance in the D argument in Mpc. Derr will be used to
+    calculate the error in the luminosity.
+    '''
+    gauss_sum = np.sum(2 * np.pi * mgetable["Ij"] * 
+            (mgetable["sigj"]/206265)**2 * mgetable["qj"])
+    gauss_sum -= (2 * np.pi * mgetable["Ij"][-1] *
+            (mgetable["sigj"][-1]/206265)**2 * 
+            mgetable["qj"][-1]) * (1 - lastgaussianweight)
+    logflux = np.log10(gauss_sum/4/np.pi)
+    logfluxerr = 0.1 / np.log(10) # Flux errors are around 10 percent.
+    if D is not None and Derr is not None:
+        loglum = logflux + np.log10(4*np.pi) + 2 * np.log10(D*1e6)
+        loglumerr = np.sqrt(logfluxerr**2 + (2*Derr/D/np.log(10))**2)
+        return loglum, loglumerr
+    elif D is None and Derr is None:
+        return logflux, logfluxerr
+    else:
+        raise ValueError("D and Derr need to either both be specified, or "
+                         "not.")
+
+def integrate_MGE_gaussian_table(
+        mgetable, distancetable, galnames=("Galaxy", "Galaxy"),
+        lastgaussianweight=1):
+    '''Integrates the MGE gaussians for all given objects.
+
+    MGEtable should be a large table containing all of the MGE expansion
+    parameters. There should also be a column containing the galaxy name
+    corresponding to each of the gaussians, so you know which one goes with
+    which.
+
+    Distancetable should be a table containing the galaxy name and the distance
+    and distance errors under "D" and "D_err".
+
+    Galnames should be a tuple containing the label for the galaxy column for
+    both the mgetable and the distancetable, respectively.
+
+    Lastgaussianweight is the factor by which the largest gaussian is weighted.
+    This is supposed to simulate the fact that the aperture size for the galaxy
+    will probably be determined by the largest gaussian. Therefore, all of the
+    flux inside the aperture will be included, while the flux outside the
+    gaussian will not. Unfortunately, I don't have an automatic way to simply
+    use the size of the aperture in terms of sigma for the outer aperture yet.
+    But that will replace this keyword.
+    '''
+    mgelums = []
+    mgelumerrs = []
+    mgegalname = []
+    mge_grouped = mgetable.group_by(galnames[0])
+    # Iterate over all of the galaxy tables.
+    for key, group in izip(mge_grouped.groups.keys, mge_grouped.groups):
+        distancerow = distancetable[np.where(
+            distancetable[galnames[1]] == key[galnames[0]])]
+        d, derr = distancerow["D"][0], distancerow["D_err"][0]
+        lum, lumerr = integrate_MGE_gaussians(
+                group, d, derr, lastgaussianweight=lastgaussianweight)
+        mgelums.append(lum)
+        mgelumerrs.append(lumerr)
+        mgegalname.append(key[galnames[0]])
+    lumtable = Table([mgegalname, mgelums, mgelumerrs],
+                     names=(galnames[0], "logL", "logL_err"))
+    return lumtable
+
+def get_largest_gaussian(
+        mgetable, galname="Galaxy", signame="sigj"):
+    '''Gets the width of the largest gaussian for each galaxy in mgetable.
+
+    MGEtable should be a large table containing all of the MGE expansion
+    parameters. There should also be a column containing hte galaxy name
+    corresponding to each of the Gaussians, so you know which one goes with
+    which.
+
+    This function will output a table containing the galaxy name along with the
+    width of the largest gaussian.
+    '''
+    mgegals = []
+    mgesigs = []
+    mge_grouped = mgetable.group_by(galname)
+    for key, group in izip(mge_grouped.groups.keys, mge_grouped.groups):
+        largest_row = group[-1]
+        mgegals.append(largest_row[galname])
+        mgesigs.append(largest_row[signame])
+    sigtable = Table([mgegals, mgesigs], names=(galname, signame))
+    return sigtable
 
 def read_McDermid_Table_4(
         URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
