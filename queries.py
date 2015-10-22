@@ -144,12 +144,13 @@ def batch_download_images(BASEDIR, objects, ras, decs, surveys, size=600,
             """
 
 
-def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE, 
-        catalog=CATALOG_NAMES["AllWISE"], radius=10, 
+def query_WISE_catalog_file_upload(
+        inputpath, url=CATALOG_BASE, catalog=CATALOG_NAMES["AllWISE"], 
+        radius=10, clearentries=[],
         cols=['ra', 'dec', 'xscprox', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
-        'w1sat', 'w2rsemi', 'w2ba', 'w2pa', 'w2gmag', 'w2sat', 'w3rsemi', 
-        'w3ba', 'w3pa', 'w3gmag', 'w3sat', 'w4rsemi', 'w4ba', 'w4pa', 
-        'w4gmag', 'w4sat'], clearentries=[]):
+              'w1gerr', 'w1sat', 'w2rsemi', 'w2ba', 'w2pa', 'w2gmag', 'w2gerr', 
+              'w2sat', 'w3rsemi', 'w3ba', 'w3pa', 'w3gmag', 'w3gerr', 'w3sat', 
+              'w4rsemi', 'w4ba', 'w4pa', 'w4gmag', 'w4gerr', 'w4sat']):
     '''Queries IRSA for the objects found in the given catalog.
     The filename '''	
     data = {"catalog": catalog, "spatial": "Upload", "uradius": radius, 
@@ -192,8 +193,14 @@ def clear_invalid_entries(fulltable, indexcolumn):
     except AttributeError:
         return fulltable
 
-def get_WISE_catalog_entries(objectfile, localallwise="", localallsky="",
-                             missing_galaxies_error=True):
+def get_WISE_catalog_entries(
+        objectfile, localallwise="", localallsky="", 
+        missing_galaxies_error=True,
+        cols=['ra', 'dec', 'xscprox', 'w1rsemi', 'w1ba', 'w1pa', 'w1gmag', 
+              'w1gerr', 'w1sat', 'w2rsemi', 'w2ba', 'w2pa', 'w2gmag', 'w2gerr', 
+              'w2sat', 'w3rsemi', 'w3ba', 'w3pa', 'w3gmag', 'w3gerr', 'w3sat', 
+              'w4rsemi', 'w4ba', 'w4pa', 'w4gmag', 'w4gerr', 'w4sat'], 
+        clearentries=["w1rsemi"]):
     '''Gets entries from objectfile and returns it as a table.
 	
     This function first gets the AllWISE data for the objects in objectfile,
@@ -228,14 +235,16 @@ def get_WISE_catalog_entries(objectfile, localallwise="", localallsky="",
     if localallwise:
         allwiseTable = Table.read(localallwise, format="ascii.ipac")
     else:
-        allwiseTable = query_WISE_catalog_file_upload(objectfile, 
-                catalog=CATALOG_NAMES["AllWISE"], clearentries=["w1rsemi"])
+        allwiseTable = query_WISE_catalog_file_upload(
+            objectfile, catalog=CATALOG_NAMES["AllWISE"], 
+            clearentries=clearentries, cols=cols)
 
     if localallsky:
         allskyTable = Table.read(localallwise, format="ascii.ipac")
     else:
-        allskyTable = query_WISE_catalog_file_upload(objectfile, 
-                catalog=CATALOG_NAMES["All-Sky"], clearentries=["w1rsemi"])
+        allskyTable = query_WISE_catalog_file_upload(
+            objectfile, catalog=CATALOG_NAMES["All-Sky"], 
+            cols=cols, clearentries=clearentries)
 
     combinedtable = join(allwiseTable, allskyTable, join_type="outer",
                          table_names=["allwise", "allsky"], keys="objstr_01")
@@ -294,12 +303,13 @@ def get_2MASS_catalog_entries(objectfile, mags="AB"):
     The mags specifies whether the 2MASS entries should be in Vega magnitudes
     or AB magnitudes. By default, they will be converted to AB.
     '''
-    twomassTable = query_WISE_catalog_file_upload(objectfile,
-            catalog=CATALOG_NAMES["2MASS"], cols=("ra", "dec", "j_m_k20fe",
-            "j_msig_k20fe", "h_m_k20fe", "h_msig_k20fe", "k_m_k20fe",
-            "k_msig_k20fe", "j_m_fe", "j_msig_fe", "h_m_fe", "h_msig_fe",
-            "k_m_fe", "k_msig_fe", "j_m_ext", "j_msig_ext", "h_m_ext", 
-            "h_msig_ext", "k_m_ext", "k_msig_ext"), clearentries=[])
+    twomassTable = query_WISE_catalog_file_upload(
+        objectfile, catalog=CATALOG_NAMES["2MASS"], 
+        cols=("ra", "dec", "r_k20fe", "sup_ba", "j_m_k20fe", "j_msig_k20fe", "h_m_k20fe", 
+              "h_msig_k20fe", "k_m_k20fe", "k_msig_k20fe", "j_m_fe", 
+              "j_msig_fe", "h_m_fe", "h_msig_fe", "k_m_fe", "k_msig_fe", 
+              "j_m_ext", "j_msig_ext", "h_m_ext", "h_msig_ext", "k_m_ext", 
+              "k_msig_ext"), clearentries=[])
     if mags == "AB":
         conv.convert_2MASS_table_to_AB(twomassTable)
     return twomassTable

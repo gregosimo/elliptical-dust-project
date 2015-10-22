@@ -341,6 +341,15 @@ def read_McDermid_Table_4(
 
     return mcdermid_table
 
+def complete_atlas3d_photometry_table(catalog,
+    replacement_table=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
+                       "atlas3d_XSC_override.tbl")):
+    newgals = Table.read(replacement_table, format="ascii.ipac")
+    allgone = np.all([x in catalog["objstr_01"] for x in 
+                      newgals["objstr_01"]])
+    allhere = np.any([x in catalog["objstr_01"] for x in 
+                      newgals["objstr_01"]])
+
 def get_dustless_galaxies(krajnovic_table=None):
     '''Gets dustless galaxies in ATLAS3D. 
 

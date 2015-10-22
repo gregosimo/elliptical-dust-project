@@ -988,6 +988,29 @@ def source_uncertainty_from_uncertainty_file(galaxydir, band, uncfile,
     output = format_band_dependence(outputbase, band, "tab", galaxydir)
     run_ellipse(varfile, ellipse_file, output)
 
+def read_aperture_transformation_table(
+        tab="/home/regulus/simonian/Downloads/wise-xscshape.tbl"):
+    f = open(tab, 'r')
+    # A list to hold the lines which have the headers.
+    headerlines = []
+    comment = "#"
+    comment_offset = 0
+    for i, line in enumerate(f):
+        if line.startswith("|"):
+            headerlines.append(i-comment_offset)
+        elif line.startswith(comment):
+            comment_offset += 1
+    endlines = headerlines[1:] + [None]
+    # Now to read the tables in, bit by bit.
+    tablelist = []
+    for start, end in zip(headerlines, endlines):
+        tablelist.append(
+            Table.read(
+                tab, format="ascii.fixed_width", header_start=start,
+                data_start=start+1, data_end=end, comment=comment))
+    return vstack(tablelist)
+
+
 def genEllipsetables(BASEDIR, WISErow, baseparamname="ellipsepars",
         baseoutput="ellipse_aperture", maskbase="mask", runbands=bands):
     '''Generates a table on the object for each band.
