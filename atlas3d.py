@@ -349,6 +349,12 @@ def complete_atlas3d_photometry_table(catalog,
                       newgals["objstr_01"]])
     allhere = np.any([x in catalog["objstr_01"] for x in 
                       newgals["objstr_01"]])
+    if allgone:
+        return vstack([catalog, newgals])
+    elif allhere:
+        return catalog
+    else:
+        raise ValueError("ATLAS3D Catalog has mixture of 
 
 def get_dustless_galaxies(krajnovic_table=None):
     '''Gets dustless galaxies in ATLAS3D. 
