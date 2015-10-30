@@ -150,6 +150,35 @@ def plot_dustless_galaxy_histogram(
     plt.ylabel("N")
     plt.title(title)
 
+def atlas3d_ml_to_wise_ml(log_atlas3d_ml, log_atlas3d_lum, w1_mag, distance,
+                          log_atlas3d_ml_err, log_atlas3d_lum_err, w1_mag_err,
+                          distance_err):
+    '''Converts the (M/L) in r-band for ATLAS3D to W1 with K20fe.
+    
+    Takes the mass-to-light ratio given in the ATLAS3D papers and performs a
+    transformation to W1 as well as an aperture transformation. This function
+    assumes that the mass-to-light ratio is constant over the entire galaxy,
+    which is not an unreasonable assumption. The ATLAS3D luminosity provided is
+    that in Paper XV in solar luminosities. The WISE magnitude should be that
+    measured in the ATLAS3D aperture, NOT the K20 aperture, and should be given
+    in AB magnitudes. Finally, in order to transition between 
+    luminosity and magnitudes, the distance to the object (in Mpc) is needed.
+
+    Handing errors is not as straightforward as it might seem. The
+    uncertainties that go into the mass-to-light ratio should be the modeling
+    uncertainties, the distance uncertainties, and the flux uncertainties for
+    both the r-band and W1 fluxes. Typical errors for modeling as given in
+    ATLAS3D are 6%. Errors for the photometry are 10%
+    '''
+    new_ml = (log_atlas3d_ml + 0.4 * (
+        w1_mag - 5 * np.log10(distance*1e5) - 
+        conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"]) + log_atlas3d_lum)
+    new_ml_err = np.sqrt(
+        log_atlas3d_ml_err**2 + (2 * distance_err / distance / np.log(10))**2 +
+        (0.4 * w1_mag_err)**2 + log_atlas3d_lum_err**2)
+    return new_ml, new_ml_err
+
+
 def read_Krajnovic_Table_D1(
         URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
              "Krajnovic2011_Atlas3D_Paper2_TableD1.txt")):
@@ -160,32 +189,6 @@ def read_Krajnovic_Table_D1(
         URL, format="ascii.commented_header", guess=False, header_start=-5, 
         data_start=0)
     return krajnovic_table
-
-def read_McDermid_Table_3(
-        URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
-             "McDermid2015_Atlas3D_Paper30_Table3.txt")):
-    '''Reads in the table from McDermid 2015
-
-    This table contains all of the early-type galaxies in the ATLAS3D sample,
-    as well as their properties as measured by the Re aperture.'''
-    mcdermid_raw_table = Table.read(
-        URL, format="ascii.basic", data_start=0, header_start=None, 
-        fill_values=("--", "0"))
-    mcdermid_table = Table(
-        mcdermid_raw_table[[
-            "col1", "col2", "col4", "col5", "col7", "col8", "col10", "col11",
-            "col13", "col14", "col16", "col17", "col19", "col20", "col22",
-            "col23"]], 
-        names=(
-            "Name", "Hbeta", "Hbeta_err", "Fe5015", "Fe5015_err", "Mgb",
-            "Mgb_err", "Fe5270", "Fe5270_err", "Age_SSP", "Age_SSP_err",
-            "[Z/H]_SSP", "[Z/H]_SSP_er", "[a/Fe]_SSP", "[a/Fe]_SSP_err",
-            "Quality"))
-    # The plus/minus symbols really ruin this command...
-    # mcdermid_table = Table.read(
-    #    URL, format="ascii.commented_header", guess=False, header_start=-4, 
-    #    data_start=0)
-    return mcdermid_table
 
 def read_MGE_model(modelfolder, galname, galcol="Galaxy"):
     '''Reads an MGE model file from Scott et al 2013.
@@ -332,25 +335,6 @@ def get_largest_gaussian(
         mgesigs.append(largest_row[signame])
     sigtable = Table([mgegals, mgesigs], names=(galname, signame))
     return sigtable
-
-def read_McDermid_Table_4(
-        URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
-             "McDermid2015_Atlas3D_Paper30_Table4.txt")):
-    '''Reads in the table from McDermid 2015
-
-    This table contains all of the early-type galaxies in the ATLAS3D sample,
-    as well as their properties as measured by the Re aperture.'''
-    mcdermid_raw_table = Table.read(
-        URL, format="ascii.basic", data_start=0, header_start=None, 
-        fill_values=("--", "0"))
-    mcdermid_table = Table(
-        mcdermid_raw_table[[
-            "col1", "col2", "col4", "col5", "col7", "col8", "col10"]],
-        names=(
-            "Name", "Age_SFH", "Age_SFH_err", "[Z/H]_SFH", "[Z/H]_SFH_err", 
-            "t50", "t50_err"))
-
-    return mcdermid_table
 
 def get_dustless_galaxies(krajnovic_table=None):
     '''Gets dustless galaxies in ATLAS3D. 

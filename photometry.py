@@ -3125,7 +3125,7 @@ def check_if_column(seq):
     return isInstance(seq, Column)
 
 def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
-                        join_type="inner"):
+                        join_type="inner", conflict_suffixes=("_A", "_B")):
     '''Joins two tables by the provided name columns. 
 
     By default, both columns should be called "objstr_01", in which, if both
@@ -3134,7 +3134,10 @@ def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
     columns to be in folder form before performing the join. It will also be
     capable of performing joins where the galaxy names are in differently-named
     columns. In this case, the galaxy name of the output column will be decided
-    by whichever table is passed first to table1.
+    by whichever table is passed first to table1. In order to allow certain
+    columns to keep their name, conflict suffixes should not be assumed to have
+    an underscore, or any other joining character as done by the Astropy
+    default. These must be added on their own.
     '''
     # Here are a list of corner cases that I can come up with:
     # 1) names are different and name2 does not have a different column with
@@ -3151,7 +3154,9 @@ def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
     table1[name1] = object_name_to_dir(table1[name1])
     table2[name1] = object_name_to_dir(table2[name2])
     # Now join them.
-    newtable = join(table1, table2, keys=[name1], join_type=join_type)
+    newtable = join(table1, table2, keys=[name1], join_type=join_type,
+                    table_names=list(conflict_suffixes),
+                    uniq_col_name="{col_name}{table_name}")
     if name1 != name2:
         del(newtable[name2])
     # Set columns back.
