@@ -594,6 +594,25 @@ def read_McDermid15_Table_3(
     atlas3dsample = separate_errors_in_table(atlas3dsample)
     return atlas3dsample
 
+def read_McDermid_Table_4(
+        URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
+             "McDermid2015_Atlas3D_Paper30_Table4.txt")):
+    '''Reads in the table from McDermid 2015
+
+    This table contains all of the early-type galaxies in the ATLAS3D sample,
+    as well as their properties as measured by the Re aperture.'''
+    mcdermid_raw_table = Table.read(
+        URL, format="ascii.basic", data_start=0, header_start=None, 
+        fill_values=("--", "0"))
+    mcdermid_table = Table(
+        mcdermid_raw_table[[
+            "col1", "col2", "col4", "col5", "col7", "col8", "col10"]],
+        names=(
+            "Name", "Age_SFH", "Age_SFH_err", "[Z/H]_SFH", "[Z/H]_SFH_err", 
+            "t50", "t50_err"))
+
+    return mcdermid_table
+
 def separate_errors_in_table(fulltable, seperator="+/-", suffix="_err",
                              mask="--"):
     '''Formats table to have separate error column.
