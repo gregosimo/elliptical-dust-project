@@ -2524,7 +2524,7 @@ def calc_statistical_fractional_difference(num, denom, numerr, denomerr):
     fracdiff = 1 - frac
     return fracdiff, fracerr
 
-def calc_statistical_exponentiation(power, powerr, base=10):
+def calc_statistical_exponentiation(base, power, baserr, powerr):
     '''Returns the exponentiation of the given exponent.
 
     Base can be given as any base. It returns a 2-tuple. The first value of the
@@ -2532,7 +2532,8 @@ def calc_statistical_exponentiation(power, powerr, base=10):
     exponentiation.
     '''
     logarithm = base**power
-    logerr = logarithm * np.log(base) * powerr
+    logerr = np.sqrt((logarithm * np.log(base) * powerr)**2 + (
+        power * base**(power-1) * baserr)**2)
     return logarithm, logerr
 
 def calc_statistical_logarithm(num, numerr, base=10):
