@@ -1472,6 +1472,35 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=bands,
         maskbase=maskbase, suffix=suffix, sizescale=sizescale)
     matplotlib.use(current_backend)
 
+def ellipse_cutout_grid(BASEDIR, WISEtable, runbands=bands, skyAperture=True,
+                        skyimage=False, skyprefix="sky_level",
+                        aperturefile="ellipse_aperture", skymethod="adaptive",
+                        maskbase="mask", sizescale=1.5):
+    '''Returns a figure with a grid of cutout figures.
+
+    The horizontal grid tracks are different bands in runbands. The vertical
+    grid tracks are different images in WISEtable.
+
+    WARNING: DO NOT SUPPLY THE ENTIRE TABLE TO THIS FUNCTION!
+    '''
+    if len(WISEtable) > 10:
+        raise ValueError("Woah! Too many objects to render, buddy!")
+    f = plt.figure()
+    gridheight = 1.0/len(WISEtable)
+    gridwidth = 1.0/len(runbands)
+    for i, WISErow in enumerate(WISEtable):
+        for j, band in enumerate(runbands):
+            draw_coords = [i * gridwidth, j * gridheight, gridwidth,
+                           gridheight]
+            draw_ellipse_cutout(
+                BASEDIR, WISErow, band, f, skyAperture=skyAperture,
+                skyimage=skyimage, skyprefix=skyprefix,
+                aperturefile=aperturefile, skymethod=skymethod,
+                maskbase=maskbase, sizescale=sizescale,
+                coords=draw_coords)
+    return f
+
+
 def createEllipseCutouts(BASEDIR, WISErow, runbands=bands, skyAperture=True,
         skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
         skymethod="adaptive", maskbase="mask", suffix="", sizescale=1.5):
@@ -1481,6 +1510,38 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=bands, skyAperture=True,
     photometry ellipse as well as the ellipse which samples the sky.
     '''
     print "Creating Cutout for {0}".format(WISErow["objstr_01"])
+    galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
+    cutoutfig = plt.figure()
+    for band in bands:
+        draw_ellipse_cutout(
+            BASEDIR, WISErow, band, cutoutfig, skyAperture=skyAperture, 
+            skyimage=skyimage, skyprefix=skyprefix, aperturefile=aperturefile,
+            skymethod=skymethod, maskbase=maskbase,
+            sizescale=sizescale)
+
+        outputbase = object_name_to_dir(WISErow["objstr_01"])
+        if suffix:
+            outputbase += "_" + suffix
+        if skyimage:
+            filename = format_band_dependence(
+                    outputbase + "_sky", band, "png", galaxydir)
+        else:
+            filename = format_band_dependence(
+                    outputbase, band, "png", galaxydir)
+
+        cutoutfig.savefig(filename)
+        plt.close(f)
+
+
+def draw_ellipse_cutout(BASEDIR, WISErow, band, figure, skyAperture=True,
+        skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
+        skymethod="adaptive", maskbase="mask", sizescale=1.5, 
+        coords=(1, 1, 1)):
+    '''Draws a cutout given for a particular band into a figure instance.
+
+    A cutout for each band will be created that contains the aperture
+    photometry ellipse as well as the ellipse which samples the sky.
+    '''
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     for band in runbands:
         # We can either get the photometry from the WISErow, or we can
@@ -1530,7 +1591,6 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=bands, skyAperture=True,
         gc.recenter(
             Xval, Yval, radius=sizescale * outerlength)
         gc.refresh()
-        #print outerlength
 
         gc.save(filename)
         gc.close()
