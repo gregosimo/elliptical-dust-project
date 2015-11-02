@@ -196,6 +196,42 @@ def DN_err_to_mag_err(galaxydir, band, DNerr, DNflux,
     return sigma_mag
 
 ###############################################################################
+# Absolute and Apparent Magnitude Conversions #
+###############################################################################o
+
+def abs2appmag(absolute, distance):
+    '''Converts an absolute magnitude to an apparent magnitude.
+
+    This assumes that distances are given in Mpc.
+    '''
+    return absolute + 5 * np.log10(distance*1e5)
+
+def app2absmag(apparent, distance):
+    '''Converts an absolute magnitude to an apparent magnitude.
+
+    This assumes that distances are given in Mpc.
+    '''
+    return apparent - 5 * np.log10(distance*1e5)
+
+def app_err_to_abs_err(apperr, distance, disterr):
+    '''Converts an uncertainty from apparent to absolute magnitudes.
+
+    This assumes distance and disterr have the same dimension.
+    '''
+    return np.sqrt(apperr**2 + (5 / np.log(10) * disterr / distance)**2)
+
+def abs_err_to_app_err(abserr, distance, disterr):
+    '''Converts an uncertainty from absolute to apparent magnitudes
+
+    This assumes distance and disterr have the same dimension.
+
+    NOTE: Since luminosity is always derived while flux is always measured,
+    this function will REMOVE the influence of distance uncertainty from the
+    overall uncertainty.
+    '''
+    return np.sqrt(apperr**2 - (5 / np.log(10) * disterr / distance)**2)
+
+###############################################################################
 # AB and Vega conversions
 ###############################################################################
 
@@ -350,6 +386,11 @@ def Mag_err_to_Jansky_err(band, mag, magerr):
                           get_zero_point_uncertainty(band))
     return err
 
+###############################################################################
+# Luminosity-Magnitude Conversions #
+###############################################################################
+
+#TBD
 
 
 ###############################################################################
