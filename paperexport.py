@@ -390,13 +390,13 @@ def create_jarrett_comparison_plot(table=jarrett_table,
                                    dest=build_filepath(FIGUREPATH, "jarrett",
                                                        EXT)):
     #smallindices = [0, 2, 3, 12, 13]
+    # HERE ARE MORE CHANGES
     smallindices = range(len(table))
     orig_fluxes = read_Jarrett_Table2()[smallindices]
     my_mags = table[smallindices]
+    # I MADE MANY MORE CHANGES HERE
 
-    orig_w1 = conv.Jansky2Vegamag("W1", orig_fluxes["W1"])
-    orig_w1_err = conv.Jansky_err_to_mag_err("W1", orig_fluxes["W1"], 
-                                  orig_fluxes["W1_err"])
+# I DELETED THINGS AS WELL!
     myw1 = my_mags["w1apmag"]
     myw1err = my_mags["w1aperr"]
     orig_w2 = conv.Jansky2Vegamag("W2", orig_fluxes["W2"])
