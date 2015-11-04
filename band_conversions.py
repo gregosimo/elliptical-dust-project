@@ -519,8 +519,8 @@ def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=WISE_bands):
     keys.'''
     Mag_Table = Table(Flux_Table, copy=True)
     for band in bands:
-        Mag_Table[band] = Jansky2WISEmag(band, Flux_Table[band], color_indices)
-        Mag_Table["{0}_err".format(band)] = Jansky_err_to_WISE_mag_err(band,
+        Mag_Table[band] = Jansky2Vegamag(band, Flux_Table[band], color_indices)
+        Mag_Table["{0}_err".format(band)] = Jansky_err_to_mag_err(band,
                 Flux_Table[band], Flux_Table["{0}_err".format(band)])
     return Mag_Table
 
