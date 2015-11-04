@@ -1475,7 +1475,7 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=bands,
 def ellipse_cutout_grid(BASEDIR, WISEtable, runbands=bands, skyAperture=True,
                         skyimage=False, skyprefix="sky_level",
                         aperturefile="ellipse_aperture", skymethod="adaptive",
-                        maskbase="mask", sizescale=1.5):
+                        maskbase="mask", sizescale=1.5, ignore_exception=True):
     '''Returns a figure with a grid of cutout figures.
 
     The horizontal grid tracks are different bands in runbands. The vertical
@@ -1485,19 +1485,32 @@ def ellipse_cutout_grid(BASEDIR, WISEtable, runbands=bands, skyAperture=True,
     '''
     if len(WISEtable) > 10:
         raise ValueError("Woah! Too many objects to render, buddy!")
-    f = plt.figure()
-    gridheight = 1.0/len(WISEtable)
-    gridwidth = 1.0/len(runbands)
+    f = plt.figure(figsize=(12,4))
+    # Without these margins, the axes are impossible to see.
+    top_margin = 0.1
+    bottom_margin = 0.1
+    left_margin = 0.1
+    right_margin = 0.1
+    gridheight = (1.0 - top_margin - bottom_margin)/len(WISEtable)
+    gridwidth = (1.0 - left_margin - right_margin)/len(runbands)
     for i, WISErow in enumerate(WISEtable):
         for j, band in enumerate(runbands):
-            draw_coords = [i * gridwidth, j * gridheight, gridwidth,
-                           gridheight]
-            draw_ellipse_cutout(
-                BASEDIR, WISErow, band, f, skyAperture=skyAperture,
-                skyimage=skyimage, skyprefix=skyprefix,
-                aperturefile=aperturefile, skymethod=skymethod,
-                maskbase=maskbase, sizescale=sizescale,
-                coords=draw_coords)
+            draw_coords = [top_margin + j * gridwidth, 1.0 - left_margin -
+                           (i+1) * gridheight, gridwidth, gridheight]
+            if j==0:
+                galname = WISErow["objstr_01"]
+            else:
+                galname=""
+            try:
+                draw_ellipse_cutout(
+                    BASEDIR, WISErow, band, f, skyAperture=skyAperture,
+                    skyimage=skyimage, skyprefix=skyprefix,
+                    aperturefile=aperturefile, skymethod=skymethod,
+                    maskbase=maskbase, sizescale=sizescale,
+                    coords=draw_coords, hide_x_labels=True, hide_y_labels=True,
+                    galname=galname, galcoord=(0.4, 0.9))
+            except iraf.IrafError as e:
+                continue
     return f
 
 
@@ -1512,7 +1525,7 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=bands, skyAperture=True,
     print "Creating Cutout for {0}".format(WISErow["objstr_01"])
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
     cutoutfig = plt.figure()
-    for band in bands:
+    for band in runbands:
         draw_ellipse_cutout(
             BASEDIR, WISErow, band, cutoutfig, skyAperture=skyAperture, 
             skyimage=skyimage, skyprefix=skyprefix, aperturefile=aperturefile,
@@ -1530,71 +1543,73 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=bands, skyAperture=True,
                     outputbase, band, "png", galaxydir)
 
         cutoutfig.savefig(filename)
-        plt.close(f)
+        plt.close(cutoutfig)
 
 
-def draw_ellipse_cutout(BASEDIR, WISErow, band, figure, skyAperture=True,
-        skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
+def draw_ellipse_cutout(
+        BASEDIR, WISErow, band, figure, skyAperture=True, skyimage=False, 
+        skyprefix="sky_level", aperturefile="ellipse_aperture",
         skymethod="adaptive", maskbase="mask", sizescale=1.5, 
-        coords=(1, 1, 1)):
+        coords=(1, 1, 1, 1), hide_x_labels=False, hide_y_labels=False, 
+        galname="", galcoord=(0.1, 0.9)):
     '''Draws a cutout given for a particular band into a figure instance.
 
     A cutout for each band will be created that contains the aperture
     photometry ellipse as well as the ellipse which samples the sky.
     '''
     galaxydir = change_to_galaxy_dir(BASEDIR, WISErow["objstr_01"])
-    for band in runbands:
-        # We can either get the photometry from the WISErow, or we can
-        # get it directly from the STSDAS tables. The latter seems to 
-        # be more direct, since those are actually used for photometry
-        # and sky.
-        aperturepars = STSDAS_to_Astropy_Table(
-            format_band_dependence(aperturefile, band, "tab", galaxydir))
-        # This is to show masked values in the cutout.
-        imagehdulist = fits.open(match_filter(galaxydir, band, sky=skyimage))
-        imagehdu = imagehdulist[0]
-        maskhdulist = fits.open(format_band_dependence(maskbase, band, "fits",
-            galaxydir))
-        maskhdu = maskhdulist[0]
-        # Since maskhdu is binary 0/1, this should yield the desired outcome.
-        imagehdu.data = np.ma.MaskedArray(
-            imagehdu.data, mask=maskhdu.data).filled(np.nan)
-        gc = aplpy.FITSFigure(imagehdu)
-        gc.show_grayscale(invert=True)
-        gc.set_nan_color("1.0")
-        gc.refresh()
+    # We can either get the photometry from the WISErow, or we can
+    # get it directly from the STSDAS tables. The latter seems to 
+    # be more direct, since those are actually used for photometry
+    # and sky.
+    aperturepars = STSDAS_to_Astropy_Table(
+        format_band_dependence(aperturefile, band, "tab", galaxydir))
+    # This is to show masked values in the cutout.
+    imagehdulist = fits.open(match_filter(galaxydir, band, sky=skyimage))
+    imagehdu = imagehdulist[0]
+    maskhdulist = fits.open(format_band_dependence(maskbase, band, "fits",
+        galaxydir))
+    maskhdu = maskhdulist[0]
+    # Since maskhdu is binary 0/1, this should yield the desired outcome.
+    imagehdu.data = np.ma.MaskedArray(
+        imagehdu.data, mask=maskhdu.data).filled(np.nan)
+    gc = aplpy.FITSFigure(imagehdu, figure=figure, subplot=coords)
+    gc.show_grayscale(invert=True)
+    gc.set_nan_color("1.0")
+    gc.refresh()
 
-        px = getPixelScale(band)
-        # Make the ellipse indicating the aperture:
-        Xval, Yval = gc.pixel2world(aperturepars["X0"][0], 
-                                    aperturepars["Y0"][0])
-        height = 2 * px * aperturepars["SMA"] / 3600.0
-        width = height * (1.0 - float(aperturepars["ELLIP"]))
-        angle = float(aperturepars["PA"])
-        gc.show_ellipses(Xval, Yval, width, height, angle=angle,
-            edgecolor="red")
-        # Now make the sky annulus:
-        if skyAperture:
-            drawSkyParams(galaxydir, band, gc, skyprefix=skyprefix,
-                    method=skymethod)
-        outputbase = object_name_to_dir(WISErow["objstr_01"])
-        if suffix:
-            outputbase += "_" + suffix
-        if skyimage:
-            filename = format_band_dependence(
-                    outputbase + "_sky", band, "png", galaxydir)
-        else:
-            filename = format_band_dependence(
-                    outputbase, band, "png", galaxydir)
-        outerlength = get_outer_sky_length(galaxydir, band, skyprefix,
-                                           skymethod)
-        gc.recenter(
-            Xval, Yval, radius=sizescale * outerlength)
-        gc.refresh()
-
-        gc.save(filename)
-        gc.close()
-        plt.close("all")
+    px = getPixelScale(band)
+    # Make the ellipse indicating the aperture:
+    Xval, Yval = gc.pixel2world(aperturepars["X0"][0], 
+                                aperturepars["Y0"][0])
+    height = 2 * px * aperturepars["SMA"] / 3600.0
+    width = height * (1.0 - float(aperturepars["ELLIP"]))
+    angle = float(aperturepars["PA"])
+    gc.show_ellipses(Xval, Yval, width, height, angle=angle,
+        edgecolor="red")
+    # Now make the sky annulus:
+    if skyAperture:
+        drawSkyParams(galaxydir, band, gc, skyprefix=skyprefix,
+                method=skymethod)
+    # Now resize the image.
+    outerlength = get_outer_sky_length(galaxydir, band, skyprefix, skymethod)
+    gc.recenter(
+        Xval, Yval, radius=sizescale * outerlength)
+    # Now we want to put the name of the galaxy on the image.
+    # Since the coordinates are in percentile units of the image, they need to
+    # be transformed to the units of the figure.
+    imgwidth = coords[2]
+    imgheight = coords[3]
+    xcoord = coords[0] + galcoord[0] * imgwidth
+    ycoord = coords[1] + galcoord[1] * imgheight
+    gc.add_label(galcoord[0], galcoord[1], galname, relative=True)
+    if hide_x_labels:
+        gc.hide_xtick_labels()
+        gc.hide_xaxis_label()
+    if hide_y_labels:
+        gc.hide_ytick_labels()
+        gc.hide_yaxis_label()
+    gc.refresh()
 
 def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive"):
     '''Draws shapes used for estimating the background values.
@@ -1623,8 +1638,7 @@ def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive")
         skypars = Table.read(os.path.join(galaxydir,
             format_band_dependence("sky_level", band, "txt")),
             format="ascii.basic")
-        Xval, Yval = gc.pixel2world(skypars["X0"][0], 
-                skypars["Y0"][0])
+        Xval, Yval = gc.pixel2world(skypars["X0"][0], skypars["Y0"][0])
         major_in = 2 * skypars["A0"] * px / 3600.0
         minor_in = 2 * skypars["B0"] * px / 3600.0
         major_mid = 2 * skypars["A1"] * px / 3600.0
@@ -2094,8 +2108,9 @@ def createDifferencePlot(xval, yval, valtocompare, yerror, valerror, xlabel,
     plt.ylabel(ylabel)
     plt.title(title)
 
-def doubleDifferencePlot(xfirst, xsecond, yfirst, ysecond, xfirsterr,
-        xseconderr, yfirsterr, yseconderr, xlabel, ylabel, title, label=""):
+def doubleDifferencePlot(xfirst, xsecond, yfirst, ysecond, xfirsterr, 
+                         xseconderr, yfirsterr, yseconderr, xlabel, ylabel, 
+                         title, label="", fmt="."):
     '''Makes a plot of one difference of quantities vs another difference.
 
     This plot can be used to add even more information about data consistency
@@ -2106,7 +2121,7 @@ def doubleDifferencePlot(xfirst, xsecond, yfirst, ysecond, xfirsterr,
     ydiff, yerrs = calc_statistical_difference(yfirst, ysecond, yfirsterr,
             yseconderr)
     maxdiff = max(np.absolute(xdiff).max(), np.absolute(ydiff).max())
-    plt.errorbar(xdiff, ydiff, yerrs, xerrs, fmt=".", label=label)
+    plt.errorbar(xdiff, ydiff, yerrs, xerrs, fmt=fmt, label=label)
     plt.plot([-maxdiff - 0.2, maxdiff + 0.2], [0, 0], 'k-')
     plt.plot([0, 0], [-maxdiff - 0.2, maxdiff + 0.2], 'k-')
     plt.xlabel(xlabel)
