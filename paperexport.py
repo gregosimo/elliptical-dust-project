@@ -470,14 +470,15 @@ def create_SED(table=atlas3d_table, dest=build_filepath(FIGUREPATH, "sed",
 def create_jarrett_comparison_plot(table=jarrett_table,
                                    dest=build_filepath(FIGUREPATH, "jarrett",
                                                        EXT)):
-    #smallindices = [0, 2, 3, 12, 13]
-    # HERE ARE MORE CHANGES
-    smallindices = range(len(table))
-    orig_fluxes = read_Jarrett_Table2()[smallindices]
-    my_mags = table[smallindices]
-    # I MADE MANY MORE CHANGES HERE
+    smallobjs = ["NGC584", "NGC777"]
 
-# I DELETED THINGS AS WELL!
+    smallindices = np.searchsorted(table["objstr_01"], smallobjs)
+    orig_fluxes = table
+    my_mags = table
+
+    orig_w1 = conv.Jansky2Vegamag("W1", orig_fluxes["W1"])
+    orig_w1_err = conv.Jansky_err_to_mag_err("W1", orig_fluxes["W1"], 
+                                  orig_fluxes["W1_err"])
     myw1 = my_mags["w1apmag"]
     myw1err = my_mags["w1aperr"]
     orig_w2 = conv.Jansky2Vegamag("W2", orig_fluxes["W2"])
@@ -524,7 +525,7 @@ def create_jarrett_comparison_plot(table=jarrett_table,
         myw3[smallindices], orig_w3[smallindices], myw2[smallindices],
         orig_w2[smallindices], myw3err[smallindices],
         orig_w3_err[smallindices], myw4err[smallindices],
-        orig_w4_err[smallindices], "W3 Difference", "W3 Difference", "", 
+        orig_w4_err[smallindices], "W3 Difference", "W4 Difference", "", 
         fmt="r.")
     plt.savefig(dest)
     plt.close()
