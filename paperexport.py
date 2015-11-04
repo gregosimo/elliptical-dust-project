@@ -357,6 +357,13 @@ def create_stellar_mass_luminosity_relation(
     plt.savefig(dest)
     plt.close()
 
+def create_cutout_grid(
+        table=atlas3d_table[:2], dest=os.path.join(FIGUREPATH, "cutouts.png")):
+    gridfig = phot.ellipse_cutout_grid(
+        ATLAS3DBASE, table, ignore_exception=True)
+    gridfig.savefig(dest)
+    plt.close(gridfig)
+
 
 def create_mass_to_light_ATLAS3D_comparison(
         table=atlas3d_table, dest=os.path.join(FIGUREPATH, "masstolight.pdf")):
@@ -447,6 +454,19 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
 
     return classtable
 
+def create_SED(table=atlas3d_table, dest=build_filepath(FIGUREPATH, "sed",
+                                                        EXT)):
+    normval = fsps.plot_FSPS_SED(FSPSPATH)
+    fsps.plot_data_SED(atlas3d_table, normvalue=normval)
+
+    plt.xlabel("Wavelength (um)")
+    plt.ylabel("AB magnitude")
+    plt.ylim([5, 17])
+    plt.gca().invert_yaxis()
+    plt.legend(loc="upper left")
+    plt.savefig(dest)
+    plt.close()
+
 def create_jarrett_comparison_plot(table=jarrett_table,
                                    dest=build_filepath(FIGUREPATH, "jarrett",
                                                        EXT)):
@@ -485,9 +505,27 @@ def create_jarrett_comparison_plot(table=jarrett_table,
     w4diff, w4differr = phot.calc_statistical_difference(myw4, orig_w4,
         myw4err, orig_w4_err)
 
-    phot.doubleDifferencePlot(myw1, orig_w1, myw2, orig_w2, myw1err,
-                              orig_w1_err, myw2err, orig_w2_err,
-                              "W1 Difference", "W2 Difference", "")
+    plt.figure(figsize=(10,5))
+    plt.subplot(1, 2, 1)
+    phot.doubleDifferencePlot(
+        myw1, orig_w1, myw2, orig_w2, myw1err, orig_w1_err, myw2err, 
+        orig_w2_err, "W1 Difference", "W2 Difference", "", fmt="b.")
+    phot.doubleDifferencePlot(
+        myw1[smallindices], orig_w1[smallindices], myw2[smallindices],
+        orig_w2[smallindices], myw1err[smallindices],
+        orig_w1_err[smallindices], myw2err[smallindices],
+        orig_w2_err[smallindices], "W1 Difference", "W2 Difference", "", 
+        fmt="r.")
+    plt.subplot(1, 2, 2)
+    phot.doubleDifferencePlot(
+        myw3, orig_w3, myw4, orig_w4, myw3err, orig_w3_err, myw4err, 
+        orig_w4_err, "W1 Difference", "W2 Difference", "", fmt="b.")
+    phot.doubleDifferencePlot(
+        myw3[smallindices], orig_w3[smallindices], myw2[smallindices],
+        orig_w2[smallindices], myw3err[smallindices],
+        orig_w3_err[smallindices], myw4err[smallindices],
+        orig_w4_err[smallindices], "W3 Difference", "W3 Difference", "", 
+        fmt="r.")
     plt.savefig(dest)
     plt.close()
 

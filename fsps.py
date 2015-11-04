@@ -309,36 +309,82 @@ def color_difference_plot(times, outputdir=TBURST_PATH, prefix1="early_t",
             plt.ylabel("({0}-{1})".format(blueband, redband))
             plt.legend(loc=loc)
 
-def plot_FSPS_SED(datatable, FSPS_DIR, modelfile="SSP.out.mags",
-                  label="FSPS", modfmt="c*",  datafmt="r.",
-                  runbands=(conv.WISE_bands + conv.TWOMASS_bands + 
-                            conv.GALEX_bands)):
+def Astropy_Table_to_numpy_array(table, dtype=np.float64):
+    '''Converts an Astropy table to a 2-D numpy array.
+
+    NOTE: This requires all of the entries in the table to be of the given
+    dtype.
+    '''
+    data = np.ma.array(table)
+    arr = data.view(dtype).reshape(len(data), len(data.dtype))
+    return arr
+
+def mag_table_to_flux_table(
+    table, runbands=(conv.WISE_bands + conv.TWOMASS_bands + conv.GALEX_bands),
+ZP="AB"):
+    '''Converts a table in magnitudes to a table in fluxes.'''
+    mag_columns = [phot.name_photometry_column(band, error=False) for band in
+                   runbands]
+    err_columns = [phot.name_photometry_column(band, error=True) for band in
+                   runbands]
+    newtable = table[["objstr_01"]]
+    for band in runbands:
+        mag_column = phot.name_photometry_column(band, error=False)
+        err_column = phot.name_photometry_column(band, error=True)
+        newtable[mag_column] = conv.ABmag2Jansky(band, table[mag_column])
+        newtable[err_column] = conv.Mag_err_to_Jansky_err(
+            band, table[mag_column], table[err_column])
+    return newtable
+
+def plot_data_SED(
+        datatable, label="Data", fmt="r.", 
+        runbands=(conv.WISE_bands + conv.TWOMASS_bands + conv.GALEX_bands),
+        normband="Ks", normvalue=1, inputzp="AB"):
+    # In order to make a plot of nu-fnu, we need fluxes.
+    #if inputzp is "AB":
+    #    datatable = mag_table_to_flux_table(datatable, runbands=runbands)
+    # Wavelengths in microns
+    wavelengths = np.array([conv.WAVELENGTHS[band] for band in runbands])*1e6
+    #frequencies = 3e14 / wavelengths
+    mag_columns = [phot.name_photometry_column(band, error=False) for band in
+                   runbands]
+    err_columns = [phot.name_photometry_column(band, error=True) for band in
+                   runbands]
+
+    data_arr = Astropy_Table_to_numpy_array(datatable[mag_columns])
+    sed_table = Table(data_arr.transpose(), names=datatable["objstr_01"])
+    data_err_arr = Astropy_Table_to_numpy_array(datatable[err_columns])
+    sed_err_table = Table(data_err_arr.transpose(), 
+                          names=datatable["objstr_01"])
+
+    for gal in sed_table.colnames:
+        galaxy_sed = sed_table[gal]# * frequencies
+        galaxy_sed_err = sed_err_table[gal]# * frequencies
+        normindex = runbands.index(normband)
+        normed_sed = galaxy_sed / galaxy_sed[normindex] * normvalue
+        normed_sed_err = galaxy_sed_err / galaxy_sed[normindex] * normvalue
+        plt.errorbar(wavelengths, normed_sed, normed_sed_err, fmt=fmt,
+                     label=label)
+        label=""
+
+def plot_FSPS_SED(
+        FSPS_DIR, modelfile="SSP.out.mags", label="FSPS", fmt="c*",  
+        runbands=(conv.WISE_bands + conv.TWOMASS_bands + conv.GALEX_bands),
+        ageindex=-1, normband="Ks"):
     '''Plots a model FSPS SED with data.
 
     Takes an FSPS directory and file with a table full of data, and then plots
     both as an SED.
     '''
-    filepath = os.path.join(FSPS_DIR, modelfile)
+    filepath = os.path.join(FSPS_DIR, "OUTPUTS", modelfile)
     magtable = read_mags(filepath)
-    # I haven't decided how to choose an age, so I'm choosing the very last
-    # one.
-    ageindex = -1
 
     wavelengths = np.array([conv.WAVELENGTHS[band] for band in runbands])*1e6
+    #frequencies = 3e14 / wavelengths
     mags = np.array([magtable[ageindex][band] for band in runbands])
-    plt.semilogx(wavelengths, mags, modfmt, label=label)
+    plt.semilogx(wavelengths, mags, fmt, label=label)
 
-    for galrow in datatable:
-        galmags = np.array([
-            galrow[phot.name_photometry_column(band, error=False)] for band in 
-            runbands])
-        galerrs = np.array([
-            galrow[phot.name_photometry_column(band, error=True)] for band in 
-            runbands])
-        galmags += (magtable[ageindex]["Ks"] - 
-                    galrow[phot.name_photometry_column("Ks")])
-        plt.errorbar(wavelengths, galmags, galerrs, fmt=datafmt)
+    normindex = runbands.index(normband)
+    print magtable["Age"][ageindex]
+    return mags[normindex]
 
-    plt.xlabel("Wavelength (um)")
-    plt.ylabel("AB Mag")
-    plt.gca().invert_yaxis()

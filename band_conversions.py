@@ -12,10 +12,13 @@ WAVELENGTHS = {"W1": 3.4e-6, "W2": 4.6e-6, "W3": 12e-6, "W4": 22e-6, "J":
                1516e-10}
 
 # Dictionaries of Zero-points for bands
+# All of these zero-point fluxes are given in Janskys.
 ZERO_POINT_FLUXES = {"W1": 306.682, "W2": 170.663, "W3": 29.0448, "W4": 8.2839, 
-                     "NUV": 3810, "FUV": 3620, "[3.6]": 280.9, "[4.5]": 179.7}
+                     "NUV": 3810, "FUV": 3620, "J": 1594, "H": 1024, 
+                     "Ks": 666.7, "[3.6]": 280.9, "[4.5]": 179.7}
 ZERO_POINT_FLUX_UNCERTAINTIES = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124, 
-                                 "NUV": 0, "FUV": 0}
+                                 "NUV": 0, "FUV": 0, "J": 27.8, "H": 20.0,
+                                 "Ks": 12.6, "[3.6]": 0, "[4.5]": 0}
 # NOTE: These magnitues are for going from data numbers to magnitudes. They are
 # not related to Janskys at all.
 # Unfortunately, magnitudes are given in either Vega or AB. And WISE does
@@ -375,7 +378,7 @@ def Vegamag2Jansky(band, mag, colorIndex=-2):
 
 def ABmag2Jansky(band, mag, colorIndex=-2):
     '''Converts an AB magnitude into Janskys.'''
-    if band in WISE_bands:
+    if band not in GALEX_bands:
         mag = AB2Vegamag(band, mag)
     flux = mag2flux(mag, 0, get_zero_point_flux_level(band))
     return flux
