@@ -470,6 +470,7 @@ def create_SED(table=atlas3d_table, dest=build_filepath(FIGUREPATH, "sed",
 def create_jarrett_comparison_plot(table=jarrett_table,
                                    dest=build_filepath(FIGUREPATH, "jarrett",
                                                        EXT)):
+    # THIS IS A CHANGE I'M GOING TO MAKE
     smallindices = [0, 2, 3, 12, 13]
     orig_fluxes = read_Jarrett_Table2()
     my_mags = table
