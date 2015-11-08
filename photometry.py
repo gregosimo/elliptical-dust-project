@@ -1805,7 +1805,7 @@ def draw_ellipse_cutout(
         BASEDIR, WISErow, band, figure, skyAperture=True, skyimage=False, 
         skyprefix="sky_level", aperturefile="ellipse_aperture",
         skymethod="adaptive", maskbase="mask", sizescale=1.5, 
-        coords=(1, 1, 1, 1), hide_x_labels=False, hide_y_labels=False, 
+        coords=[1, 1, 1, 1], hide_x_labels=False, hide_y_labels=False, 
         galname="", galcoord=(0.1, 0.9)):
     '''Draws a cutout given for a particular band into a figure instance.
 
@@ -1847,9 +1847,9 @@ def draw_ellipse_cutout(
         drawSkyParams(galaxydir, band, gc, skyprefix=skyprefix,
                 method=skymethod)
     # Now resize the image.
-    outerlength = get_outer_sky_length(galaxydir, band, skyprefix, skymethod)
-    gc.recenter(
-        Xval, Yval, radius=sizescale * outerlength)
+    outerlength = get_outer_sky_length(galaxydir, band)
+    cutoutsize = sizescale * WISErow["w1rsemi"] / 3600.0
+    gc.recenter(Xval, Yval, radius=cutoutsize)
     # Now we want to put the name of the galaxy on the image.
     # Since the coordinates are in percentile units of the image, they need to
     # be transformed to the units of the figure.
