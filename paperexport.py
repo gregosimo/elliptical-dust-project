@@ -76,15 +76,27 @@ def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
     Since generating the full table is an expensive operation, this function is
     called to ensure it is only called once per load, and only when it is
     really needed.'''
+    rampazzosample = rampazzo.copy()
+    rampazzosample["sample"] = "Rampazzo"
+    atlas3dsample = atlas3d.copy()
+    atlas3dsample["sample"] = "ATLAS3D"
     global fulltable
-    if fulltable is []:
+    if not fulltable:
         # With a later version of astropy, I could just use the unique 
         # function...
-        fulltable = vstack([rampazzo, atlas3d])
+        fulltable = vstack([rampazzosample, atlas3dsample])
         groupedtable = fulltable.group_by('objstr_01')
-        fulltable = Table(rows=groupedtable[0])
+        # This will be bad if the first galaxy is in both datasets.
+        fulltable = Table(rows=groupedtable.groups[0][0])
         for ix in xrange(1, len(groupedtable.groups)):
-            fulltable.add_row(groupedtable.groups[ix][0])
+            tablegroup = groupedtable.groups[ix]
+            addrow = tablegroup[0]
+            if len(tablegroup) == 2:
+                addrow["sample"] = "Both"
+            elif len(tablegroup) > 2:
+                raise ValueError("Some table has more than three entries.")
+            fulltable.add_row(addrow)
+        fulltable.sort("objstr_01")
     else:
         pass
 
@@ -134,22 +146,28 @@ def create_ATLAS3D_sample_table(table=atlas3d_table,
                "w1ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
     names = ["Galaxy", "Morph", "Distance", "Semimajor Axis", "Axis Ratio", 
                "Position Angle", "WISE Catalog", "NUV Tile", "FUV Tile"]
+    preamble = r"""\tabletypesize{\scriptsize}"""
     table1 = joinedtable[columns]
     table1.write(dest, format="ascii.aastex", names=names,
-                 latexdict={"caption": caption},
+                 latexdict={"caption": caption, "preamble": preamble},
                  formats={"NUV Tile": format_GALEX_tile, "FUV Tile":
                           format_GALEX_tile})
 
-def create_param_table(table=fulltable, dest=os.path.join(TABLEPATH,
+def create_param_table(table=fulltable[:10], dest=os.path.join(TABLEPATH,
                                                           "params.tex")):
     generate_fulltable()
     caption = r"""Aperture photometry parameters for galaxies in the \ATLAS{}
     and Rampazzo samples
     \label{tab:params}"""
-    columns = ["objstr_01", "w1rsemi", "w1ba", "w1pa", "cat", "NUV_Tile",
-               "FUV_Tile"]
-    names = ["Galaxy", "Semimajor Axis", "Axis Ratio", "Position Angle",
-             "\WISE{} Survey", "NUV Tile", "FUV Tile"]
+    columns = ["objstr_01", "type", "D", "sample", "w1rsemi", "w4rsemi", 
+               "w1ba", "w4ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
+    names = ["Galaxy", "Morph", "D", "Sample", "W1 SMA", "W4 SMA", "W1 B/A", 
+             "W4 B/A", "PA", "\WISE{} Survey", "NUV Tile", "FUV Tile"]
+    writetable = table[columns]
+    writetable.write(dest, format="ascii.aastex", names=names,
+                     latexdict={"caption": caption}, 
+                     formats={"NUV Tile": format_GALEX_tile, "FUV Tile":
+                              format_GALEX_tile, "Sample": format_sample})
 
 def create_magnitude_table(table=rampazzo_table, dest=os.path.join(TABLEPATH,
                                                               "mags.tex")):
@@ -530,6 +548,11 @@ def create_jarrett_comparison_plot(table=jarrett_table,
     plt.savefig(dest)
     plt.close()
 
+    print "W1 Difference: {0:.2g}".format(np.std(w1diff))
+    print "W2 Difference: {0:.2g}".format(np.std(w2diff))
+    print "W3 Difference: {0:.2g}".format(np.std(w3diff))
+    print "W4 Difference: {0:.2g}".format(np.std(w4diff))
+
 def move_rampazzo():
     # First read in Table 1
     # Then Table 2
@@ -840,6 +863,19 @@ def format_GALEX_tile(tilename):
     if tilename is None:
         return "--"
     return tilename.replace("_", r"\_")
+
+def format_sample(sampstr):
+    '''Condenses the string corresponding to the sample to a single letter.'''
+
+    if sampstr == "Rampazzo":
+        return "R"
+    elif sampstr == "ATLAS3D":
+        return "A"
+    elif sampstr == "Both":
+        return "R,A"
+    else:
+        raise ValueError("Don't recognize the sample")
+
 
 def format_mag(mag):
     '''Format magnitudes so that they can be displayed on a table.
