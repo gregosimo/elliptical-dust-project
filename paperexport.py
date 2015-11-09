@@ -78,6 +78,7 @@ def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
     really needed.'''
     rampazzosample = rampazzo.copy()
     rampazzosample["sample"] = "Rampazzo"
+    rampazzosample.rename_column("RSA_morph_type", "morph")
     atlas3dsample = atlas3d.copy()
     atlas3dsample["sample"] = "ATLAS3D"
     global fulltable

@@ -3201,7 +3201,8 @@ def check_if_column(seq):
     return isInstance(seq, Column)
 
 def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
-                        join_type="inner", conflict_suffixes=("_A", "_B")):
+                        join_type="inner", conflict_suffixes=("_A", "_B"),
+                        additional_keys=[]):
     '''Joins two tables by the provided name columns. 
 
     By default, both columns should be called "objstr_01", in which, if both
@@ -3230,8 +3231,8 @@ def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
     table1[name1] = object_name_to_dir(table1[name1])
     table2[name1] = object_name_to_dir(table2[name2])
     # Now join them.
-    newtable = join(table1, table2, keys=[name1], join_type=join_type,
-                    table_names=list(conflict_suffixes),
+    newtable = join(table1, table2, keys=[name1]+additional_keys, 
+                    join_type=join_type, table_names=list(conflict_suffixes),
                     uniq_col_name="{col_name}{table_name}")
     if name1 != name2:
         del(newtable[name2])

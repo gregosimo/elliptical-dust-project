@@ -175,7 +175,7 @@ def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE,
     # I'm willing to make.
     for colname in clearentries:
         ipac_table = clear_invalid_entries(ipac_table, ipac_table[colname])
-    ipac_table["cat"] = INVERTED_CATALOG_NAMES[catalog]
+    ipac_table["cat"] = np.str(INVERTED_CATALOG_NAMES[catalog])
     return ipac_table
 	
 def clear_invalid_entries(fulltable, indexcolumn):
@@ -269,6 +269,10 @@ def get_WISE_catalog_entries(objectfile, localallwise="", localallsky="",
             # If this throws an error, something is weird and I would like to
             # know.
             newcolumn = combinedtable[colname]
+        # This is necessary because strangely enough, np.ma.where has problems
+        # with string arrays.
+        if colname in ['cat']:
+                newcolumn = newcolumn.astype(np.str)
         output_table[colname] = newcolumn
 
     # Finally test to see if all of the objects are present. If they are not,
