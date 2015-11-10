@@ -78,7 +78,7 @@ def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
     really needed.'''
     rampazzosample = rampazzo.copy()
     rampazzosample["sample"] = "Rampazzo"
-    rampazzosample.rename_column("RSA_morph_type", "morph")
+    rampazzosample.rename_column("RSA_morph_type", "type")
     atlas3dsample = atlas3d.copy()
     atlas3dsample["sample"] = "ATLAS3D"
     global fulltable
@@ -98,6 +98,22 @@ def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
                 raise ValueError("Some table has more than three entries.")
             fulltable.add_row(addrow)
         fulltable.sort("objstr_01")
+        # For some reason, the masks keep getting messed up whenever I make the
+        # full table.
+        fulltable["NUV_Tile"].mask = fulltable["NUV_Tile"] == '0.0'
+        fulltable["FUV_Tile"].mask = fulltable["FUV_Tile"] == '0.0'
+        fulltable["NUVapmag"].mask = np.isnan(fulltable["NUVapmag"])
+        fulltable["FUVapmag"].mask = np.isnan(fulltable["FUVapmag"])
+        fulltable["w1apmag"].mask = np.isnan(fulltable["w1apmag"])
+        fulltable["w2apmag"].mask = np.isnan(fulltable["w2apmag"])
+        fulltable["w3apmag"].mask = np.isnan(fulltable["w3apmag"])
+        fulltable["w4apmag"].mask = np.isnan(fulltable["w4apmag"])
+        fulltable["NUVaperr"].mask = np.isnan(fulltable["NUVaperr"])
+        fulltable["FUVaperr"].mask = np.isnan(fulltable["FUVaperr"])
+        fulltable["w1aperr"].mask = np.isnan(fulltable["w1aperr"])
+        fulltable["w2aperr"].mask = np.isnan(fulltable["w2aperr"])
+        fulltable["w3aperr"].mask = np.isnan(fulltable["w3aperr"])
+        fulltable["w4aperr"].mask = np.isnan(fulltable["w4aperr"])
     else:
         pass
 
@@ -147,31 +163,34 @@ def create_ATLAS3D_sample_table(table=atlas3d_table,
                "w1ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
     names = ["Galaxy", "Morph", "Distance", "Semimajor Axis", "Axis Ratio", 
                "Position Angle", "WISE Catalog", "NUV Tile", "FUV Tile"]
-    preamble = r"""\tabletypesize{\scriptsize}"""
     table1 = joinedtable[columns]
     table1.write(dest, format="ascii.aastex", names=names,
-                 latexdict={"caption": caption, "preamble": preamble},
+                 latexdict={"caption": caption},
                  formats={"NUV Tile": format_GALEX_tile, "FUV Tile":
                           format_GALEX_tile})
 
 def create_param_table(table=fulltable[:10], dest=os.path.join(TABLEPATH,
-                                                          "params.tex")):
+                                                               "params.tex")):
+
     generate_fulltable()
     caption = r"""Aperture photometry parameters for galaxies in the \ATLAS{}
     and Rampazzo samples
     \label{tab:params}"""
     columns = ["objstr_01", "type", "D", "sample", "w1rsemi", "w4rsemi", 
                "w1ba", "w4ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
-    names = ["Galaxy", "Morph", "D", "Sample", "W1 SMA", "W4 SMA", "W1 B/A", 
-             "W4 B/A", "PA", "\WISE{} Survey", "NUV Tile", "FUV Tile"]
+    names = ["Galaxy", "Morph", "D", "S", r"\(a_{W1}\)", r"\(a_{W4}\)",
+             r"\(b/a_{W1}\)", r"\(b/a_{W4}\)", "PA", "Survey", "NUV Tile", 
+             "FUV Tile"]
+    preamble = r"""\tabletypesize{\scriptsize}"""
     writetable = table[columns]
     writetable.write(dest, format="ascii.aastex", names=names,
-                     latexdict={"caption": caption}, 
+                     latexdict={"caption": caption, "preamble": preamble}, 
                      formats={"NUV Tile": format_GALEX_tile, "FUV Tile":
-                              format_GALEX_tile, "Sample": format_sample})
+                              format_GALEX_tile, "S": format_sample, 
+                              "PA": "%d"})
 
-def create_magnitude_table(table=rampazzo_table, dest=os.path.join(TABLEPATH,
-                                                              "mags.tex")):
+def create_magnitude_table(table=rampazzo_table[:10], 
+                           dest=os.path.join(TABLEPATH, "mags.tex")):
     generate_fulltable()
     caption = r"""Magnitudes of galaxies in the \ATLAS{} and Rampazzo samples.
     \label{tab:magtable}"""
@@ -183,6 +202,7 @@ def create_magnitude_table(table=rampazzo_table, dest=os.path.join(TABLEPATH,
     names = ["Galaxy", "FUV", r"\(\sigma_{FUV}\)", "NUV", r"\(\sigma_{NUV}\)", 
              "W1", r"\(\sigma_{W1}\)", "W2", r"\(\sigma_{W2}\)", "W3",
              r"\(\sigma_{W3}\)", "W4", r"\(\sigma_{W4}\)"]
+    preamble = r"""\tabletypesize{\scriptsize}"""
     formats = {"Galaxy": format_reflect,
                "FUV": format_mag, r"\(\sigma_{FUV}\)": format_mag_err, 
                "NUV": format_mag, r"\(\sigma_{NUV}\)": format_mag_err, 
@@ -193,7 +213,7 @@ def create_magnitude_table(table=rampazzo_table, dest=os.path.join(TABLEPATH,
     export = table[columns]
     export.write(dest, format="ascii.aastex", names=names, formats=formats,
                  latexdict={"caption": caption, "tablefoot": tablefoot,
-                 "tabletype": "deluxetable"})
+                            "tabletype": "deluxetable", "preamble": preamble})
 
 def create_W2_W3_histogram(table=rampazzo_table, 
                            dest=build_filepath(FIGUREPATH, "w2w3hist")):
@@ -438,6 +458,16 @@ def create_mass_to_light_ATLAS3D_comparison(
     plt.savefig(dest)
     plt.close()
 
+def create_NUV_W1_abs_plot(table=fulltable, dest=os.path.join(FIGUREPATH,
+                                                              "nuvw1.pdf")):
+    nuv = table["NUVunextmag"]
+    nuv_e = table["NUVunexterr"]
+    w1 = table["w1unextmag"]
+    w1_e = table["w1unexterr"]
+    d = table["D"]
+
+    nuvw1, nuvw1_e = phot.calc_statistical_difference(nuv, w1, nuv_e, w1_e)
+    w1abs = conv.app2absmag(w1, 
 
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
                                 dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
