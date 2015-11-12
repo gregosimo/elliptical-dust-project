@@ -458,16 +458,32 @@ def create_mass_to_light_ATLAS3D_comparison(
     plt.savefig(dest)
     plt.close()
 
-def create_NUV_W1_abs_plot(table=fulltable, dest=os.path.join(FIGUREPATH,
-                                                              "nuvw1.pdf")):
-    nuv = table["NUVunextmag"]
-    nuv_e = table["NUVunexterr"]
-    w1 = table["w1unextmag"]
-    w1_e = table["w1unexterr"]
-    d = table["D"]
+def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table, 
+        dest=os.path.join(FIGUREPATH, "nuvw1.pdf")):
+    rnuv = rtable["NUVunextmag"]
+    rnuv_e = rtable["NUVunexterr"]
+    rw1 = rtable["w1unextmag"]
+    rw1_e = table["w1unexterr"]
+    rd = rtable["D"]
 
-    nuvw1, nuvw1_e = phot.calc_statistical_difference(nuv, w1, nuv_e, w1_e)
-    w1abs = conv.app2absmag(w1, 
+    rnuvw1, rnuvw1_e = phot.calc_statistical_difference(
+            rnuv, rw1, rnuv_e, rw1_e)
+
+    rw1abs = conv.app2absmag(rw1, rd)
+    # This until I figure out what to do with distance errors.
+    rw1abs_e = rw1_e
+
+    anuv = atable["NUVunextmag"]
+    anuv_e = atable["NUVunexterr"]
+    aw1 = atable["w1unextmag"]
+    aw1_e = table["w1unextear"]
+    ad = atable["D"]
+
+    anuvw1, anuvw1_e = phot.calc_statistical_difference(
+            anuv, aw1, anuv_e, aw1_e)
+    aw1abs = conv.app2absmag(aw1, ad)
+    # This until I figure out what to do with distance errors.
+    aw1abs_e = aw1_e
 
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
                                 dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
