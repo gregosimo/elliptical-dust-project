@@ -463,7 +463,7 @@ def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table,
     rnuv = rtable["NUVunextmag"]
     rnuv_e = rtable["NUVunexterr"]
     rw1 = rtable["w1unextmag"]
-    rw1_e = table["w1unexterr"]
+    rw1_e = rtable["w1unexterr"]
     rd = rtable["D"]
 
     rnuvw1, rnuvw1_e = phot.calc_statistical_difference(
@@ -476,14 +476,24 @@ def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table,
     anuv = atable["NUVunextmag"]
     anuv_e = atable["NUVunexterr"]
     aw1 = atable["w1unextmag"]
-    aw1_e = table["w1unextear"]
+    aw1_e = atable["w1unexterr"]
     ad = atable["D"]
+    ad_e = atable["D_err"]
 
     anuvw1, anuvw1_e = phot.calc_statistical_difference(
             anuv, aw1, anuv_e, aw1_e)
     aw1abs = conv.app2absmag(aw1, ad)
     # This until I figure out what to do with distance errors.
-    aw1abs_e = aw1_e
+    aw1abs_e = conv.app_err_to_abs_err(aw1_e, ad, ad_e)
+
+    plt.errorbar(aw1abs, anuvw1, anuvw1_e, aw1abs_e, 'kx', label="ATLAS3D")
+    rp.MIRplot(rw1abs, rnuvw1, rtable["MIR_class"], rnuvw1_e, xlabel="M_{W1}",
+               ylabel="NUV-W1")
+
+    plt.ylim([2, 7])
+    plt.xlim([-18, -24])
+    plt.legend(loc="lower right", bbox_to_anchor=(0.85, 0.01))
+    print "Not shown are NGC 4406 and NGC 4429"
 
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
                                 dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
