@@ -319,9 +319,9 @@ def create_stellar_mass_ATLAS3D_comparison(
         np.log10(joinedtable["D"]*1e6/10))
     logluminosity_w1 = -0.4 * (
         absmag_w1 - conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"])
-    mass_jarrett = 10**(joinedtable["logML_W1"] + logluminosity_w1)
+    mass_this = 10**(joinedtable["logML_W1"] + logluminosity_w1)
     mass_atlas3d = 10**(joinedtable["logML_star"] + joinedtable["logLum"])
-    plt.loglog(mass_jarrett, mass_atlas3d, 'b*')
+    plt.loglog(mass_this, mass_atlas3d, 'b*')
     plt.xlabel("Jarrett M* (Msun)")
     plt.ylabel("ATLAS3D M* (Msun)")
     plt.savefig(dest)
