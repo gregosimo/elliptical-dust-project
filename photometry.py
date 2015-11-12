@@ -1475,7 +1475,8 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=bands,
 def ellipse_cutout_grid(BASEDIR, WISEtable, runbands=bands, skyAperture=True,
                         skyimage=False, skyprefix="sky_level",
                         aperturefile="ellipse_aperture", skymethod="adaptive",
-                        maskbase="mask", sizescale=1.5, ignore_exception=True):
+                        maskbase="mask", sizescale=1.5, scalelength="ellipse", 
+                        ignore_exception=True):
     '''Returns a figure with a grid of cutout figures.
 
     The horizontal grid tracks are different bands in runbands. The vertical
@@ -1508,15 +1509,18 @@ def ellipse_cutout_grid(BASEDIR, WISEtable, runbands=bands, skyAperture=True,
                     aperturefile=aperturefile, skymethod=skymethod,
                     maskbase=maskbase, sizescale=sizescale,
                     coords=draw_coords, hide_x_labels=True, hide_y_labels=True,
-                    galname=galname, galcoord=(0.4, 0.9))
+                    galname=galname, galcoord=(0.4, 0.9),
+                    scalelength=scalelength)
             except iraf.IrafError as e:
                 continue
     return f
 
 
-def createEllipseCutouts(BASEDIR, WISErow, runbands=bands, skyAperture=True,
-        skyimage=False, skyprefix="sky_level", aperturefile="ellipse_aperture",
-        skymethod="adaptive", maskbase="mask", suffix="", sizescale=1.5):
+def createEllipseCutouts(
+        BASEDIR, WISErow, runbands=bands, skyAperture=True, skyimage=False, 
+        skyprefix="sky_level", aperturefile="ellipse_aperture",
+        skymethod="adaptive", maskbase="mask", suffix="", sizescale=1.5,
+        scalelength="sky"):
     '''Creates a set of four cutouts with the aperture and sky ellipses
 
     A cutout for each band will be created that contains the aperture
@@ -1530,7 +1534,7 @@ def createEllipseCutouts(BASEDIR, WISErow, runbands=bands, skyAperture=True,
             BASEDIR, WISErow, band, cutoutfig, skyAperture=skyAperture, 
             skyimage=skyimage, skyprefix=skyprefix, aperturefile=aperturefile,
             skymethod=skymethod, maskbase=maskbase,
-            sizescale=sizescale)
+            sizescale=sizescale, scalelength=scalelength)
 
         outputbase = object_name_to_dir(WISErow["objstr_01"])
         if suffix:
@@ -1551,7 +1555,7 @@ def draw_ellipse_cutout(
         skyprefix="sky_level", aperturefile="ellipse_aperture",
         skymethod="adaptive", maskbase="mask", sizescale=1.5, 
         coords=[1, 1, 1, 1], hide_x_labels=False, hide_y_labels=False, 
-        galname="", galcoord=(0.1, 0.9)):
+        galname="", galcoord=(0.1, 0.9), scalelength="ellipse"):
     '''Draws a cutout given for a particular band into a figure instance.
 
     A cutout for each band will be created that contains the aperture
@@ -1592,8 +1596,11 @@ def draw_ellipse_cutout(
         drawSkyParams(galaxydir, band, gc, skyprefix=skyprefix,
                 method=skymethod)
     # Now resize the image.
-    outerlength = get_outer_sky_length(galaxydir, band)
-    cutoutsize = sizescale * WISErow["w1rsemi"] / 3600.0
+    if scalelength is "ellipse":
+        sl = WISErow["w1rsemi"]
+    elif scalelength is "sky":
+        sl = get_outer_sky_length(galaxydir, band)
+    cutoutsize = sizescale * sl / 3600.0
     gc.recenter(Xval, Yval, radius=cutoutsize)
     # Now we want to put the name of the galaxy on the image.
     # Since the coordinates are in percentile units of the image, they need to
