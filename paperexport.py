@@ -490,10 +490,12 @@ def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table,
     rp.MIRplot(rw1abs, rnuvw1, rtable["MIR_class"], rnuvw1_e, xlabel="M_{W1}",
                ylabel="NUV-W1")
 
-    plt.ylim([2, 7])
-    plt.xlim([-18, -24])
+    #plt.ylim([2, 7])
+    #plt.xlim([-18, -24])
     plt.legend(loc="lower right", bbox_to_anchor=(0.85, 0.01))
     print "Not shown are NGC 4406 and NGC 4429"
+    #plt.savefig(dest)
+    #plt.close()
 
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
                                 dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
@@ -531,8 +533,28 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
 
 def create_SED(table=atlas3d_table, dest=build_filepath(FIGUREPATH, "sed",
                                                         EXT)):
+    fluxtable = Table(table["objstr_01"])
+    table["w1unextmag"] = conv.ABmag2Jansky("W1", table["w1unextmag"])
+    table["w1unexterr"] = conv.Mag_err_to_Jansky_err(
+        "W1", table["w1unextmag"], table["w1unexterr"])
+    table["w2unextmag"] = conv.ABmag2Jansky("W2", table["w2unextmag"])
+    table["w2unexterr"] = conv.Mag_err_to_Jansky_err(
+        "W2", table["w2unextmag"], table["w2unexterr"])
+    table["w3unextmag"] = conv.ABmag2Jansky("W3", table["w3unextmag"])
+    table["w3unexterr"] = conv.Mag_err_to_Jansky_err(
+        "W3", table["w3unextmag"], table["w3unexterr"])
+    table["w4unextmag"] = conv.ABmag2Jansky("W4", table["w4unextmag"])
+    table["w4unexterr"] = conv.Mag_err_to_Jansky_err(
+        "W4", table["w4unextmag"], table["w4unexterr"])
+    table["NUVunextmag"] = conv.ABmag2Jansky("NUV", table["NUVunextmag"])
+    table["NUVunexterr"] = conv.Mag_err_to_Jansky_err(
+        "NUV", table["NUVunextmag"], table["NUVunexterr"])
+    table["FUVunextmag"] = conv.ABmag2Jansky("FUV", table["FUVunextmag"])
+    table["FUVunexterr"] = conv.Mag_err_to_Jansky_err(
+        "FUV", table["FUVunextmag"], table["FUVunexterr"])
+
     normval = fsps.plot_FSPS_SED(FSPSPATH)
-    fsps.plot_data_SED(atlas3d_table, normvalue=normval)
+    fsps.plot_data_SED(fluxtable, normvalue=normval)
 
     plt.xlabel("Wavelength (um)")
     plt.ylabel("AB magnitude")
