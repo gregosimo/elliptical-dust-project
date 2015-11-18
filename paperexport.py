@@ -564,6 +564,88 @@ def create_SED(table=atlas3d_table, dest=build_filepath(FIGUREPATH, "sed",
     plt.savefig(dest)
     plt.close()
 
+def create_circumstellar_dust_plot(table=atlas3d_table,
+                                   dest=build_filepath(FIGUREPATH, "cdust",
+                                                       EXT)):
+    '''Dual-paneled W1-W3 and W1-W4 vs age plot.'''
+    # Set up the data
+    dustless_catalog = \
+        atlas3d.filter_ATLAS3D_table_for_dustless_galaxies(table)
+    w1w3color, w1w3err = phot.calc_statistical_difference(
+        dustless_catalog["w1unextmag"], dustless_catalog["w3unextmag"], 
+        dustless_catalog["w1unexterr"], dustless_catalog["w3unexterr"])
+    w1w4color, w1w4err = phot.calc_statistical_difference(
+        dustless_catalog["w1unextmag"], dustless_catalog["w4unextmag"], 
+        dustless_catalog["w1unexterr"], dustless_catalog["w4unexterr"])
+    atlas3d_ages = dustless_catalog["Age_SSP"]
+    atlas3d_ages_err = dustless_catalog["Age_SSP_err"]
+    atlas3d_metallicities = dustless_catalog["[Z/H]_SSP"]
+    med_met = float(np.ma.median(atlas3d_metallicities))
+                                                
+    
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+    # Let's make the first plot: W1-W3
+    plt.sca(ax1)
+    fsps.plot_atlas3d_coded_by_metallicity(
+        atlas3d_ages, w1w3color, w1w3err, atlas3d_ages_err,
+        atlas3d_metallicities, med_met)
+    fsps.plot_dust_toggled_metallicity_bounds(
+        os.path.join(fsps.OUTPUT_PATH, "toggle_dust_met_bounds"), "W1", "W3")
+    plt.legend(loc="upper right")
+    plt.ylabel("W1-W3")
+
+    # Now the second plot: W1-W4
+    plt.sca(ax2)
+    fsps.plot_atlas3d_coded_by_metallicity(
+        atlas3d_ages, w1w4color, w1w4err, atlas3d_ages_err,
+        atlas3d_metallicities, med_met)
+    fsps.plot_dust_toggled_metallicity_bounds(
+        os.path.join(fsps.OUTPUT_PATH, "toggle_dust_met_bounds"), "W1", "W4")
+    plt.ylabel("W1-W4")
+    plt.xlabel("SSP Age (Gyr)")
+    plt.tight_layout(0)
+    plt.close()
+    plt.savefig(dest)
+    # I don't think I need anything below this. But just to be sure, let me
+    # check. If it works, delete EVERYTHING here.
+    # Set up the FSPS models
+    median_met_SSP_file = os.path.join(
+        fsps.OUTPUT_PATH, "SSP_med.out.mags")
+    low_met_SSP_file = os.path.join(
+        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "dust_lowmet.mags")
+    high_met_SSP_file = os.path.join(
+        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "dust_highmet.mags")
+    low_met_SSP_nodust_file = os.path.join(
+        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "nodust_lowmet.mags")
+    high_met_SSP_nodust_file = os.path.join(
+        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "nodust_highmet.mags")
+
+    median_met_SSP = fsps.read_mags(median_met_SSP_file)
+    low_met_SSP = fsps.read_mags(low_met_SSP_file)
+    high_met_SSP = fsps.read_mags(high_met_SSP_file)
+    low_met_SSP_nodust = fsps.read_mags(low_met_SSP_nodust_file)
+    high_met_SSP_nodust = fsps.read_mags(high_met_SSP_nodust_file)
+    
+    # W1-W3 tracks
+    median_met_SSP_w1w3_track = median_met_SSP["W1"] - median_met_SSP["W3"]
+    low_met_SSP_w1w3_track = low_met_SSP["W1"] - low_met_SSP["W3"]
+    high_met_SSP_w1w3_track = high_met_SSP["W1"] - high_met_SSP["W3"]
+    low_met_SSP_nodust_w1w3_track = (low_met_SSP_nodust["W1"] - 
+                                     low_met_SSP_nodust["W3"])
+    high_met_SSP_nodust_w1w3_track = (high_met_SSP_nodust["W1"] - 
+                                      high_met_SSP_nodust["W3"])
+
+    # W1-W4 tracks
+    median_met_SSP_w1w4_track = median_met_SSP["W1"] - median_met_SSP["W4"]
+    low_met_SSP_w1w4_track = low_met_SSP["W1"] - low_met_SSP["W4"]
+    high_met_SSP_w1w4_track = high_met_SSP["W1"] - high_met_SSP["W4"]
+    low_met_SSP_nodust_w1w4_track = (low_met_SSP_nodust["W1"] -
+                                     low_met_SSP_nodust["W4"])
+    high_met_SSP_nodust_w1w4_track = (high_met_SSP_nodust["W1"] -
+                                      high_met_SSP_nodust["W4"])
+
+    
+
 def create_jarrett_comparison_plot(table=jarrett_table,
                                    dest=build_filepath(FIGUREPATH, "jarrett",
                                                        EXT)):
