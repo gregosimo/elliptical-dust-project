@@ -1,8 +1,10 @@
 import os
+from itertools import izip
 
-from astropy.table import Table
+from astropy.table import Table, vstack
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.special
 
 import photometry as phot
 import band_conversions as conv
@@ -148,6 +150,35 @@ def plot_dustless_galaxy_histogram(
     plt.ylabel("N")
     plt.title(title)
 
+def atlas3d_ml_to_wise_ml(log_atlas3d_ml, log_atlas3d_lum, w1_mag, distance,
+                          log_atlas3d_ml_err, log_atlas3d_lum_err, w1_mag_err,
+                          distance_err):
+    '''Converts the (M/L) in r-band for ATLAS3D to W1 with K20fe.
+    
+    Takes the mass-to-light ratio given in the ATLAS3D papers and performs a
+    transformation to W1 as well as an aperture transformation. This function
+    assumes that the mass-to-light ratio is constant over the entire galaxy,
+    which is not an unreasonable assumption. The ATLAS3D luminosity provided is
+    that in Paper XV in solar luminosities. The WISE magnitude should be that
+    measured in the ATLAS3D aperture, NOT the K20 aperture, and should be given
+    in AB magnitudes. Finally, in order to transition between 
+    luminosity and magnitudes, the distance to the object (in Mpc) is needed.
+
+    Handing errors is not as straightforward as it might seem. The
+    uncertainties that go into the mass-to-light ratio should be the modeling
+    uncertainties, the distance uncertainties, and the flux uncertainties for
+    both the r-band and W1 fluxes. Typical errors for modeling as given in
+    ATLAS3D are 6%. Errors for the photometry are 10%
+    '''
+    new_ml = (log_atlas3d_ml + 0.4 * (
+        w1_mag - 5 * np.log10(distance*1e5) - 
+        conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"]) + log_atlas3d_lum)
+    new_ml_err = np.sqrt(
+        log_atlas3d_ml_err**2 + (2 * distance_err / distance / np.log(10))**2 +
+        (0.4 * w1_mag_err)**2 + log_atlas3d_lum_err**2)
+    return new_ml, new_ml_err
+
+
 def read_Krajnovic_Table_D1(
         URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
              "Krajnovic2011_Atlas3D_Paper2_TableD1.txt")):
@@ -159,50 +190,151 @@ def read_Krajnovic_Table_D1(
         data_start=0)
     return krajnovic_table
 
-def read_McDermid_Table_3(
-        URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
-             "McDermid2015_Atlas3D_Paper30_Table3.txt")):
-    '''Reads in the table from McDermid 2015
+def read_MGE_model(modelfolder, galname, galcol="Galaxy"):
+    '''Reads an MGE model file from Scott et al 2013.
 
-    This table contains all of the early-type galaxies in the ATLAS3D sample,
-    as well as their properties as measured by the Re aperture.'''
-    mcdermid_raw_table = Table.read(
-        URL, format="ascii.basic", data_start=0, header_start=None, 
-        fill_values=("--", "0"))
-    mcdermid_table = Table(
-        mcdermid_raw_table[[
-            "col1", "col2", "col4", "col5", "col7", "col8", "col10", "col11",
-            "col13", "col14", "col16", "col17", "col19", "col20", "col22",
-            "col23"]], 
-        names=(
-            "Name", "Hbeta", "Hbeta_err", "Fe5015", "Fe5015_err", "Mgb",
-            "Mgb_err", "Fe5270", "Fe5270_err", "Age_SSP", "Age_SSP_err",
-            "[Z/H]_SSP", "[Z/H]_SSP_er", "[a/Fe]_SSP", "[a/Fe]_SSP_err",
-            "Quality"))
-    # The plus/minus symbols really ruin this command...
-    # mcdermid_table = Table.read(
-    #    URL, format="ascii.commented_header", guess=False, header_start=-4, 
-    #    data_start=0)
-    return mcdermid_table
+    The structure of this file can be found in Table 2. This function will
+    return the table, with the galaxy name given under the column of "galcol".
+    '''
+    modelpath = os.path.join(
+        modelfolder, "mge_{0}.txt".format(phot.object_name_to_dir(galname)))
+    modeltable = Table.read(
+        modelpath, format="ascii.no_header", names=("Ij", "sigj", "qj"),
+        data_start=1, guess=False)
+    modeltable[galcol] = galname
+    ordered_mt = modeltable[galcol, "Ij", "sigj", "qj"]
+    return ordered_mt
 
-def read_McDermid_Table_4(
-        URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
-             "McDermid2015_Atlas3D_Paper30_Table4.txt")):
-    '''Reads in the table from McDermid 2015
+def read_MGE_models(BASEDIR, galnames, galcol="Galaxy", 
+                    modelfolder="mge_parameters_atlas3d"):
+    '''Reads in the MGE models for the objects in galnames.
 
-    This table contains all of the early-type galaxies in the ATLAS3D sample,
-    as well as their properties as measured by the Re aperture.'''
-    mcdermid_raw_table = Table.read(
-        URL, format="ascii.basic", data_start=0, header_start=None, 
-        fill_values=("--", "0"))
-    mcdermid_table = Table(
-        mcdermid_raw_table[[
-            "col1", "col2", "col4", "col5", "col7", "col8", "col10"]],
-        names=(
-            "Name", "Age_SFH", "Age_SFH_err", "[Z/H]_SFH", "[Z/H]_SFH_err", 
-            "t50", "t50_err"))
+    This function will return an astropy table with the model parameters, and a
+    column labeled "galcol", which will have the name of the galaxy
+    corresponding to each model parameter. The utility of this approach lies in
+    the astropy.table.Table.group_by() method, where subtables corresponding to
+    each galaxy can be separated.
+    '''
+    modelfolderpath = os.path.join(BASEDIR, modelfolder)
+    # Since vstack accepts a sequece of tables, we'll just make our own list.
+    # We're not using a list comprehension for the sake of exception handling. 
+    modellist = []
+    for galname in galnames:
+        try:
+            mgemodel = read_MGE_model(
+                    modelfolderpath, galname, galcol)
+        except IOError:
+            # This means that there isn't an MGE model for this galaxy. So
+            # ignore it.
+            continue
+        except Exception:
+            if not phot.check_if_column(galnames):
+                raise ValueError("Galnames is not an Astropy Column")
+            else:
+                raise
+        modellist.append(mgemodel)
+    fullmodeltable = vstack(modellist)
+    return fullmodeltable
 
-    return mcdermid_table
+def integrate_MGE_gaussians(mgetable, D=None, Derr=None, aperturesize=np.inf):
+    '''Takes a table with MGE parameters and calculates fluxes.
+
+    This involves using Equation (1) from Scott et al. (2013). Due to the
+    ambiguity of the equation, this function will either return a flux or a
+    luminosity. 
+    
+    In order to get a luminosity, distances will be required.
+    Specify the distance in the D argument in Mpc. Derr will be used to
+    calculate the error in the luminosity. The luminosity will be returned in
+    terms of the log of the luminosity in solar luminosity units. Fluxes will
+    be returned in terms of the log of the luminosity in solar luminosities per
+    square parsec.
+
+    The aperturesize parameter allows an elliptical aperture to be used of the
+    same shape as the galaxy with a given semimajor axis. The default value is
+    the numpy floating-point value for Infinity, in which case all flux will be
+    included. The value of aperturesize should be given in arcseconds.
+    '''
+    # The sqrt(2) takes into account the fact that erf is defined as the
+    # integral of e**t**2 rather than e**(t**2/2).
+    apweights = scipy.special.erf(aperturesize/mgetable["sigj"]/np.sqrt(2))
+    gauss_sum = np.sum(2 * np.pi * mgetable["Ij"] * 
+            (mgetable["sigj"]/206265)**2 * mgetable["qj"] * apweights)
+    logflux = np.log10(gauss_sum/4/np.pi)
+    logfluxerr = 0.1 / np.log(10) # Flux errors are around 10 percent.
+    if D is not None and Derr is not None:
+        loglum = logflux + np.log10(4*np.pi) + 2 * np.log10(D*1e6)
+        loglumerr = np.sqrt(logfluxerr**2 + (2*Derr/D/np.log(10))**2)
+        return loglum, loglumerr
+    elif D is None and Derr is None:
+        return logflux, logfluxerr
+    else:
+        raise ValueError("D and Derr need to either both be specified, or "
+                         "not.")
+
+def integrate_MGE_gaussian_table(
+        mgetable, distancetable, galnames=("Galaxy", "Galaxy"),
+        lastgaussianscale=np.inf):
+    '''Integrates the MGE gaussians for all given objects.
+
+    MGEtable should be a large table containing all of the MGE expansion
+    parameters. There should also be a column containing the galaxy name
+    corresponding to each of the gaussians, so you know which one goes with
+    which.
+
+    Distancetable should be a table containing the galaxy name and the distance
+    and distance errors under "D" and "D_err".
+
+    Galnames should be a tuple containing the label for the galaxy column for
+    both the mgetable and the distancetable, respectively.
+
+
+    Lastgaussianscale is the factor which determines the aperture size for each
+    object. The aperture size will be lastgaussianscale*max(sigj). In other
+    words, the size of the aperture will be lastgaussianscale sigma of the
+    largest Gaussian making up the MGE model. The default value is to have an
+    infinitely large aperture.
+    '''
+    mgelums = []
+    mgelumerrs = []
+    mgegalname = []
+    mge_grouped = mgetable.group_by(galnames[0])
+    # Iterate over all of the galaxy tables.
+    for key, group in izip(mge_grouped.groups.keys, mge_grouped.groups):
+        distancerow = distancetable[np.where(
+            distancetable[galnames[1]] == key[galnames[0]])]
+        d, derr = distancerow["D"][0], distancerow["D_err"][0]
+        largest_gaussian = max(group["sigj"])
+        lum, lumerr = integrate_MGE_gaussians(
+                group, d, derr, aperturesize=lastgaussianscale*largest_gaussian)
+        mgelums.append(lum)
+        mgelumerrs.append(lumerr)
+        mgegalname.append(key[galnames[0]])
+    lumtable = Table([mgegalname, mgelums, mgelumerrs],
+                     names=(galnames[0], "logL", "logL_err"))
+    return lumtable
+
+def get_largest_gaussian(
+        mgetable, galname="Galaxy", signame="sigj"):
+    '''Gets the width of the largest gaussian for each galaxy in mgetable.
+
+    MGEtable should be a large table containing all of the MGE expansion
+    parameters. There should also be a column containing hte galaxy name
+    corresponding to each of the Gaussians, so you know which one goes with
+    which.
+
+    This function will output a table containing the galaxy name along with the
+    width of the largest gaussian.
+    '''
+    mgegals = []
+    mgesigs = []
+    mge_grouped = mgetable.group_by(galname)
+    for key, group in izip(mge_grouped.groups.keys, mge_grouped.groups):
+        largest_row = group[-1]
+        mgegals.append(largest_row[galname])
+        mgesigs.append(largest_row[signame])
+    sigtable = Table([mgegals, mgesigs], names=(galname, signame))
+    return sigtable
 
 def get_dustless_galaxies(krajnovic_table=None):
     '''Gets dustless galaxies in ATLAS3D. 

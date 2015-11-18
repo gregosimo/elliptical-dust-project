@@ -19,6 +19,7 @@ import queries
 import rampazzo_plots as rp
 import fsps
 import band_conversions as conv
+import atlas3d
 
 BASEPATH = "/home/regulus/simonian/year1/wise"
 FSPSPATH = "/home/regulus/simonian/year1/fsps"
@@ -75,15 +76,44 @@ def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
     Since generating the full table is an expensive operation, this function is
     called to ensure it is only called once per load, and only when it is
     really needed.'''
+    rampazzosample = rampazzo.copy()
+    rampazzosample["sample"] = "Rampazzo"
+    rampazzosample.rename_column("RSA_morph_type", "type")
+    atlas3dsample = atlas3d.copy()
+    atlas3dsample["sample"] = "ATLAS3D"
     global fulltable
-    if fulltable is []:
+    if not fulltable:
         # With a later version of astropy, I could just use the unique 
         # function...
-        fulltable = vstack([rampazzo, atlas3d])
+        fulltable = vstack([rampazzosample, atlas3dsample])
         groupedtable = fulltable.group_by('objstr_01')
-        fulltable = Table(rows=groupedtable[0])
+        # This will be bad if the first galaxy is in both datasets.
+        fulltable = Table(rows=groupedtable.groups[0][0])
         for ix in xrange(1, len(groupedtable.groups)):
-            fulltable.add_row(groupedtable.groups[ix][0])
+            tablegroup = groupedtable.groups[ix]
+            addrow = tablegroup[0]
+            if len(tablegroup) == 2:
+                addrow["sample"] = "Both"
+            elif len(tablegroup) > 2:
+                raise ValueError("Some table has more than three entries.")
+            fulltable.add_row(addrow)
+        fulltable.sort("objstr_01")
+        # For some reason, the masks keep getting messed up whenever I make the
+        # full table.
+        fulltable["NUV_Tile"].mask = fulltable["NUV_Tile"] == '0.0'
+        fulltable["FUV_Tile"].mask = fulltable["FUV_Tile"] == '0.0'
+        fulltable["NUVapmag"].mask = np.isnan(fulltable["NUVapmag"])
+        fulltable["FUVapmag"].mask = np.isnan(fulltable["FUVapmag"])
+        fulltable["w1apmag"].mask = np.isnan(fulltable["w1apmag"])
+        fulltable["w2apmag"].mask = np.isnan(fulltable["w2apmag"])
+        fulltable["w3apmag"].mask = np.isnan(fulltable["w3apmag"])
+        fulltable["w4apmag"].mask = np.isnan(fulltable["w4apmag"])
+        fulltable["NUVaperr"].mask = np.isnan(fulltable["NUVaperr"])
+        fulltable["FUVaperr"].mask = np.isnan(fulltable["FUVaperr"])
+        fulltable["w1aperr"].mask = np.isnan(fulltable["w1aperr"])
+        fulltable["w2aperr"].mask = np.isnan(fulltable["w2aperr"])
+        fulltable["w3aperr"].mask = np.isnan(fulltable["w3aperr"])
+        fulltable["w4aperr"].mask = np.isnan(fulltable["w4aperr"])
     else:
         pass
 
@@ -139,19 +169,28 @@ def create_ATLAS3D_sample_table(table=atlas3d_table,
                  formats={"NUV Tile": format_GALEX_tile, "FUV Tile":
                           format_GALEX_tile})
 
-def create_param_table(table=fulltable, dest=os.path.join(TABLEPATH,
-                                                          "params.tex")):
+def create_param_table(table=fulltable[:10], dest=os.path.join(TABLEPATH,
+                                                               "params.tex")):
+
     generate_fulltable()
     caption = r"""Aperture photometry parameters for galaxies in the \ATLAS{}
     and Rampazzo samples
     \label{tab:params}"""
-    columns = ["objstr_01", "w1rsemi", "w1ba", "w1pa", "cat", "NUV_Tile",
-               "FUV_Tile"]
-    names = ["Galaxy", "Semimajor Axis", "Axis Ratio", "Position Angle",
-             "\WISE{} Survey", "NUV Tile", "FUV Tile"]
+    columns = ["objstr_01", "type", "D", "sample", "w1rsemi", "w4rsemi", 
+               "w1ba", "w4ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
+    names = ["Galaxy", "Morph", "D", "S", r"\(a_{W1}\)", r"\(a_{W4}\)",
+             r"\(b/a_{W1}\)", r"\(b/a_{W4}\)", "PA", "Survey", "NUV Tile", 
+             "FUV Tile"]
+    preamble = r"""\tabletypesize{\scriptsize}"""
+    writetable = table[columns]
+    writetable.write(dest, format="ascii.aastex", names=names,
+                     latexdict={"caption": caption, "preamble": preamble}, 
+                     formats={"NUV Tile": format_GALEX_tile, "FUV Tile":
+                              format_GALEX_tile, "S": format_sample, 
+                              "PA": "%d"})
 
-def create_magnitude_table(table=rampazzo_table, dest=os.path.join(TABLEPATH,
-                                                              "mags.tex")):
+def create_magnitude_table(table=rampazzo_table[:10], 
+                           dest=os.path.join(TABLEPATH, "mags.tex")):
     generate_fulltable()
     caption = r"""Magnitudes of galaxies in the \ATLAS{} and Rampazzo samples.
     \label{tab:magtable}"""
@@ -163,6 +202,7 @@ def create_magnitude_table(table=rampazzo_table, dest=os.path.join(TABLEPATH,
     names = ["Galaxy", "FUV", r"\(\sigma_{FUV}\)", "NUV", r"\(\sigma_{NUV}\)", 
              "W1", r"\(\sigma_{W1}\)", "W2", r"\(\sigma_{W2}\)", "W3",
              r"\(\sigma_{W3}\)", "W4", r"\(\sigma_{W4}\)"]
+    preamble = r"""\tabletypesize{\scriptsize}"""
     formats = {"Galaxy": format_reflect,
                "FUV": format_mag, r"\(\sigma_{FUV}\)": format_mag_err, 
                "NUV": format_mag, r"\(\sigma_{NUV}\)": format_mag_err, 
@@ -173,7 +213,7 @@ def create_magnitude_table(table=rampazzo_table, dest=os.path.join(TABLEPATH,
     export = table[columns]
     export.write(dest, format="ascii.aastex", names=names, formats=formats,
                  latexdict={"caption": caption, "tablefoot": tablefoot,
-                 "tabletype": "deluxetable"})
+                            "tabletype": "deluxetable", "preamble": preamble})
 
 def create_W2_W3_histogram(table=rampazzo_table, 
                            dest=build_filepath(FIGUREPATH, "w2w3hist")):
@@ -313,7 +353,7 @@ def create_stellar_mass_ATLAS3D_comparison(
     atlas3d_lums = read_Cappellari13a_Table_1()
     atlas3d_masstolight = read_Cappellari13b_Table_1()
     joinedtable = phot.multijoin_by_galaxy_name(
-        atlas3d_table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
+        table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
         names=("objstr_01", "Galaxy", "Galaxy", "Galaxy"))
     absmag_w1 = joinedtable["w1unextmag"] - (5 *
         np.log10(joinedtable["D"]*1e6/10))
@@ -327,30 +367,135 @@ def create_stellar_mass_ATLAS3D_comparison(
     plt.savefig(dest)
     plt.close()
 
-def create_mass_to_light_ATLAS3D_comparison(
-        table=atlas3d_table, dest=os.path.join(FIGUREPATH, "masstolight.pdf")):
+def create_stellar_mass_luminosity_relation(
+        table=atlas3d_table, dest=os.path.join(FIGUREPATH, 
+        "mass-luminosity.pdf")):
     atlas3d_params = read_Cappellari11_Table_3()
+    atlas3d_params = generate_ATLAS3D_distance_errors(atlas3d_params)
     atlas3d_lums = read_Cappellari13a_Table_1()
     atlas3d_masstolight = read_Cappellari13b_Table_1()
     joinedtable = phot.multijoin_by_galaxy_name(
-        atlas3d_table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
+        table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
         names=("objstr_01", "Galaxy", "Galaxy", "Galaxy"))
-    absmag_w1 = joinedtable["w1unextmag"] - (5 *
-        np.log10(joinedtable["D"]*1e6/10))
-    # This is the Jarrett Mass-to-light ratio translated to r-band.
-    jarrett_ml_r = (
-        joinedtable["logML_W1"] - 
-        0.4 * (absmag_w1 - conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"]) -
-        joinedtable["logLum"])
-    plt.plot(jarrett_ml_r, joinedtable["logML_star"], 'b*')
-    plt.xlabel("Jarrett M/L (r-band)")
-    plt.ylabel("ATLAS3D (M/L)_stars (r-band)")
-    # Not shown is PGC029321 all the way to the right.
-    plt.xlim([-1.5, 0.5])
-    plt.ylim([-0.5, 1.5])
+
+    atlas3d_stellar_mass, atlas3d_stellar_mass_err = phot.calc_statistical_sum(
+        joinedtable["logML_star"], joinedtable["logLum"], 0.06/np.log(10),
+        0.1/np.log(10))
+    distance_modulus, distance_modulus_err = phot.calc_statistical_logarithm(
+        joinedtable["D"]*1e5, joinedtable["D_err"]*1e5)
+    absolute_w1, absolute_w1_err = phot.calc_statistical_difference(
+        joinedtable["w1unextmag"], 5 * distance_modulus, 
+        joinedtable["w1unexterr"], 5 * distance_modulus_err)
+    lum, lum_err = (-0.4 * (absolute_w1 - 
+                           conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"]),
+                    0.4 * absolute_w1_err)
+    plt.errorbar(lum, atlas3d_stellar_mass, atlas3d_stellar_mass_err, lum_err, 
+                 'bo', label="ATLAS3D")
+    plt.xlabel("log L_W1 (Lsun)")
+    plt.ylabel("log M* (Msun)")
     plt.savefig(dest)
     plt.close()
 
+def create_cutout_grid(
+        table=atlas3d_table[:2], dest=os.path.join(FIGUREPATH, "cutouts.png")):
+    gridfig = phot.ellipse_cutout_grid(
+        ATLAS3DBASE, table, ignore_exception=True)
+    gridfig.savefig(dest)
+    plt.close(gridfig)
+
+
+def create_mass_to_light_ATLAS3D_comparison(
+        table=atlas3d_table, dest=os.path.join(FIGUREPATH, "masstolight.pdf")):
+    atlas3d_params = read_Cappellari11_Table_3()
+    atlas3d_params = generate_ATLAS3D_distance_errors(atlas3d_params)
+    atlas3d_lums = read_Cappellari13a_Table_1()
+    atlas3d_masstolight = read_Cappellari13b_Table_1()
+    joinedtable = phot.multijoin_by_galaxy_name(
+        table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
+        names=("objstr_01", "Galaxy", "Galaxy", "Galaxy"))
+    # Calculate the mass-to-light ratio for the ATLAS3D points in WISE.
+    atlas3d_masstolight_w1, atlas3d_masstolight_w1_err = \
+        atlas3d.atlas3d_ml_to_wise_ml(
+            joinedtable["logML_star"], joinedtable["logLum"],
+            joinedtable["w1unextmag_atlas3d"], joinedtable["D"],
+            0.06/np.log(10), 0.1/np.log(10), joinedtable["w1unexterr_atlas3d"],
+            joinedtable["D_err"])
+    w1w2, w1w2_err = phot.calc_statistical_difference(
+        joinedtable["w1unextmag"], joinedtable["w2unextmag"],
+        joinedtable["w1unexterr"], joinedtable["w2unexterr"])
+    plt.errorbar(w1w2, atlas3d_masstolight_w1, atlas3d_masstolight_w1_err,
+                 w1w2_err, 'k*', label="ATLAS3D")
+
+    # Remember that these will be given in Vega mags.
+    w1w2_limits = np.linspace(-0.8+0.01, -0.2-0.01, 2)
+    w1w2_limits_VEGA = w1w2_limits +0.64
+    # Relations from Jarrett et al 2013
+    jarrett_relation = -0.31 + 3.42 * w1w2_limits_VEGA
+    jarrett_fit_relation = -0.246 - 2.100 * w1w2_limits_VEGA
+    jarrett_fit_lower = (-0.246-0.027) - (2.100+0.238) * w1w2_limits_VEGA
+    jarrett_fit_upper = (-0.246+0.027) - (2.100-0.238) * w1w2_limits_VEGA
+    plt.plot(w1w2_limits, jarrett_relation, 'r-', label="Jarrett M/L")
+    plt.plot(w1w2_limits, jarrett_fit_relation, 'm-', label="Jarrett M/L fit")
+    plt.plot(w1w2_limits, jarrett_fit_upper, 'm--')
+    plt.plot(w1w2_limits, jarrett_fit_lower, 'm--')
+    # Relations from Meidt et al 2014
+    meidt_relation = 0.07 + 3.98 * w1w2_limits_VEGA
+    meidt_upper = 0.15 + 4.96 * w1w2_limits_VEGA
+    meidt_lower = 0.01 + 3.00 * w1w2_limits_VEGA
+    plt.plot(w1w2_limits, meidt_relation, 'g-', label="Meidt M/L")
+    plt.plot(w1w2_limits, meidt_upper, 'g--')
+    plt.plot(w1w2_limits, meidt_lower, 'g--')
+    # Finally Eskew
+    eskew_relation = 0.28 - 0.74 * w1w2_limits_VEGA
+    plt.plot(w1w2_limits, eskew_relation, 'b-', label="Eskew M/L") 
+
+    plt.xlabel("W1-W2 (AB)")
+    plt.ylabel("(M/L)_W1")
+    # Not shown is PGC029321 all the way to the right.
+    plt.xlim([-0.8, -0.2])
+    plt.ylim([-1.0, 1.0])
+    plt.legend(loc="upper right")
+    plt.savefig(dest)
+    plt.close()
+
+def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table, 
+        dest=os.path.join(FIGUREPATH, "nuvw1.pdf")):
+    rnuv = rtable["NUVunextmag"]
+    rnuv_e = rtable["NUVunexterr"]
+    rw1 = rtable["w1unextmag"]
+    rw1_e = rtable["w1unexterr"]
+    rd = rtable["D"]
+
+    rnuvw1, rnuvw1_e = phot.calc_statistical_difference(
+            rnuv, rw1, rnuv_e, rw1_e)
+
+    rw1abs = conv.app2absmag(rw1, rd)
+    # This until I figure out what to do with distance errors.
+    rw1abs_e = rw1_e
+
+    anuv = atable["NUVunextmag"]
+    anuv_e = atable["NUVunexterr"]
+    aw1 = atable["w1unextmag"]
+    aw1_e = atable["w1unexterr"]
+    ad = atable["D"]
+    ad_e = atable["D_err"]
+
+    anuvw1, anuvw1_e = phot.calc_statistical_difference(
+            anuv, aw1, anuv_e, aw1_e)
+    aw1abs = conv.app2absmag(aw1, ad)
+    # This until I figure out what to do with distance errors.
+    aw1abs_e = conv.app_err_to_abs_err(aw1_e, ad, ad_e)
+
+    plt.errorbar(aw1abs, anuvw1, anuvw1_e, aw1abs_e, 'kx', label="ATLAS3D")
+    rp.MIRplot(rw1abs, rnuvw1, rtable["MIR_class"], rnuvw1_e, xlabel="M_{W1}",
+               ylabel="NUV-W1")
+
+    #plt.ylim([2, 7])
+    #plt.xlim([-18, -24])
+    plt.legend(loc="lower right", bbox_to_anchor=(0.85, 0.01))
+    print "Not shown are NGC 4406 and NGC 4429"
+    #plt.savefig(dest)
+    #plt.close()
 
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
                                 dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
@@ -386,13 +531,129 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
 
     return classtable
 
+def create_SED(table=atlas3d_table, dest=build_filepath(FIGUREPATH, "sed",
+                                                        EXT)):
+    fluxtable = Table(table["objstr_01"])
+    table["w1unextmag"] = conv.ABmag2Jansky("W1", table["w1unextmag"])
+    table["w1unexterr"] = conv.Mag_err_to_Jansky_err(
+        "W1", table["w1unextmag"], table["w1unexterr"])
+    table["w2unextmag"] = conv.ABmag2Jansky("W2", table["w2unextmag"])
+    table["w2unexterr"] = conv.Mag_err_to_Jansky_err(
+        "W2", table["w2unextmag"], table["w2unexterr"])
+    table["w3unextmag"] = conv.ABmag2Jansky("W3", table["w3unextmag"])
+    table["w3unexterr"] = conv.Mag_err_to_Jansky_err(
+        "W3", table["w3unextmag"], table["w3unexterr"])
+    table["w4unextmag"] = conv.ABmag2Jansky("W4", table["w4unextmag"])
+    table["w4unexterr"] = conv.Mag_err_to_Jansky_err(
+        "W4", table["w4unextmag"], table["w4unexterr"])
+    table["NUVunextmag"] = conv.ABmag2Jansky("NUV", table["NUVunextmag"])
+    table["NUVunexterr"] = conv.Mag_err_to_Jansky_err(
+        "NUV", table["NUVunextmag"], table["NUVunexterr"])
+    table["FUVunextmag"] = conv.ABmag2Jansky("FUV", table["FUVunextmag"])
+    table["FUVunexterr"] = conv.Mag_err_to_Jansky_err(
+        "FUV", table["FUVunextmag"], table["FUVunexterr"])
+
+    normval = fsps.plot_FSPS_SED(FSPSPATH)
+    fsps.plot_data_SED(fluxtable, normvalue=normval)
+
+    plt.xlabel("Wavelength (um)")
+    plt.ylabel("AB magnitude")
+    plt.ylim([5, 17])
+    plt.gca().invert_yaxis()
+    plt.legend(loc="upper left")
+    plt.savefig(dest)
+    plt.close()
+
+def create_circumstellar_dust_plot(table=atlas3d_table,
+                                   dest=build_filepath(FIGUREPATH, "cdust",
+                                                       EXT)):
+    '''Dual-paneled W1-W3 and W1-W4 vs age plot.'''
+    # Set up the data
+    dustless_catalog = \
+        atlas3d.filter_ATLAS3D_table_for_dustless_galaxies(table)
+    w1w3color, w1w3err = phot.calc_statistical_difference(
+        dustless_catalog["w1unextmag"], dustless_catalog["w3unextmag"], 
+        dustless_catalog["w1unexterr"], dustless_catalog["w3unexterr"])
+    w1w4color, w1w4err = phot.calc_statistical_difference(
+        dustless_catalog["w1unextmag"], dustless_catalog["w4unextmag"], 
+        dustless_catalog["w1unexterr"], dustless_catalog["w4unexterr"])
+    atlas3d_ages = dustless_catalog["Age_SSP"]
+    atlas3d_ages_err = dustless_catalog["Age_SSP_err"]
+    atlas3d_metallicities = dustless_catalog["[Z/H]_SSP"]
+    med_met = float(np.ma.median(atlas3d_metallicities))
+                                                
+    
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+    # Let's make the first plot: W1-W3
+    plt.sca(ax1)
+    fsps.plot_atlas3d_coded_by_metallicity(
+        atlas3d_ages, w1w3color, w1w3err, atlas3d_ages_err,
+        atlas3d_metallicities, med_met)
+    fsps.plot_dust_toggled_metallicity_bounds(
+        os.path.join(fsps.OUTPUT_PATH, "toggle_dust_met_bounds"), "W1", "W3")
+    plt.legend(loc="upper right")
+    plt.ylabel("W1-W3")
+
+    # Now the second plot: W1-W4
+    plt.sca(ax2)
+    fsps.plot_atlas3d_coded_by_metallicity(
+        atlas3d_ages, w1w4color, w1w4err, atlas3d_ages_err,
+        atlas3d_metallicities, med_met)
+    fsps.plot_dust_toggled_metallicity_bounds(
+        os.path.join(fsps.OUTPUT_PATH, "toggle_dust_met_bounds"), "W1", "W4")
+    plt.ylabel("W1-W4")
+    plt.xlabel("SSP Age (Gyr)")
+    plt.tight_layout(0)
+    plt.close()
+    plt.savefig(dest)
+    # I don't think I need anything below this. But just to be sure, let me
+    # check. If it works, delete EVERYTHING here.
+    # Set up the FSPS models
+    median_met_SSP_file = os.path.join(
+        fsps.OUTPUT_PATH, "SSP_med.out.mags")
+    low_met_SSP_file = os.path.join(
+        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "dust_lowmet.mags")
+    high_met_SSP_file = os.path.join(
+        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "dust_highmet.mags")
+    low_met_SSP_nodust_file = os.path.join(
+        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "nodust_lowmet.mags")
+    high_met_SSP_nodust_file = os.path.join(
+        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "nodust_highmet.mags")
+
+    median_met_SSP = fsps.read_mags(median_met_SSP_file)
+    low_met_SSP = fsps.read_mags(low_met_SSP_file)
+    high_met_SSP = fsps.read_mags(high_met_SSP_file)
+    low_met_SSP_nodust = fsps.read_mags(low_met_SSP_nodust_file)
+    high_met_SSP_nodust = fsps.read_mags(high_met_SSP_nodust_file)
+    
+    # W1-W3 tracks
+    median_met_SSP_w1w3_track = median_met_SSP["W1"] - median_met_SSP["W3"]
+    low_met_SSP_w1w3_track = low_met_SSP["W1"] - low_met_SSP["W3"]
+    high_met_SSP_w1w3_track = high_met_SSP["W1"] - high_met_SSP["W3"]
+    low_met_SSP_nodust_w1w3_track = (low_met_SSP_nodust["W1"] - 
+                                     low_met_SSP_nodust["W3"])
+    high_met_SSP_nodust_w1w3_track = (high_met_SSP_nodust["W1"] - 
+                                      high_met_SSP_nodust["W3"])
+
+    # W1-W4 tracks
+    median_met_SSP_w1w4_track = median_met_SSP["W1"] - median_met_SSP["W4"]
+    low_met_SSP_w1w4_track = low_met_SSP["W1"] - low_met_SSP["W4"]
+    high_met_SSP_w1w4_track = high_met_SSP["W1"] - high_met_SSP["W4"]
+    low_met_SSP_nodust_w1w4_track = (low_met_SSP_nodust["W1"] -
+                                     low_met_SSP_nodust["W4"])
+    high_met_SSP_nodust_w1w4_track = (high_met_SSP_nodust["W1"] -
+                                      high_met_SSP_nodust["W4"])
+
+    
+
 def create_jarrett_comparison_plot(table=jarrett_table,
                                    dest=build_filepath(FIGUREPATH, "jarrett",
                                                        EXT)):
-    #smallindices = [0, 2, 3, 12, 13]
-    smallindices = range(len(table))
-    orig_fluxes = read_Jarrett_Table2()[smallindices]
-    my_mags = table[smallindices]
+    smallobjs = ["NGC584", "NGC777"]
+
+    smallindices = np.searchsorted(table["objstr_01"], smallobjs)
+    orig_fluxes = table
+    my_mags = table
 
     orig_w1 = conv.Jansky2Vegamag("W1", orig_fluxes["W1"])
     orig_w1_err = conv.Jansky_err_to_mag_err("W1", orig_fluxes["W1"], 
@@ -424,11 +685,34 @@ def create_jarrett_comparison_plot(table=jarrett_table,
     w4diff, w4differr = phot.calc_statistical_difference(myw4, orig_w4,
         myw4err, orig_w4_err)
 
-    phot.doubleDifferencePlot(myw1, orig_w1, myw2, orig_w2, myw1err,
-                              orig_w1_err, myw2err, orig_w2_err,
-                              "W1 Difference", "W2 Difference", "")
+    plt.figure(figsize=(10,5))
+    plt.subplot(1, 2, 1)
+    phot.doubleDifferencePlot(
+        myw1, orig_w1, myw2, orig_w2, myw1err, orig_w1_err, myw2err, 
+        orig_w2_err, "W1 Difference", "W2 Difference", "", fmt="b.")
+    phot.doubleDifferencePlot(
+        myw1[smallindices], orig_w1[smallindices], myw2[smallindices],
+        orig_w2[smallindices], myw1err[smallindices],
+        orig_w1_err[smallindices], myw2err[smallindices],
+        orig_w2_err[smallindices], "W1 Difference", "W2 Difference", "", 
+        fmt="r.")
+    plt.subplot(1, 2, 2)
+    phot.doubleDifferencePlot(
+        myw3, orig_w3, myw4, orig_w4, myw3err, orig_w3_err, myw4err, 
+        orig_w4_err, "W1 Difference", "W2 Difference", "", fmt="b.")
+    phot.doubleDifferencePlot(
+        myw3[smallindices], orig_w3[smallindices], myw2[smallindices],
+        orig_w2[smallindices], myw3err[smallindices],
+        orig_w3_err[smallindices], myw4err[smallindices],
+        orig_w4_err[smallindices], "W3 Difference", "W4 Difference", "", 
+        fmt="r.")
     plt.savefig(dest)
     plt.close()
+
+    print "W1 Difference: {0:.2g}".format(np.std(w1diff))
+    print "W2 Difference: {0:.2g}".format(np.std(w2diff))
+    print "W3 Difference: {0:.2g}".format(np.std(w3diff))
+    print "W4 Difference: {0:.2g}".format(np.std(w4diff))
 
 def move_rampazzo():
     # First read in Table 1
@@ -594,6 +878,25 @@ def read_McDermid15_Table_3(
     atlas3dsample = separate_errors_in_table(atlas3dsample)
     return atlas3dsample
 
+def read_McDermid_Table_4(
+        URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
+             "McDermid2015_Atlas3D_Paper30_Table4.txt")):
+    '''Reads in the table from McDermid 2015
+
+    This table contains all of the early-type galaxies in the ATLAS3D sample,
+    as well as their properties as measured by the Re aperture.'''
+    mcdermid_raw_table = Table.read(
+        URL, format="ascii.basic", data_start=0, header_start=None, 
+        fill_values=("--", "0"))
+    mcdermid_table = Table(
+        mcdermid_raw_table[[
+            "col1", "col2", "col4", "col5", "col7", "col8", "col10"]],
+        names=(
+            "Name", "Age_SFH", "Age_SFH_err", "[Z/H]_SFH", "[Z/H]_SFH_err", 
+            "t50", "t50_err"))
+
+    return mcdermid_table
+
 def separate_errors_in_table(fulltable, seperator="+/-", suffix="_err",
                              mask="--"):
     '''Formats table to have separate error column.
@@ -659,7 +962,7 @@ def generate_ATLAS3D_distance_errors(atlas3d_table_3=None):
     # distance determinations
     at3_group = at3.group_by("SBF")
     # When SBF=2, then the distances come from Mei et al (2007)
-    meigals = at3_group.groups[2][["Galaxy", "D"]]
+    meigals = at3_group.groups[2]
     meigals["D_err"] = 0.03 * meigals["D"]
     # Next precise is for galaxies which are in Virgo, so we'll make a table
     # for the non-Mei galaxies
@@ -673,7 +976,7 @@ def generate_ATLAS3D_distance_errors(atlas3d_table_3=None):
     nonvirgo = nonacs_group.groups[0]
     nonvirgo_group = nonvirgo.group_by("SBF")
     # The Tonry et al (2001) galaxies are the ones where SBF=1
-    tonrygals = nonvirgo_group.groups[1][["Galaxy", "D"]]
+    tonrygals = nonvirgo_group.groups[1]
     tonrygals["D_err"] = 0.10 * tonrygals["D"]
     # When SBF=0, we have multiple cases.
     nonSBF = nonvirgo_group.groups[0]
@@ -681,15 +984,15 @@ def generate_ATLAS3D_distance_errors(atlas3d_table_3=None):
     # When SBF=0 and NED-D > 0, then distance was taken from NED-D catalog.
     # There are two sets of methods which are good to ~10 percent, an <~20
     # percent. I'm gonna choose 15 percent just for current simplicity's sake.
-    NEDgals = nonSBF_group.groups[1:][["Galaxy", "D"]]
+    NEDgals = nonSBF_group.groups[1:]
     NEDgals["D_err"] = 0.15 * NEDgals["D"]
     # We took care of the 5 cases. Now for the rest which are only avaialble
     # through cosmic flow velocities.
-    nonNEDgals = nonSBF_group.groups[0][["Galaxy", "D"]]
+    nonNEDgals = nonSBF_group.groups[0]
     nonNEDgals["D_err"] = 0.21 * nonNEDgals["D"]
 
     distance_error_table = vstack([meigals, virgogals, tonrygals, NEDgals,
-                                   nonNEDgals])
+                                   nonNEDgals])[["Galaxy", "D_err"]]
     full_table = phot.join_by_galaxy_name(
         at3, distance_error_table, names=("Galaxy", "Galaxy"), join_type="left")
     return full_table
@@ -721,6 +1024,19 @@ def format_GALEX_tile(tilename):
     if tilename is None:
         return "--"
     return tilename.replace("_", r"\_")
+
+def format_sample(sampstr):
+    '''Condenses the string corresponding to the sample to a single letter.'''
+
+    if sampstr == "Rampazzo":
+        return "R"
+    elif sampstr == "ATLAS3D":
+        return "A"
+    elif sampstr == "Both":
+        return "R,A"
+    else:
+        raise ValueError("Don't recognize the sample")
+
 
 def format_mag(mag):
     '''Format magnitudes so that they can be displayed on a table.
