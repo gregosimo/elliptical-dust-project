@@ -20,6 +20,7 @@ import rampazzo_plots as rp
 import fsps
 import band_conversions as conv
 import atlas3d
+import statop as stat
 
 BASEPATH = "/home/regulus/simonian/year1/wise"
 FSPSPATH = "/home/regulus/simonian/year1/fsps"
@@ -251,8 +252,8 @@ def create_W1W2_W2W3_MIR_plot(table=rampazzo_table,
     w3err = table["w3unexterr"]
     MIR = table["MIR_class"]
 
-    w1w2, w1w2err = phot.calc_statistical_difference(w1, w2, w1err, w2err)
-    w2w3, w2w3err = phot.calc_statistical_difference(w2, w3, w2err, w3err)
+    w1w2, w1w2err = stat.subtract(w1, w2, w1err, w2err)
+    w2w3, w2w3err = stat.subtract(w2, w3, w2err, w3err)
 
     rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, xrange(5), xlabel,
                ylabel, "", loc="upper left")
@@ -273,8 +274,8 @@ def create_W2W3_W3W4_MIR_plot(table=rampazzo_table,
     w4err = table["w4unexterr"]
     MIR = table["MIR_class"]
 
-    w2w3, w2w3err = phot.calc_statistical_difference(w2, w3, w2err, w3err)
-    w3w4, w3w4err = phot.calc_statistical_difference(w3, w4, w3err, w4err)
+    w2w3, w2w3err = stat.subtract(w2, w3, w2err, w3err)
+    w3w4, w3w4err = stat.subtract(w3, w4, w3err, w4err)
 
     rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, xrange(5), xlabel,
                ylabel, "", loc="upper left")
@@ -294,9 +295,9 @@ def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
     w4err = table["w4unexterr"]
     MIR = table["MIR_class"]
 
-    w1w2, w1w2err = phot.calc_statistical_difference(w1, w2, w1err, w2err)
-    w2w3, w2w3err = phot.calc_statistical_difference(w2, w3, w2err, w3err)
-    w3w4, w3w4err = phot.calc_statistical_difference(w3, w4, w3err, w4err)
+    w1w2, w1w2err = stat.subtract(w1, w2, w1err, w2err)
+    w2w3, w2w3err = stat.subtract(w2, w3, w2err, w3err)
+    w3w4, w3w4err = stat.subtract(w3, w4, w3err, w4err)
 
     w1w2label = "W1-W2"
     w2w3label = "W2-W3"
@@ -333,9 +334,9 @@ def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
     pah17 = classtable["17 um"]
     pah17_err = classtable["17 um err"]
 
-    xratio, xratioerr = phot.calc_statistical_quotient(pah113, pah17, 
+    xratio, xratioerr = stat.divide(pah113, pah17, 
                                                        pah113_err, pah17_err)
-    yratio, yratioerr = phot.calc_statistical_quotient(pah77, pah113,
+    yratio, yratioerr = stat.divide(pah77, pah113,
                                                        pah77_err, pah113_err)
 
     rp.MIRplot(xratio, yratio, classtable["MIR_class"], yerr=yratioerr,
@@ -378,12 +379,12 @@ def create_stellar_mass_luminosity_relation(
         table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
         names=("objstr_01", "Galaxy", "Galaxy", "Galaxy"))
 
-    atlas3d_stellar_mass, atlas3d_stellar_mass_err = phot.calc_statistical_sum(
+    atlas3d_stellar_mass, atlas3d_stellar_mass_err = stat.add(
         joinedtable["logML_star"], joinedtable["logLum"], 0.06/np.log(10),
         0.1/np.log(10))
-    distance_modulus, distance_modulus_err = phot.calc_statistical_logarithm(
+    distance_modulus, distance_modulus_err = stat.logarithm(
         joinedtable["D"]*1e5, joinedtable["D_err"]*1e5)
-    absolute_w1, absolute_w1_err = phot.calc_statistical_difference(
+    absolute_w1, absolute_w1_err = stat.subtract(
         joinedtable["w1unextmag"], 5 * distance_modulus, 
         joinedtable["w1unexterr"], 5 * distance_modulus_err)
     lum, lum_err = (-0.4 * (absolute_w1 - 
@@ -420,7 +421,7 @@ def create_mass_to_light_ATLAS3D_comparison(
             joinedtable["w1unextmag_atlas3d"], joinedtable["D"],
             0.06/np.log(10), 0.1/np.log(10), joinedtable["w1unexterr_atlas3d"],
             joinedtable["D_err"])
-    w1w2, w1w2_err = phot.calc_statistical_difference(
+    w1w2, w1w2_err = stat.subtract(
         joinedtable["w1unextmag"], joinedtable["w2unextmag"],
         joinedtable["w1unexterr"], joinedtable["w2unexterr"])
     plt.errorbar(w1w2, atlas3d_masstolight_w1, atlas3d_masstolight_w1_err,
@@ -466,7 +467,7 @@ def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table,
     rw1_e = rtable["w1unexterr"]
     rd = rtable["D"]
 
-    rnuvw1, rnuvw1_e = phot.calc_statistical_difference(
+    rnuvw1, rnuvw1_e = stat.subtract(
             rnuv, rw1, rnuv_e, rw1_e)
 
     rw1abs = conv.app2absmag(rw1, rd)
@@ -480,7 +481,7 @@ def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table,
     ad = atable["D"]
     ad_e = atable["D_err"]
 
-    anuvw1, anuvw1_e = phot.calc_statistical_difference(
+    anuvw1, anuvw1_e = stat.subtract(
             anuv, aw1, anuv_e, aw1_e)
     aw1abs = conv.app2absmag(aw1, ad)
     # This until I figure out what to do with distance errors.
@@ -516,8 +517,8 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
     pah113 = classtable["11.3 um"]
     pah113_err = classtable["11.3 um err"]
 
-    xcolor, xcolorerr = phot.calc_statistical_difference(nuv, j, nuv_err, j_err)
-    yratio, yratioerr = phot.calc_statistical_quotient(pah77, pah113,
+    xcolor, xcolorerr = stat.subtract(nuv, j, nuv_err, j_err)
+    yratio, yratioerr = stat.divide(pah77, pah113,
                                                        pah77_err, pah113_err)
 
     rp.MIRplot(xcolor, yratio, classtable["MIR_class"], yerr=yratioerr, 
@@ -571,10 +572,10 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     # Set up the data
     dustless_catalog = \
         atlas3d.filter_ATLAS3D_table_for_dustless_galaxies(table)
-    w1w3color, w1w3err = phot.calc_statistical_difference(
+    w1w3color, w1w3err = stat.subtract(
         dustless_catalog["w1unextmag"], dustless_catalog["w3unextmag"], 
         dustless_catalog["w1unexterr"], dustless_catalog["w3unexterr"])
-    w1w4color, w1w4err = phot.calc_statistical_difference(
+    w1w4color, w1w4err = stat.subtract(
         dustless_catalog["w1unextmag"], dustless_catalog["w4unextmag"], 
         dustless_catalog["w1unexterr"], dustless_catalog["w4unexterr"])
     atlas3d_ages = dustless_catalog["Age_SSP"]
@@ -676,13 +677,13 @@ def create_jarrett_comparison_plot(table=jarrett_table,
     myw4 = my_mags["w4apmag"]
     myw4err = my_mags["w4aperr"]
 
-    w1diff, w1differr = phot.calc_statistical_difference(myw1, orig_w1,
+    w1diff, w1differr = stat.subtract(myw1, orig_w1,
         myw1err, orig_w1_err)
-    w2diff, w2differr = phot.calc_statistical_difference(myw2, orig_w2,
+    w2diff, w2differr = stat.subtract(myw2, orig_w2,
         myw2err, orig_w2_err)
-    w3diff, w3differr = phot.calc_statistical_difference(myw3, orig_w3,
+    w3diff, w3differr = stat.subtract(myw3, orig_w3,
         myw3err, orig_w3_err)
-    w4diff, w4differr = phot.calc_statistical_difference(myw4, orig_w4,
+    w4diff, w4differr = stat.subtract(myw4, orig_w4,
         myw4err, orig_w4_err)
 
     plt.figure(figsize=(10,5))

@@ -7,6 +7,7 @@ import numpy as np
 
 import WISE_conversions as conv
 import photometry as phot
+import statop as stat
 
 FSPS_PATH = "/home/regulus/simonian/year1/fsps"
 OUTPUT_PATH = os.path.join(FSPS_PATH, "OUTPUTS")
@@ -189,7 +190,7 @@ def tburst_data_plot(times, lowmet, highmet, atlas3dtable,
         plot_metallicity_bounds(lowmet, highmet, MET_PATH, blueband, redband,
                                 met_fileformat, met_label)
         # Now add on the data.
-        color, colorerr = phot.calc_statistical_difference(
+        color, colorerr = stat.calc_statistical_difference(
             atlas3dtable[phot.name_photometry_column(blueband)], 
             atlas3dtable[phot.name_photometry_column(redband)],
             atlas3dtable[phot.name_photometry_column(blueband, error=True)],

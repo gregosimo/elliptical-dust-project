@@ -1,6 +1,8 @@
 import numpy as np
 from astropy.table import Table
 
+import statop as stat
+
 WISE_bands = ["W1", "W2", "W3", "W4"]
 TWOMASS_bands = ["J", "H", "Ks"]
 IRAC_bands = ["[3.6]", "[4.5]"]
