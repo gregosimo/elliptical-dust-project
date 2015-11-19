@@ -23,6 +23,7 @@ import masks
 import queries as query
 import synthetic_photometry as synphot
 import band_conversions as conv
+import statop as stat
 
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
@@ -32,14 +33,6 @@ MASKBANDS = ["W1", "NUV"]
 #STSDAS_COLUMN = "/home/gregory/work/ellipse_columns.txt"
 STSDAS_COLUMN = "/home/regulus/simonian/year1/wise/ellipse_columns.txt"
 
-UPPER_LIMIT_SYMBOL = 'u'
-LOWER_LIMIT_SYMBOL = 'l'
-DATA_POINT_SYMBOL = '0'
-NO_LIMIT_SYMBOL = 'n'
-UPPER = UPPER_LIMIT_SYMBOL
-LOWER = LOWER_LIMIT_SYMBOL
-NA = NO_LIMIT_SYMBOL
-DETECTION = DATA_POINT_SYMBOL
 
 ###############################################################################
 # Aperture Photometry Routines                                                #
@@ -1955,17 +1948,19 @@ def aperture_photometry_table(
             # images because those should be set to -99.0 instead. But, let's
             # be explicit and not have weird cases that weren't kept track of
             # from popping up.
-            if (phot is not np.nan) and (err is np.nan):
+            if (phot != np.nan) and (err == np.nan):
                 # A non-detection is an upper limit on flux.
                 if brightness is "flux":
-                    photcolumns[limkey].append(UPPER)
+                    photcolumns[limkey].append(stat.UPPER)
                 # A non-detection is a lower limit on magnitudes.
                 elif (brightness is "AB") or (brightness is "Vega"):
-                    photcolumns[limkey].append(LOWER)
+                    photcolumns[limkey].append(stat.LOWER)
                 else:
                     raise ValueError("Don't recognize {0}".format(brightness))
+            elif (phot == -99.0) and (err == -99.0):
+                photcolumns[limkey].append(stat.NA)
             else:
-                photcolumns[limkey].append(DETECTION)
+                photcolumns[limkey].append(stat.DETECTION)
 
 
         photcolumns["objstr_01"].append(galname)
@@ -2014,6 +2009,7 @@ def deextinct_data(photometry_table, extinction="", runbands=bands):
             # Get the names of the photometry columns.
             ap_mag = name_photometry_column(band, error=False, category="ap")
             ap_err = name_photometry_column(band, error=True, category="ap")
+            ap_lim = name_photometry_column(band, limit=True, category="ap")
             # Get the names of the unextincted columns
             category = "unext"
             unext_mag = name_photometry_column(band, error=False,
@@ -2026,15 +2022,17 @@ def deextinct_data(photometry_table, extinction="", runbands=bands):
             # time. When I move de-exinction to galaxy_photometry, this will be
             # a moot point!
             try:
-                unextmags, unexterrs = conv.extinction_correction(band,
-                    extincted_table[ap_mag], extincted_table["E_B_V_SFD"],
-                    extincted_table[ap_err], extincted_table["stdev_E_B_V_SFD"], 
-                    deredden=True)
+                unextmags, unexterrs, unextlim = conv.extinction_correction(
+                    band, extincted_table[ap_mag], extincted_table["E_B_V_SFD"],
+                    extincted_table[ap_err], extincted_table[ap_lim], 
+                    extincted_table["stdev_E_B_V_SFD"], deredden=True)
                 extincted_table[unext_mag] = unextmags
                 extincted_table[unext_err] = unexterrs
-            except KeyError:
+                extincted_table[unext_lim] = unextlim
+            except KeyError as e:
                 extincted_table[unext_mag] = extincted_table[ap_mag]
                 extincted_table[unext_err] = extincted_table[ap_err]
+                extincted_table[unext_lim] = extincted_table[ap_lim]
         return extincted_table
     else:
         return photometry_table
@@ -2151,13 +2149,57 @@ def createDifferencePlot(xval, yval, valtocompare, yerror, valerror, xlabel,
 
     This plot is used for illustrating how consistent two datasets are
     from each other.'''
-    difference, errors = calc_statistical_difference(
+    difference, errors = stat.subtract(
         valtocompare, yval, valerror, yerror)
     plt.errorbar(xval, difference, errors, fmt="o", label=label)
     plt.plot([min(xval)+0.01, max(xval)-0.01], [0, 0], 'k-')
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
+
+def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror, 
+        xlabel, ylabel, title, label=""):
+    '''Plots the fractional difference between two values against one value.
+
+    The valtocompare is the minuend while the x value is the subtrahend. The
+    errors in the plot are determined using standard propagation of errors.'''
+    fracdiff = (valtocompare - xval) / xval
+    errors = np.sqrt((valerror / xval)**2 + (xerror * valtocompare / 
+        xval**2)**2)
+    plt.errorbar(xval, fracdiff, errors, fmt="o", label=label)
+    plt.plot([10**np.floor(np.log10(min(xval)) + 0.01),
+        10**np.ceil(np.log10(max(xval))- 0.01)], [0, 0], 'k-')
+    plt.xscale("log")
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    plt.title(title)
+
+def calc_statistical_elliptical_mass_to_light_ratio(
+    W1, W2, W1err, W2err, retlog=True):
+    '''Turns a W1-W2 color to a mass-to-light ratio.
+
+    This function implements Equation 8 in Jarrett 2013. Note that it only
+    applies to early-type galaxies.'''
+
+    w1w2, w1w2err = subtract(
+        conv.AB2Vegamag('W1', W1), conv.AB2Vegamag('W2', W2), W1err, W2err)
+
+    # I'm adding two terms: one for conversion from [3.6] to W1, and another
+    # for conversion from W1 Vega to r-band AB.
+    masslightlog = 0.04 + 3.98 * w1w2
+    masslightlogerr = 0
+    
+    if retlog:
+        return masslightlog, masslightlogerr
+    else:
+        masslight = 10**(masslightlog)
+        masslighterr = np.log10(10) * masslight * masslightlogerr
+
+        return masslight, masslighterr
+
+def check_if_column(seq):
+    '''Verifies that the sequence is an Astropy Column.'''
+    return isInstance(seq, Column)
 
 def doubleDifferencePlot(xfirst, xsecond, yfirst, ysecond, xfirsterr, 
                          xseconderr, yfirsterr, yseconderr, xlabel, ylabel, 
@@ -2167,9 +2209,9 @@ def doubleDifferencePlot(xfirst, xsecond, yfirst, ysecond, xfirsterr,
     This plot can be used to add even more information about data consistency
     than a single difference plot.
     '''
-    xdiff, xerrs = calc_statistical_difference(xfirst, xsecond, xfirsterr,
+    xdiff, xerrs = stat.subtract(xfirst, xsecond, xfirsterr,
             xseconderr)
-    ydiff, yerrs = calc_statistical_difference(yfirst, ysecond, yfirsterr,
+    ydiff, yerrs = stat.subtract(yfirst, ysecond, yfirsterr,
             yseconderr)
     maxdiff = max(np.absolute(xdiff).max(), np.absolute(ydiff).max())
     plt.errorbar(xdiff, ydiff, yerrs, xerrs, fmt=fmt, label=label)
@@ -2198,248 +2240,6 @@ def plotSED(bands, mags, errs, modelx=[], modely=[], modellabels=[],
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.legend()
-
-def generate_limit(testlim, length):
-    '''If testlim is None, generate an array of default limits with length.
-
-    If testlim is valid, then it will be returned.
-    '''
-    if testlim is None:
-        testlim = np.array([DETECTION]*length)
-    return testlim
-
-def invert_limits(limits):
-    '''Toggles between upper and lower limits.
-
-    UPPER and LOWER limits will switch, while valid/unconstrained values will
-    remain as they were.
-    '''
-    newlimits = np.copy(limits)
-    upperindices = np.where(limits == UPPER)
-    lowerindices = np.where(limits == LOWER)
-    newlimits[upperindices] = LOWER
-    newlimits[lowerindices] = UPPER
-    return newlimits
-
-def combine_limits(lim1, lim2):
-    '''Combines arrays of limits according to combine_limit.
-
-    See combine_limit for the algebra
-    '''
-    return np.array([combine_limit(v1, v2) for (v1, v2) in zip(lim1, lim2)])
-
-def combine_limit(lim1, lim2):
-    '''Combines limits in a logically valid way.
-
-    The set of rules which govern limits are:
-    u + u -> u
-    u + l -> n
-    u + 0 -> u
-    u + n -> n
-    l + u -> n
-    l + l -> l
-    l + 0 -> l
-    l + n -> n
-    0 + u -> u
-    0 + l -> l
-    0 + 0 -> 0
-    0 + n -> n
-    n + u -> n
-    n + l -> n
-    n + 0 -> n
-    n + n -> n
-    '''
-    # Implementation details. 
-    # Utilizing the symmetric property of these will only require cases for:
-    ## u + u -> u
-    ## u + l -> n
-    ## u + 0 -> u
-    ## u + n -> n
-    ## l + l -> l
-    ## l + 0 -> l
-    ## l + n -> n
-    ## 0 + 0 -> 0
-    ## 0 + n -> n
-    ## n + n -> n
-    # This makes 10 relations
-    # One easy thing to program is
-    if lim2 == NA:
-        return NA
-    # 6 left
-    elif lim1 == lim2:
-        return lim1
-    # 3 left
-    elif lim2 == DETECTION:
-        return lim1
-    # 1 left
-    elif lim1 == UPPER and lim2 == LOWER:
-        return NA
-    else:
-        return combine_limit(lim2, lim1)
-    
-
-def calc_statistical_difference(minuend, subtrahend, minuerr, subtraerr,
-                                minulim=None, subtralim=None):
-    '''Returns statistically subtracted value of two arrays.
-
-    This function takes two arrays involving two measurements with errors which
-    may be upper or lower limits. It then returns a 3-tuple. The first element
-    is simply the difference of the values. The second is the error of the 
-    difference. And the third represents whether the differences are limits or
-    not.
-
-    If limits are not given, then the third element will simply be limits
-    indicating all data points are valid.
-    '''
-    minulim = generate_limit(minulim, len(minuend))
-    subtralim = generate_limit(subtralim, len(subtrahend))
-    difference, differr, difflim = calc_statistical_sum(
-        minuend, -subtrahend, minuerr, subtraerr, minulim,
-        invert_limits(subtralim))
-    return (difference, differr, difflim)
-
-def calc_statistical_sum(augend, addend, augerr, adderr, auglim=None,
-                         addlim=None):
-    '''Returns the statistically summed value of two arrays.
-
-    This function takes two arrays involving two measurements with errors. It
-    then returns a 2-tuple. The first value is simply the sum, and the second
-    is the error on the sum.
-    '''
-    auglim = generate_limit(auglim, len(augend))
-    addlim = generate_limit(alim, len(addend))
-    sums = augend + addend
-    sumerr = np.sqrt(augerr**2 + adderr**2)
-    sumlim = combine_limits(auglim, addlim)
-    return (sums, sumerr, sumlim)
-
-
-def calc_statistical_quotient(dividend, divisor, dividenderr, divisorerr,
-                              dividendlim=None, divisorlim=None):
-    '''Returns the statistically divided quotient of two arrays.
-
-    This function takes two arrays involving two measurements with errors. It
-    then returns a 2-tuple. The first is simply the ratio of the numbers. The
-    second is the error of that ratio.'''
-    dividendlim = generate_limit(dividendlim, len(dividend))
-    divisorlim = generate_limit(divisorlim, len(divisor))
-    quotient = dividend / divisor
-    # This is more robust to the dividend being equal to zero. If the divisor
-    # is equal to zero, we will still have problems.
-    quoterrs = np.sqrt(
-        (dividenderr / divisor)**2 + (dividend * divisorerr / divisor**2)**2)
-    quotlims = combine_limits(dividendlim, invert_limits(divisorlim))
-    return quotient, quoterrs, quotlims
-
-def calc_statistical_product(multiplicand, multiplier, multiplicerr,
-                             multiplierr, multipliclim=None, 
-                             multiplilim=None):
-    '''Returns the statistically multiplied product of two arrays.
-
-    This function takes two arrays involving two measurements with errors. It
-    returns a 2-tuple. The first value of the tuple is the product; the second
-    is the error of that product.
-    '''
-    multipliclim = generate_limit(multipliclim, len(multiplicand))
-    multiplilim = generate_limit(multiplilim, len(multiplier))
-    product = multiplicand * multiplier
-    # I could do this the fancy way, but the fancy way fails if either of the
-    # multiplicand or multiplier are zero. So let's not.
-    producterr = np.sqrt(
-        (multiplier * multiplicerr)**2 + (multiplicand * multipliererr)**2)
-    productlim = combine_limits(multipliclim, multiplilim)
-    return product, producterr, productlim
-
-def calc_statistical_fractional_difference(num, denom, numerr, denomerr):
-    '''Returns the fractional difference between num and denom.
-
-    This equation takes the fractional difference (denom-num)/denom. It returns
-    a 2-tuple. The first value of the tuple is the fraction, and the second is
-    the error on that fraction.
-    '''
-    frac, fracerr = calc_statistical_quotient(num, denom, numerr, denomerr)
-    fracdiff = 1 - frac
-    return fracdiff, fracerr
-
-def calc_statistical_exponentiation(base, power, baserr, powerr):
-    '''Returns the exponentiation of the given exponent.
-
-    Base can be given as any base. It returns a 2-tuple. The first value of the
-    tuple is the exponentiation, and the second is the error on that
-    exponentiation.
-    '''
-    logarithm = base**power
-    logerr = np.sqrt((logarithm * np.log(base) * powerr)**2 + (
-        power * base**(power-1) * baserr)**2)
-    return logarithm, logerr
-
-def calc_statistical_logarithm(num, numerr, base=10):
-    '''Returns the logarithm of the given number.
-
-    Base can be given as any base. It returns a 2-tuple. The first value of the
-    tuple is the logarithm, and the second is the error on the logarithm.
-    '''
-    exponent = np.log(num) / np.log(base)
-    experr = numerr / num / np.log(base)
-    return exponent, experr
-
-def calc_statistical_fraction_of_sums(allvalues, allerrs, nummask, denommask,
-                                      propagate=False):
-    r'''Return statistically summed and divided quotient of many arrays.
-
-    Allvalues and allerrs should be sequences of some given length. Nummask and
-    denommask should be boolean (or boolean-like) arrays which indicate the
-    values to be included in the numerator and the denominator.
-
-    The form of this is:
-    \sum_k \left[ \frac{\sum_i \left(a_k b_i - b_k a_i\right) x_i}
-    {\left(\sum_i b_i x_i\right)^2\right]**2 \sigma_k**2
-    '''
-    valarray = np.ma.array(allvalues, dtype=np.float)
-    errarray = np.ma.array(allerrs, dtype=np.float)
-    if propagate:
-        valarray = valarray.filled(np.nan)
-        errarray = errarray.filled(np.nan)
-    numindicator = np.array(nummask, 
-                            dtype=np.int).reshape((valarray.shape[0], 1))
-    denomindicator = np.array(denommask, 
-                              dtype=np.int).reshape((valarray.shape[0],1))
-    answer = np.sum(numindicator * valarray, axis=0) / np.sum(denomindicator * 
-        valarray, axis=0)
-    anserr = 0
-    denomsum = np.sum(denomindicator * valarray, axis=0)
-    for k in xrange(valarray.shape[0]):
-        numindex = numindicator[k]
-        denomindex = denomindicator[k]
-        errindex = allerrs[k]
-
-        # This represents the a_k b_i - b_k a_i
-        indicatordiff = (numindex * denomindicator - denomindex * numindicator)
-        # Finish off the part inside the brackets
-        bracket = np.sum(indicatordiff * valarray, axis=0) / denomsum**2
-        # Now multiply by sigma squared.
-        errnum = bracket**2 * errindex**2
-
-        anserr += errnum
-    return answer, np.sqrt(anserr)
-
-def createFractionalDifferencePlot(xval, valtocompare, xerror, valerror, 
-        xlabel, ylabel, title, label=""):
-    '''Plots the fractional difference between two values against one value.
-
-    The valtocompare is the minuend while the x value is the subtrahend. The
-    errors in the plot are determined using standard propagation of errors.'''
-    fracdiff = (valtocompare - xval) / xval
-    errors = np.sqrt((valerror / xval)**2 + (xerror * valtocompare / 
-        xval**2)**2)
-    plt.errorbar(xval, fracdiff, errors, fmt="o", label=label)
-    plt.plot([10**np.floor(np.log10(min(xval)) + 0.01),
-        10**np.ceil(np.log10(max(xval))- 0.01)], [0, 0], 'k-')
-    plt.xscale("log")
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.title(title)
-
 
 def makePlots(BASEDIR, w1mags, w2mags, w3mags, w1apmags, w2apmags, w3apmags):
     '''Plots the WISE photometry versus aperture photometry.
@@ -2935,32 +2735,6 @@ def Convert_to_WISE_Table(objstr, ra, dec, w1rsemi, w2rsemi, w3rsemi, w4rsemi,
             "w4ba")
     return Table(fulltable , names=names)
 
-def calc_statistical_elliptical_mass_to_light_ratio(
-    W1, W2, W1err, W2err, retlog=True):
-    '''Turns a W1-W2 color to a mass-to-light ratio.
-
-    This function implements Equation 8 in Jarrett 2013. Note that it only
-    applies to early-type galaxies.'''
-
-    w1w2, w1w2err = calc_statistical_difference(
-        conv.AB2Vegamag('W1', W1), conv.AB2Vegamag('W2', W2), W1err, W2err)
-
-    # I'm adding two terms: one for conversion from [3.6] to W1, and another
-    # for conversion from W1 Vega to r-band AB.
-    masslightlog = 0.04 + 3.98 * w1w2
-    masslightlogerr = 0
-    
-    if retlog:
-        return masslightlog, masslightlogerr
-    else:
-        masslight = 10**(masslightlog)
-        masslighterr = np.log10(10) * masslight * masslightlogerr
-
-        return masslight, masslighterr
-
-def check_if_column(seq):
-    '''Verifies that the sequence is an Astropy Column.'''
-    return isInstance(seq, Column)
 
 def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
                         join_type="inner", conflict_suffixes=("_A", "_B"),

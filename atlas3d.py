@@ -8,6 +8,7 @@ import scipy.special
 
 import photometry as phot
 import band_conversions as conv
+import statop as stat
 
 # Maybe I want to subclass figure later on. But now... meh.
 class SED(object):

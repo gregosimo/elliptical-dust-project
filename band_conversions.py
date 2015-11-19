@@ -2,6 +2,8 @@ import numpy as np
 from astropy.table import Table
 from scipy.interpolate import interp1d
 
+import statop as stat
+
 WISE_bands = ["W1", "W2", "W3", "W4"]
 TWOMASS_bands = ["J", "H", "Ks"]
 IRAC_bands = ["[3.6]", "[4.5]"]
@@ -548,8 +550,8 @@ def FUV_extinction(EB_V, Rv=3.1):
     return A_FUV
 
 
-def extinction_correction(band, truemag, EB_V, magerr=None, EBVerr=None, Rv=3.1, 
-                          deredden=False):
+def extinction_correction(band, truemag, EB_V, magerr=None, maglim=None, 
+                          EBVerr=None, Rv=3.1, deredden=False):
     '''Extincts a given magnitude using a reddening law.
 
     This function assumes magnitudes are expressed in the AB system.
@@ -564,8 +566,8 @@ def extinction_correction(band, truemag, EB_V, magerr=None, EBVerr=None, Rv=3.1,
 
     if deredden:
         try:
-            extincted_mag, extinctederr = phot.calc_statistical_difference(
-                truemag, A, magerr, EXTINCTION_RATIO[band]*EBVerr)
+            extincted_mag, extinctederr, extinctedlim = stat.subtract(
+                truemag, A, magerr, EXTINCTION_RATIO[band]*EBVerr, maglim)
         except TypeError:
             if magerr is None and EBVerr is None:
                 return truemag - A
@@ -573,20 +575,15 @@ def extinction_correction(band, truemag, EB_V, magerr=None, EBVerr=None, Rv=3.1,
                 raise
     else:
         try:
-            extincted_mag, extinctederr = phot.calc_statistical_sum(
-                truemag, A, magerr, EXTINCTION_RATIO[band]*EBVerr)
+            extincted_mag, extinctederr, extinctedlim = stat.add(
+                truemag, A, magerr, EXTINCTION_RATIO[band]*EBVerr, maglim)
         except TypeError:
             if magerr is None and EBVerr is None:
                 return truemag + A
             else:
                 raise
 
-    if magerr is None and EBVerr is None:
-        return extincted_mag
-    elif magerr is not None and EBVerr is not None:
-        extinctederr = np.sqrt(magerr**2 + (EXTINCTION_RATIO[band] *
-                                            EBVerr)**2)
-        return (extincted_mag, extinctederr)
+    return (extincted_mag, extinctederr, extinctedlim)
 
 def get_extinction_table(filepath):
     '''Reads in an extinction table from the IRSA extinction service.
