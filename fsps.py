@@ -263,7 +263,7 @@ def plot_tburst_tracks(times, TBURST_DIR, blueband, redband,
         plt.plot(magtable["Age"]/1e9, magtable[blueband] - 
                  magtable[redband], fmt, label=label.format(i))
 
-def plot_atlas3d_coded_by_metallicity(xvalues, yvalues, yerrs, xerrs, zh, 
+def plot_atlas3d_coded_by_metallicity(xvalues, yvalues, yerrs, xerrs, ylims, zh, 
                                       zh_lim=0.0):
     '''Plots atlas3d points so that they are color-coded by metallicity.
 
@@ -279,11 +279,14 @@ def plot_atlas3d_coded_by_metallicity(xvalues, yvalues, yerrs, xerrs, zh,
     lowmetx, lowmety = xvalues[lowmetindices], yvalues[lowmetindices]
     highmetxerr, highmetyerr = xerrs[highmetindices], yerrs[highmetindices]
     lowmetxerr, lowmetyerr = xerrs[lowmetindices], yerrs[lowmetindices]
+    highmetlims = ylims[highmetindices]
+    lowmetlims = ylims[lowmetindices]
     
-    plt.errorbar(highmetx, highmety, highmetyerr, highmetxerr, 'r.',
-                 label="[Z/H] >= {0:.1f}".format(zh_lim))
-    plt.errorbar(lowmetx, lowmety, lowmetyerr, lowmetxerr, 'b.',
-                 label="[Z/H] < {0:.1f}".format(zh_lim))
+    stat.errorbar(highmetx, highmety, highmetyerr, highmetxerr, highmetlims, 
+                  'r.', label="[Z/H] >= {0:.1f}".format(zh_lim), ufmt='rv', 
+                  lfmt='r^')
+    stat.errorbar(lowmetx, lowmety, lowmetyerr, lowmetxerr, lowmetlims, 'b.',
+                  label="[Z/H] < {0:.1f}".format(zh_lim), ufmt='bv', lfmt='r^')
 
 
 def color_difference_plot(times, outputdir=TBURST_PATH, prefix1="early_t",
