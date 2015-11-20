@@ -1965,6 +1965,9 @@ def aperture_photometry_table(
 
         photcolumns["objstr_01"].append(galname)
     
+    # We want the limits to be string arrays.
+    for lim in limkeys:
+        photcolumns[lim] = Column(photcolumns[lim], dtype="a1")
     photometry_table = Table(photcolumns, masked=True)
     # Once we make the table, we need to mask out the columns correctly. The
     # best way to do this for an astropy table is to iterate through the data

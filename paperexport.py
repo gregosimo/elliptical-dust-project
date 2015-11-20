@@ -584,12 +584,14 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     # Set up the data
     dustless_catalog = \
         atlas3d.filter_ATLAS3D_table_for_dustless_galaxies(table)
-    w1w3color, w1w3err = stat.subtract(
+    w1w3color, w1w3err, w1w3lim = stat.subtract(
         dustless_catalog["w1unextmag"], dustless_catalog["w3unextmag"], 
-        dustless_catalog["w1unexterr"], dustless_catalog["w3unexterr"])
-    w1w4color, w1w4err = stat.subtract(
+        dustless_catalog["w1unexterr"], dustless_catalog["w3unexterr"],
+        dustless_catalog["w1unextlim"], dustless_catalog["w3unextlim"])
+    w1w4color, w1w4err, w1w4lim = stat.subtract(
         dustless_catalog["w1unextmag"], dustless_catalog["w4unextmag"], 
-        dustless_catalog["w1unexterr"], dustless_catalog["w4unexterr"])
+        dustless_catalog["w1unexterr"], dustless_catalog["w4unexterr"],
+        dustless_catalog["w1unextlim"], dustless_catalog["w4unextlim"])
     atlas3d_ages = dustless_catalog["Age_SSP"]
     atlas3d_ages_err = dustless_catalog["Age_SSP_err"]
     atlas3d_metallicities = dustless_catalog["[Z/H]_SSP"]
@@ -600,25 +602,26 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     # Let's make the first plot: W1-W3
     plt.sca(ax1)
     fsps.plot_atlas3d_coded_by_metallicity(
-        atlas3d_ages, w1w3color, w1w3err, atlas3d_ages_err,
+        atlas3d_ages, w1w3color, w1w3err, atlas3d_ages_err, w1w3lim,
         atlas3d_metallicities, med_met)
     fsps.plot_dust_toggled_metallicity_bounds(
         os.path.join(fsps.OUTPUT_PATH, "toggle_dust_met_bounds"), "W1", "W3")
-    plt.legend(loc="upper right")
+    plt.legend(loc="upper right", fontsize="small")
     plt.ylabel("W1-W3")
 
     # Now the second plot: W1-W4
     plt.sca(ax2)
     fsps.plot_atlas3d_coded_by_metallicity(
-        atlas3d_ages, w1w4color, w1w4err, atlas3d_ages_err,
+        atlas3d_ages, w1w4color, w1w4err, atlas3d_ages_err, w1w4lim,
         atlas3d_metallicities, med_met)
     fsps.plot_dust_toggled_metallicity_bounds(
         os.path.join(fsps.OUTPUT_PATH, "toggle_dust_met_bounds"), "W1", "W4")
+    ax2.set_ylim([-4, 1])
     plt.ylabel("W1-W4")
     plt.xlabel("SSP Age (Gyr)")
     plt.tight_layout(0)
-    plt.close()
     plt.savefig(dest)
+    plt.close()
 
 def create_jarrett_comparison_plot(table=jarrett_table,
                                    dest=build_filepath(FIGUREPATH, "jarrett",

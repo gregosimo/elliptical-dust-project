@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 
 UPPER_LIMIT_SYMBOL = 'u'
 LOWER_LIMIT_SYMBOL = 'l'
-DATA_POINT_SYMBOL = '0'
+DATA_POINT_SYMBOL = 'd'
 NO_LIMIT_SYMBOL = 'n'
 UPPER = UPPER_LIMIT_SYMBOL
 LOWER = LOWER_LIMIT_SYMBOL
@@ -289,7 +289,36 @@ def get_lim(val, valerr=None, vallim=None, lim=DETECTION):
 
     return newval, newvalerr
 
-def errorbar(x, y, **kwargs):
+def errorbar(x, y, *args, **kwargs):
+    '''Wraps the error bar and allows for separate plotting of limits.
+
+    Requires x values and y values. It will require the keyword argument ylim
+    to specify whether the y-values are limits or not. Additional keywords are
+    ufmt and lfmt, which are format strings for the upper and lower limits,
+    respectively. If they are omitted, the default will be triangles. All other
+    keywords are passed to the matplotlib errorbar function.
+
+    This function's matplotlib call signature is more like:
+    errorbar(x, y, yerr=None, xerr=None, ylim=None, fmt=None, **kwargs)
+    Therefore, yerr, xerr, ylim, and fmt can be given as positional arguments;
+    they don't have to be specified as keyword arguments.
+    '''
+    if len(args) >= 1:
+        kwargs["yerr"] = args[0]
+    if len(args) >= 2:
+        kwargs["xerr"] = args[1]
+    if len(args) >= 3:
+        kwargs["ylim"] = args[2]
+    if len(args) >= 4:
+        kwargs["fmt"] = args[3]
+    if len(args) >= 5:
+        raise TypeError("Can't handle positional arguments past fmt.")
+    
+    _errorbar(x, y, **kwargs)
+
+    
+
+def _errorbar(x, y, **kwargs):
     '''Wraps the error bar and allows for separate plotting of limits.
 
     Requires x values and y values. It will require the keyword argument ylim
@@ -308,18 +337,22 @@ def errorbar(x, y, **kwargs):
         yerr = kwargs.pop("yerr", None)
 
         # Take care of the data points.
+        # This assumes that x-values will never have limits. It shouldn't be
+        # difficult to add in later, but this requires giving more thought to
+        # how they will be displayed. It will have to be more than simply
+        # having a triangle. Probably an arrow of some sort.
         normx, normxerr = get_lim(x, xerr, ylim, DETECTION)
         normy, normyerr = get_lim(y, yerr, ylim, DETECTION)
-        plt.errorbar(normx, normy, normyerr, normxerr, *kwargs)
+        plt.errorbar(normx, normy, normyerr, normxerr, **kwargs)
 
         # Now upper limits
         ux, uxerr = get_lim(x, xerr, ylim, UPPER)
         uy, uyerr = get_lim(y, yerr, ylim, UPPER)
-        kwargs["fmt"] = ufmt
-        plt.errorbar(ux, uy, uyerr, uxerr, *kwargs)
+        del(kwargs["fmt"])
+        del(kwargs["label"])
+        plt.plot(ux, uy, ufmt, **kwargs)
 
         # Now lower limits
         lx, lxerr = get_lim(x, xerr, ylim, LOWER)
         ly, lyerr = get_lim(y, yerr, ylim, LOWER)
-        kwargs["fmt"] = lfmt
-        plt.errorbar(lx, ly, lyerr, lxerr, *kwargs)
+        plt.plot(lx, ly, ufmt, **kwargs)
