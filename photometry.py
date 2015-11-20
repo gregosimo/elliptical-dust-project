@@ -2193,12 +2193,12 @@ def aperture_photometry_table(
             # images because those should be set to -99.0 instead. But, let's
             # be explicit and not have weird cases that weren't kept track of
             # from popping up.
-            if (phot != np.nan) and (err == np.nan):
+            if not np.isnan(phot) and np.isnan(err):
                 # A non-detection is an upper limit on flux.
-                if brightness is "flux":
+                if brightness == "flux":
                     photcolumns[limkey].append(stat.UPPER)
                 # A non-detection is a lower limit on magnitudes.
-                elif (brightness is "AB") or (brightness is "Vega"):
+                elif (brightness == "AB") or (brightness == "Vega"):
                     photcolumns[limkey].append(stat.LOWER)
                 else:
                     raise ValueError("Don't recognize {0}".format(brightness))

@@ -173,7 +173,6 @@ def create_ATLAS3D_sample_table(table=atlas3d_table,
 def create_param_table(table=fulltable[:10], dest=os.path.join(TABLEPATH,
                                                                "params.tex")):
 
-    generate_fulltable()
     caption = r"""Aperture photometry parameters for galaxies in the \ATLAS{}
     and Rampazzo samples
     \label{tab:params}"""
@@ -192,29 +191,42 @@ def create_param_table(table=fulltable[:10], dest=os.path.join(TABLEPATH,
 
 def create_magnitude_table(table=rampazzo_table[:10], 
                            dest=os.path.join(TABLEPATH, "mags.tex")):
-    generate_fulltable()
     caption = r"""Magnitudes of galaxies in the \ATLAS{} and Rampazzo samples.
     \label{tab:magtable}"""
     tablefoot = r"""\tablecomments{Magnitudes are reported in the AB system. 
     They have not been corrected for extinction.}"""
-    columns = ["objstr_01", "FUVapmag", "FUVaperr", "NUVapmag", "NUVaperr", 
-               "w1apmag", "w1aperr", "w2apmag", "w2aperr", "w3apmag",
-               "w3aperr", "w4apmag", "w4aperr"]
+    columns = ["objstr_01", "FUVaperr", "NUVaperr", "w1aperr", "w2aperr", 
+               "w3aperr", "w4aperr"]
+    column_order = ["objstr_01", "FUVapmag", "FUVaperr", "NUVapmag", "NUVaperr", 
+                    "w1apmag", "w1aperr", "w2apmag", "w2aperr", "w3apmag", 
+                    "w3aperr", "w4apmag", "w4aperr"]
     names = ["Galaxy", "FUV", r"\(\sigma_{FUV}\)", "NUV", r"\(\sigma_{NUV}\)", 
              "W1", r"\(\sigma_{W1}\)", "W2", r"\(\sigma_{W2}\)", "W3",
              r"\(\sigma_{W3}\)", "W4", r"\(\sigma_{W4}\)"]
     preamble = r"""\tabletypesize{\scriptsize}"""
-    formats = {"Galaxy": format_reflect,
-               "FUV": format_mag, r"\(\sigma_{FUV}\)": format_mag_err, 
-               "NUV": format_mag, r"\(\sigma_{NUV}\)": format_mag_err, 
-               "W1": format_mag, r"\(\sigma_{W1}\)": format_mag_err, 
-               "W2": format_mag, r"\(\sigma_{W2}\)": format_mag_err, 
-               "W3": format_mag, r"\(\sigma_{W3}\)": format_mag_err, 
-               "W4": format_mag, r"\(\sigma_{W4}\)": format_mag_err}
+    formats = {"Galaxy": format_reflect, r"\(\sigma_{FUV}\)": format_mag_err, 
+               r"\(\sigma_{NUV}\)": format_mag_err, 
+               r"\(\sigma_{W1}\)": format_mag_err, 
+               r"\(\sigma_{W2}\)": format_mag_err, 
+               r"\(\sigma_{W3}\)": format_mag_err, 
+               r"\(\sigma_{W4}\)": format_mag_err}
     export = table[columns]
-    export.write(dest, format="ascii.aastex", names=names, formats=formats,
-                 latexdict={"caption": caption, "tablefoot": tablefoot,
-                            "tabletype": "deluxetable", "preamble": preamble})
+    export["FUVapmag"] = format_mag_column(table["FUVapmag"],
+                                           table["FUVaplim"])
+    export["NUVapmag"] = format_mag_column(table["NUVapmag"],
+                                           table["NUVaplim"])
+    export["w1apmag"] = format_mag_column(table["w1apmag"],
+                                           table["w1aplim"])
+    export["w2apmag"] = format_mag_column(table["w2apmag"],
+                                           table["w2aplim"])
+    export["w3apmag"] = format_mag_column(table["w3apmag"],
+                                           table["w3aplim"])
+    export["w4apmag"] = format_mag_column(table["w4apmag"],
+                                           table["w4aplim"])
+    export[column_order].write(
+        dest, format="ascii.aastex", names=names, formats=formats,
+        latexdict={"caption": caption, "tablefoot": tablefoot,
+                   "tabletype": "deluxetable", "preamble": preamble})
 
 def create_W2_W3_histogram(table=rampazzo_table, 
                            dest=build_filepath(FIGUREPATH, "w2w3hist")):
@@ -607,45 +619,6 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     plt.tight_layout(0)
     plt.close()
     plt.savefig(dest)
-    # I don't think I need anything below this. But just to be sure, let me
-    # check. If it works, delete EVERYTHING here.
-    # Set up the FSPS models
-    median_met_SSP_file = os.path.join(
-        fsps.OUTPUT_PATH, "SSP_med.out.mags")
-    low_met_SSP_file = os.path.join(
-        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "dust_lowmet.mags")
-    high_met_SSP_file = os.path.join(
-        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "dust_highmet.mags")
-    low_met_SSP_nodust_file = os.path.join(
-        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "nodust_lowmet.mags")
-    high_met_SSP_nodust_file = os.path.join(
-        fsps.OUTPUT_PATH, "toggle_dust_met_bounds", "nodust_highmet.mags")
-
-    median_met_SSP = fsps.read_mags(median_met_SSP_file)
-    low_met_SSP = fsps.read_mags(low_met_SSP_file)
-    high_met_SSP = fsps.read_mags(high_met_SSP_file)
-    low_met_SSP_nodust = fsps.read_mags(low_met_SSP_nodust_file)
-    high_met_SSP_nodust = fsps.read_mags(high_met_SSP_nodust_file)
-    
-    # W1-W3 tracks
-    median_met_SSP_w1w3_track = median_met_SSP["W1"] - median_met_SSP["W3"]
-    low_met_SSP_w1w3_track = low_met_SSP["W1"] - low_met_SSP["W3"]
-    high_met_SSP_w1w3_track = high_met_SSP["W1"] - high_met_SSP["W3"]
-    low_met_SSP_nodust_w1w3_track = (low_met_SSP_nodust["W1"] - 
-                                     low_met_SSP_nodust["W3"])
-    high_met_SSP_nodust_w1w3_track = (high_met_SSP_nodust["W1"] - 
-                                      high_met_SSP_nodust["W3"])
-
-    # W1-W4 tracks
-    median_met_SSP_w1w4_track = median_met_SSP["W1"] - median_met_SSP["W4"]
-    low_met_SSP_w1w4_track = low_met_SSP["W1"] - low_met_SSP["W4"]
-    high_met_SSP_w1w4_track = high_met_SSP["W1"] - high_met_SSP["W4"]
-    low_met_SSP_nodust_w1w4_track = (low_met_SSP_nodust["W1"] -
-                                     low_met_SSP_nodust["W4"])
-    high_met_SSP_nodust_w1w4_track = (high_met_SSP_nodust["W1"] -
-                                      high_met_SSP_nodust["W4"])
-
-    
 
 def create_jarrett_comparison_plot(table=jarrett_table,
                                    dest=build_filepath(FIGUREPATH, "jarrett",
@@ -1050,6 +1023,21 @@ def format_mag(mag):
     except ValueError:
         # May occur for masked values. 
         magstr = LATEX_TABLE_MASKSTRING
+    return magstr
+
+def format_mag_column(mags, limits):
+    '''Convert mag column to column of strings formatted correctly for limits.
+
+    This function basically converts the float array of magnitudes into string
+    arrays of well-formatted magnitudes. By well-formatted, this means the
+    numbers are truncated in the right location, and the limits are prepended
+    with "<" or ">" appropriately.
+    '''
+    magstr = np.ma.asanyarray(mags, 'a5')
+    upperlims = np.where(limits == stat.UPPER)
+    lowerlims = np.where(limits == stat.LOWER)
+    magstr[upperlims] = np.core.defchararray.add("<", magstr[upperlims])
+    magstr[lowerlims] = np.core.defchararray.add(">", magstr[lowerlims])
     return magstr
 
 def format_mag_err(err):

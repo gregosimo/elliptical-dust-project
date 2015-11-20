@@ -267,6 +267,28 @@ def fraction_of_sums(allvalues, allerrs, nummask, denommask, propagate=False):
         anserr += errnum
     return answer, np.sqrt(anserr)
 
+def get_lim(val, valerr=None, vallim=None, lim=DETECTION):
+    '''Returns the subset of val and valerr which match the given limit.
+
+    The default is to fetch all detections. If all three quantities are given,
+    then this function will return a 2-tuple containing the entries of val and
+    valerr which correspond to the given limit. If vallim is omitted, all values
+    will be returned. If valerr is omitted, then the error entr in the 2-tuple
+    will be None.
+    '''
+    if vallim is None:
+        newval = val
+        newvalerr = valerr
+    else: 
+        limind = np.where(vallim == lim)
+        newval = val[limind]
+        if valerr is None:
+            newvalerr = None
+        else:
+            newvalerr = valerr[limind]
+
+    return newval, newvalerr
+
 def errorbar(x, y, **kwargs):
     '''Wraps the error bar and allows for separate plotting of limits.
 
@@ -284,55 +306,20 @@ def errorbar(x, y, **kwargs):
     else:
         xerr = kwargs.pop("xerr", None)
         yerr = kwargs.pop("yerr", None)
-        lindices = np.where(ylim == stat.LOWER)
-        uindices = np.where(ylim == stat.UPPER)
-        normindices = np.where(ylim = stat.DETECTION)
 
-        # Take care of the detections now.
-        normx = x[normindices]
-        normy = y[normindices]
-
-        if xerr is None:
-            normxerr = None
-        else:
-            normxerr = xerr[normindices]
-        if yerr is None:
-            normyerr = None
-        else:
-            normyerr = yerr[normindices]
-
-        plt.errorbar(normx, normy, normyerr, normerr, *kwargs)
+        # Take care of the data points.
+        normx, normxerr = get_lim(x, xerr, ylim, DETECTION)
+        normy, normyerr = get_lim(y, yerr, ylim, DETECTION)
+        plt.errorbar(normx, normy, normyerr, normxerr, *kwargs)
 
         # Now upper limits
-        ux = x[uindices]
-        uy = y[uindices]
-
-        if xerr is None:
-            uxerr = None
-        else:
-            uxerr = xerr[uindices]
-        if yerr is None:
-            uyerr = None
-        else:
-            uyerr = yerr[uindices]
-
+        ux, uxerr = get_lim(x, xerr, ylim, UPPER)
+        uy, uyerr = get_lim(y, yerr, ylim, UPPER)
         kwargs["fmt"] = ufmt
-
-        plt.errorbar(ux, uy, uyerr, uerr, *kwargs)
+        plt.errorbar(ux, uy, uyerr, uxerr, *kwargs)
 
         # Now lower limits
-        lx = x[lindices]
-        ly = y[lindices]
-
-        if xerr is None:
-            lxerr = None
-        else:
-            lxerr = xerr[lindices]
-        if yerr is None:
-            lyerr = None
-        else:
-            lyerr = yerr[lindices]
-
+        lx, lxerr = get_lim(x, xerr, ylim, LOWER)
+        ly, lyerr = get_lim(y, yerr, ylim, LOWER)
         kwargs["fmt"] = lfmt
-
-        plt.errorbar(lx, ly, lyerr, lerr, *kwargs)
+        plt.errorbar(lx, ly, lyerr, lxerr, *kwargs)
