@@ -546,7 +546,7 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
 
 def create_SED(table=atlas3d_table, dest=build_filepath(FIGUREPATH, "sed",
                                                         EXT)):
-    fluxtable = Table(table["objstr_01"])
+    fluxtable = Table([table.columns["objstr_01"]])
     table["w1unextmag"] = conv.ABmag2Jansky("W1", table["w1unextmag"])
     table["w1unexterr"] = conv.Mag_err_to_Jansky_err(
         "W1", table["w1unextmag"], table["w1unexterr"])
