@@ -388,8 +388,8 @@ def ABmag2Jansky(band, mag, colorIndex=-2):
 
 def Mag_err_to_Jansky_err(band, mag, magerr):
     '''Converts an error in WISE magnitudes to an error in Janskys.'''
-    err =  magerr2fluxerr(mag, magerr, 0, 0, get_zero_point_flux(band),
-                          get_zero_point_uncertainty(band))
+    err =  magerr2fluxerr(mag, magerr, 0, 0, get_zero_point_flux_level(band),
+                          get_zero_point_flux_uncertainty(band))
     return err
 
 ###############################################################################

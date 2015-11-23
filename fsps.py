@@ -438,7 +438,7 @@ def plot_FSPS_SED(
 
     if plotquant is "Mag":
         filepath = os.path.join(
-            FSPS_DIR, "OUTPUTS", ".".join(modelbase, "mags"))
+            FSPS_DIR, "OUTPUTS", ".".join([modelbase, "mags"]))
         magtable = read_mags(filepath)
 
         mags = np.array([magtable[ageindex][band] for band in runbands])
@@ -447,6 +447,9 @@ def plot_FSPS_SED(
         filepath = os.path.join(
             FSPS_DIR, "OUTPUTS", ".".join(modelbase, "spec"))
         fluxtable = read_specs(filepath)
+    else:
+        raise ValueError(
+            "plotquant must be either Flux or Mag, not {0}".format(plotquant))
 
     plt.semilogx(wavelengths, mags, fmt, label=label)
 
