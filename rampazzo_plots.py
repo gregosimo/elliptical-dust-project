@@ -19,6 +19,11 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5, 
                    "ecolor": "red", "elinewidth": 0.7, "capthick": 1.0}}
 
+def extract_MIR_class_sample(ramptable, classnum, groupcol="MIR_class"):
+    '''Extracts the subtable from ramptable which is Class-classnum.'''
+    rampgroups = ramptable.group_by(groupcol)
+    subtable = rampgroups.groups[classnum]
+    return subtable
 
 def color_histogram_by_class(band1, band2, groupcol, xlabel, title, bins, 
                              colrange=(-4, 4), classes=np.arange(0,5)):

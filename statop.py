@@ -348,11 +348,12 @@ def _errorbar(x, y, **kwargs):
         # Now upper limits
         ux, uxerr = get_lim(x, xerr, ylim, UPPER)
         uy, uyerr = get_lim(y, yerr, ylim, UPPER)
-        del(kwargs["fmt"])
-        del(kwargs["label"])
-        plt.plot(ux, uy, ufmt, **kwargs)
+        for prop in ["fmt", "label"]:
+            if prop in kwargs:
+                del(kwargs[prop])
+        plt.errorbar(ux, uy, fmt=ufmt, uplims=True, **kwargs)
 
         # Now lower limits
         lx, lxerr = get_lim(x, xerr, ylim, LOWER)
         ly, lyerr = get_lim(y, yerr, ylim, LOWER)
-        plt.plot(lx, ly, ufmt, **kwargs)
+        plt.errorbar(lx, ly, fmt=lfmt, lolims=True, **kwargs)
