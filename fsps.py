@@ -4,6 +4,7 @@ import os
 import matplotlib.pyplot as plt
 from astropy.table import Table, join, hstack
 import numpy as np
+from scipy.interpolate import interp1d
 
 import WISE_conversions as conv
 import photometry as phot
@@ -372,7 +373,11 @@ def mag_table_to_flux_table(
     return newtable
 
 def normalize_magnitude_SED(SED, normvalue, runbands, normband):
-    '''Normalizes the SED to have magnitude equal to normvalue at normband.'''
+    '''Normalizes the SED to have magnitude equal to normvalue at normband.
+    
+    SED should be the array which contains the magnitude values with columns
+    being the names of the bands. Runbands should be a list of band names which
+    correspond to the columns of SED.'''
     normindex = runbands.index(normband)
     normed_SED = SED - SED[normindex] + normvalue
     return normed_SED
@@ -380,9 +385,11 @@ def normalize_magnitude_SED(SED, normvalue, runbands, normband):
 def normalize_flux_SED(SED, normvalue, wavelengths, normband):
     '''Normalizes the SED to have flux equal to normvalue at normband.
     
-    This is a little bit tricky because flux SEDs don't necessary coincide with 
+    This is a little bit tricky because flux SEDs don't necessary coincide with
+    band wavelengths. 
     '''
     pass
+    
 
 
 def plot_data_SED(
@@ -427,11 +434,11 @@ def plot_data_SED(
 def plot_FSPS_SED(
         FSPS_DIR, modelbase="SSP.out", label="FSPS", fmt="c*",  
         runbands=(conv.WISE_bands + conv.TWOMASS_bands + conv.GALEX_bands),
-        ageindex=-1, normband="Ks", plotquant="Flux"):
+        ageindex=-1, normband="Ks", normvalue=1, plotquant="Flux"):
     '''Plots a model FSPS SED with data.
 
     Takes an FSPS directory and file with a table full of data, and then plots
-    both as an SED.
+    both as an SED. 
     '''
     wavelengths = np.array([conv.WAVELENGTHS[band] for band in runbands])*1e6
     #frequencies = 3e14 / wavelengths
@@ -447,6 +454,9 @@ def plot_FSPS_SED(
         filepath = os.path.join(
             FSPS_DIR, "OUTPUTS", ".".join(modelbase, "spec"))
         fluxtable = read_specs(filepath)
+        spectable = fluxtable.columns[4:]
+        specwavelengths = np.asarray(spectable.colnames, dtype=np.float)*1e4
+
     else:
         raise ValueError(
             "plotquant must be either Flux or Mag, not {0}".format(plotquant))

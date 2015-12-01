@@ -37,7 +37,7 @@
                             !see sps_vars.f90 for details of this var
   pset%zmet = 11            !define the metallicity (see the manual)
                             !20 = solar metallacity
-  add_agb_dust_model = 0    !Toggle the Villaume dust model. Good to determine
+  add_agb_dust_model = 1    !Toggle the Villaume dust model. Good to determine
                             !how much of the changes we see are caused by dust.
 
   ! Reads in all of the isochrones/libraries for a given metallicity. The
@@ -47,7 +47,7 @@
 
 
   !These are parameters for the delayed-tau model.
-  pset%sfh      = 0     !set SFH to SSP
+  pset%sfh      = 1     !set SFH to SSP
   pset%tau      = 0.1   !Timescale for the suppression of star formation
   pset%const    = 0.0
   pset%sf_start = 0.0   !When 

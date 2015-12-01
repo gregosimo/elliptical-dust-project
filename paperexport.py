@@ -577,6 +577,40 @@ def create_SED(table=atlas3d_table, dest=build_filepath(FIGUREPATH, "sed",
     plt.savefig(dest)
     plt.close()
 
+def create_circumstellar_verification_plot(
+    atable=atlas3d_table, rtable=rampazzo_table, 
+    dest=build_filepath(FIGUREPATH, "dustless", EXT)):
+    '''Plot showing where Class-0 and dustless ATLAS3D objects lie.'''
+
+    # We want to set up our datasets of dustless ATLAS3D and Class-0 Rampazzo
+    # galaxies.
+    dcat = atlas3d.filter_ATLAS3D_table_for_dustless_galaxies(atable)
+
+    class0 = rp.extract_MIR_class_sample(rtable, 0, "MIR_class")
+
+    class0w1w3, class0w1w3_err, class0w1w3_lim = stat.subtract(
+        class0["w1unextmag"], class0["w3unextmag"], class0["w1unexterr"],
+        class0["w3unexterr"], class0["w1unextlim"], class0["w3unextlim"])
+    class0w1w4, class0w1w4_err, class0w1w4_lim = stat.subtract(
+        class0["w1unextmag"], class0["w4unextmag"], class0["w1unexterr"],
+        class0["w4unexterr"], class0["w1unextlim"], class0["w4unextlim"])
+    dcatw1w3, dcatw1w3_err, dcatw1w3_lim = stat.subtract(
+        dcat["w1unextmag"], dcat["w3unextmag"], dcat["w1unexterr"],
+        dcat["w3unexterr"], dcat["w1unextlim"], dcat["w3unextlim"])
+    dcatw1w4, dcatw1w4_err, dcatw1w4_lim = stat.subtract(
+        dcat["w1unextmag"], dcat["w4unextmag"], dcat["w1unexterr"],
+        dcat["w4unexterr"], dcat["w1unextlim"], dcat["w4unextlim"])
+
+    stat.errorbar(class0w1w3, class0w1w4, class0w1w4_err, class0w1w3_err,
+                  class0w1w4_lim, label="Class 0", **rp.MIR_Symbols[0])
+    stat.errorbar(dcatw1w3, dcatw1w4, dcatw1w4_err, dcatw1w3_err,
+                  dcatw1w4_lim, 'bx', label="ATLAS3D")
+    plt.xlabel("W1-W3")
+    plt.ylabel("W1-W4")
+    plt.legend(loc="lower right")
+    plt.savefig(dest)
+    plt.close()
+
 def create_circumstellar_dust_plot(table=atlas3d_table,
                                    dest=build_filepath(FIGUREPATH, "cdust",
                                                        EXT)):
