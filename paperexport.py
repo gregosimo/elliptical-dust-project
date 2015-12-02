@@ -544,36 +544,17 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
 
     return classtable
 
-def create_SED(table=atlas3d_table, dest=build_filepath(FIGUREPATH, "sed",
+def create_SED(table=fulltable, dest=build_filepath(FIGUREPATH, "sed",
                                                         EXT)):
-    fluxtable = Table([table.columns["objstr_01"]])
-    table["w1unextmag"] = conv.ABmag2Jansky("W1", table["w1unextmag"])
-    table["w1unexterr"] = conv.Mag_err_to_Jansky_err(
-        "W1", table["w1unextmag"], table["w1unexterr"])
-    table["w2unextmag"] = conv.ABmag2Jansky("W2", table["w2unextmag"])
-    table["w2unexterr"] = conv.Mag_err_to_Jansky_err(
-        "W2", table["w2unextmag"], table["w2unexterr"])
-    table["w3unextmag"] = conv.ABmag2Jansky("W3", table["w3unextmag"])
-    table["w3unexterr"] = conv.Mag_err_to_Jansky_err(
-        "W3", table["w3unextmag"], table["w3unexterr"])
-    table["w4unextmag"] = conv.ABmag2Jansky("W4", table["w4unextmag"])
-    table["w4unexterr"] = conv.Mag_err_to_Jansky_err(
-        "W4", table["w4unextmag"], table["w4unexterr"])
-    table["NUVunextmag"] = conv.ABmag2Jansky("NUV", table["NUVunextmag"])
-    table["NUVunexterr"] = conv.Mag_err_to_Jansky_err(
-        "NUV", table["NUVunextmag"], table["NUVunexterr"])
-    table["FUVunextmag"] = conv.ABmag2Jansky("FUV", table["FUVunextmag"])
-    table["FUVunexterr"] = conv.Mag_err_to_Jansky_err(
-        "FUV", table["FUVunextmag"], table["FUVunexterr"])
 
-    normval = fsps.plot_FSPS_SED(FSPSPATH)
-    fsps.plot_data_SED(fluxtable, normvalue=normval)
+    fsps.plot_FSPS_SED(FSPSPATH, plotquant="Flux", fmt="k-")
+    fsps.plot_data_SED(table, plotquant="Flux")
 
     plt.xlabel("Wavelength (um)")
-    plt.ylabel("AB magnitude")
-    plt.ylim([5, 17])
-    plt.gca().invert_yaxis()
-    plt.legend(loc="upper left")
+    plt.ylabel("nu f_nu")
+    plt.xlim([0.1, 100])
+#    plt.gca().invert_yaxis()
+    plt.legend(loc="lower left")
     plt.savefig(dest)
     plt.close()
 
@@ -602,9 +583,10 @@ def create_circumstellar_verification_plot(
         dcat["w4unexterr"], dcat["w1unextlim"], dcat["w4unextlim"])
 
     stat.errorbar(class0w1w3, class0w1w4, class0w1w4_err, class0w1w3_err,
-                  class0w1w4_lim, label="Class 0", **rp.MIR_Symbols[0])
+                  class0w1w4_lim, label="Class 0", ufmt="kv", lfmt="k^", 
+                  **rp.MIR_Symbols[0])
     stat.errorbar(dcatw1w3, dcatw1w4, dcatw1w4_err, dcatw1w3_err,
-                  dcatw1w4_lim, 'bx', label="ATLAS3D")
+                  dcatw1w4_lim, 'bx', label="ATLAS3D", ufmt="bv", lfmt="k^")
     plt.xlabel("W1-W3")
     plt.ylabel("W1-W4")
     plt.legend(loc="lower right")

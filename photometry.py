@@ -2081,6 +2081,8 @@ def name_photometry_column(band, error=False, category="unext", limit=False):
         stringtemplate = "{0}_m{1}_k20fe"
         if error:
             errstring="sig"
+        elif limit:
+            errstring="lim"
         else:
             errstring=""
         # We take the first index of band because only the first character is
@@ -2184,7 +2186,7 @@ def calc_statistical_elliptical_mass_to_light_ratio(
     This function implements Equation 8 in Jarrett 2013. Note that it only
     applies to early-type galaxies.'''
 
-    w1w2, w1w2err = subtract(
+    w1w2, w1w2err, _ = stat.subtract(
         conv.AB2Vegamag('W1', W1), conv.AB2Vegamag('W2', W2), W1err, W2err)
 
     # I'm adding two terms: one for conversion from [3.6] to W1, and another
