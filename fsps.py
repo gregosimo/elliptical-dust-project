@@ -353,14 +353,11 @@ def mag_table_to_flux_table(
     table, runbands=(conv.WISE_bands + conv.TWOMASS_bands + conv.GALEX_bands),
     ZP="AB"):
     '''Converts a table in magnitudes to a table in fluxes.'''
-    mag_columns = [phot.name_photometry_column(band, error=False) for band in
-                   runbands]
-    err_columns = [phot.name_photometry_column(band, error=True) for band in
-                   runbands]
     newtable = table[["objstr_01"]]
     for band in runbands:
         mag_column = phot.name_photometry_column(band, error=False)
         err_column = phot.name_photometry_column(band, error=True)
+        lim_column = phot.name_photometry_column(band, limit=True)
         if ZP is "AB":
             newtable[mag_column] = conv.ABmag2Jansky(band, table[mag_column])
         elif ZP is "Vega":
@@ -370,31 +367,69 @@ def mag_table_to_flux_table(
                              "{0}.".format(ZP))
         newtable[err_column] = conv.Mag_err_to_Jansky_err(
             band, table[mag_column], table[err_column])
+        newtable[lim_column] = stat.invert_limits(table[lim_column])
     return newtable
 
-def normalize_magnitude_SED(SED, normvalue, runbands, normband):
-    '''Normalizes the SED to have magnitude equal to normvalue at normband.
+def normalized_magnitude_SED_offset(SED, normvalue, runbands, normband):
+    '''Returns the offset which has to be subtracted from the SED to normalize.
     
     SED should be the array which contains the magnitude values with columns
     being the names of the bands. Runbands should be a list of band names which
-    correspond to the columns of SED.'''
+    correspond to the columns of SED. Take the factor returned by this and
+    subtract it from the SED in order to get the normalized SED.'''
     normindex = runbands.index(normband)
-    normed_SED = SED - SED[normindex] + normvalue
-    return normed_SED
+    norm_offset = SED[normindex] - normvalue
+    return norm_offset
 
-def normalize_flux_SED(SED, normvalue, wavelengths, normband):
+def normalize_magnitude_SED(SED, SEDerr, normvalue, runbands,
+                                      normband):
+    '''Returns the normalized magnitude SED and SED error.
+
+    Normalizes the SED and to have the value normvalue an the band normband. It
+    will return a 2-tuple containing the normalized magnitude SED, along with 
+    the corresponding error in the SED (formally, the errors will stay the 
+    same). Runband has to function to index the values of SED, so each band in 
+    runbands should match to the corresponding magnitude in SED.
+    '''
+    normoffset = normalized_magnitude_SED_offset(SED, normvalue, runbands,
+                                                 normband)
+    normedSED = SED - normoffset
+    return (normedSED, SEDerr)
+
+def normalized_flux_SED_factor(SED, normvalue, wavelengths, normband):
+    '''Returns the scaling factor to normalize the SED to normvalue.
+
+    This function does a little more work because there is no guarantee that
+    the wavelength of normband is included in wavelengths. Therefore, this
+    function interpolates to get the corresponding flux at that value. In order
+    to do the interpolation correctly, the wavelengths array must be given in
+    microns. In order to get a normed flux SED, multiply the factor from this
+    function by the raw SED
+    '''
+    bandwv = conv.WAVELENGTHS[normband] * 1e6
+    interpfunc = interp1d(wavelengths, SED)
+    interpvalue = interpfunc(bandwv)
+    normfactor = normvalue / interpvalue
+    return normfactor
+
+def normalize_flux_SED(SED, SEDerr, normvalue, wavelengths, normband):
     '''Normalizes the SED to have flux equal to normvalue at normband.
     
     This is a little bit tricky because flux SEDs don't necessary coincide with
-    band wavelengths. 
+    band wavelengths. So we'll probably use some interpolation. This function
+    assumes that wavelengths array is given in microns. This function returns
+    a 2-tuple corresponding to the normalized flux, and the error in the
+    normalized flux.
     '''
-    pass
-    
-
+    normfactor = normalized_flux_SED_factor(SED, normvalue, wavelengths,
+                                            normband)
+    normedSED = SED * normfactor
+    normedSED_err = SEDerr * normfactor
+    return (normedSED, normedSED_err)
 
 def plot_data_SED(
         datatable, label="Data", fmt="r.", 
-        runbands=(conv.WISE_bands + conv.TWOMASS_bands + conv.GALEX_bands),
+        runbands=(conv.GALEX_bands + conv.TWOMASS_bands + conv.WISE_bands),
         normband="Ks", normvalue=1, inputzp="AB", plotquant="Flux"):
     # In order to make a plot of nu-fnu, we need fluxes.
     if plotquant is "Flux":
@@ -409,30 +444,39 @@ def plot_data_SED(
                    runbands]
     err_columns = [phot.name_photometry_column(band, error=True) for band in
                    runbands]
+    lim_columns = [phot.name_photometry_column(band, limit=True) for band in
+                   runbands]
 
+    # This set of routines turns a table with bands as columns and objects as
+    # rows, into a table with objects as columns and bands as rows.
     data_arr = Astropy_Table_to_numpy_array(datatable[mag_columns])
     sed_table = Table(data_arr.transpose(), names=datatable["objstr_01"])
     data_err_arr = Astropy_Table_to_numpy_array(datatable[err_columns])
     sed_err_table = Table(data_err_arr.transpose(), 
                           names=datatable["objstr_01"])
-
+    data_lim_arr = Astropy_Table_to_numpy_array(datatable[lim_columns],
+                                                dtype="S1")
+    sed_lim_table = Table(data_lim_arr.transpose(), 
+                          names=datatable["objstr_01"])
     for gal in sed_table.colnames:
         galaxy_sed = sed_table[gal]
         galaxy_sed_err = sed_err_table[gal]
+        galaxy_sed_lims = sed_lim_table[gal]
         # If we change to fluxes, we want to plot nu-fnu.
         if plotquant is "Flux":
-            galaxy_sed *= frequencies
-            galaxy_sed_err *= frequencies
-        normindex = runbands.index(normband)
-        # This norming is all wrong. There shoul be two separate cases for
-        # magnitudes and fluxes.
-        normed_sed = galaxy_sed / galaxy_sed[normindex] * normvalue
-        normed_sed_err = galaxy_sed_err / galaxy_sed[normindex] * normvalue
-        plt.errorbar(wavelengths, normed_sed, normed_sed_err, fmt=fmt,
-                     label=label)
+            normed_sed, normed_sed_err = normalize_flux_SED(
+                galaxy_sed, galaxy_sed_err, normvalue, wavelengths, normband)
+            normed_sed *= frequencies
+            normed_sed_err *= frequencies
+        elif plotquant is "Mag":
+            normed_sed, normed_sed_err = normalize_magnitude_SED(
+                galaxy_sed, galaxy_sed_err, normvalue, runbands, normband)
+        stat.errorbar(wavelengths, normed_sed, normed_sed_err,
+                      ylim=galaxy_sed_lims, fmt=fmt, label=label)
+        label=None
 
 def plot_FSPS_SED(
-        FSPS_DIR, modelbase="SSP.out", label="FSPS", fmt="c*",  
+        FSPS_DIR, modelbase="SSP.out", label="FSPS", fmt="k-",  
         runbands=(conv.WISE_bands + conv.TWOMASS_bands + conv.GALEX_bands),
         ageindex=-1, normband="Ks", normvalue=1, plotquant="Flux"):
     '''Plots a model FSPS SED with data.
@@ -440,29 +484,36 @@ def plot_FSPS_SED(
     Takes an FSPS directory and file with a table full of data, and then plots
     both as an SED. 
     '''
-    wavelengths = np.array([conv.WAVELENGTHS[band] for band in runbands])*1e6
-    #frequencies = 3e14 / wavelengths
 
     if plotquant is "Mag":
+        wavelengths = np.array([conv.WAVELENGTHS[band] for band in 
+                                runbands])*1e6
         filepath = os.path.join(
             FSPS_DIR, "OUTPUTS", ".".join([modelbase, "mags"]))
         magtable = read_mags(filepath)
 
         mags = np.array([magtable[ageindex][band] for band in runbands])
-        normindex = runbands.index(normband)
+        normedSED = normalize_magnitude_SED(mags, 1, normvalue, runbands,
+                                            normband)[0]
+        plotfunc = plt.semilogx
     elif plotquant is "Flux":
         filepath = os.path.join(
-            FSPS_DIR, "OUTPUTS", ".".join(modelbase, "spec"))
+            FSPS_DIR, "OUTPUTS", ".".join([modelbase, "spec"]))
         fluxtable = read_specs(filepath)
-        spectable = fluxtable.columns[4:]
-        specwavelengths = np.asarray(spectable.colnames, dtype=np.float)*1e4
-
+        # Remember that this is a logarithm
+        ages = fluxtable["log(age)"]
+        spectable = Table(fluxtable.columns[4:])
+        wavelengths = np.asarray(spectable.colnames, dtype=np.float)*1e-4
+        specdata = Astropy_Table_to_numpy_array(spectable)
+        frequencies = 3e14 / wavelengths
+        # I want fluxes to be an array. An astropy row is NOT an array.
+        fluxes = specdata[ageindex, :]
+        normedSED = normalize_flux_SED(fluxes, 1, normvalue, wavelengths, 
+                                       normband)[0]
+        normedSED *= frequencies
+        plotfunc = plt.loglog
     else:
         raise ValueError(
             "plotquant must be either Flux or Mag, not {0}".format(plotquant))
 
-    plt.semilogx(wavelengths, mags, fmt, label=label)
-
-    print magtable["Age"][ageindex]
-    return mags[normindex]
-
+    plotfunc(wavelengths, normedSED, fmt, label=label)

@@ -17,6 +17,7 @@ import numpy as np
 
 import photometry as phot
 import band_conversions as conv
+import statop as stat
 
 # This is the entry point for the catalog.
 CATALOG_BASE = "http://irsa.ipac.caltech.edu/cgi-bin/Gator/nph-query"
@@ -294,6 +295,9 @@ def get_2MASS_catalog_entries(objectfile, mags="AB"):
 
     The mags specifies whether the 2MASS entries should be in Vega magnitudes
     or AB magnitudes. By default, they will be converted to AB.
+
+    This function also adds limits to the table for compatibility with the
+    pipeline. It's assumed all 2MASS objects are clear detections.
     '''
     twomassTable = query_WISE_catalog_file_upload(objectfile,
             catalog=CATALOG_NAMES["2MASS"], cols=("ra", "dec", "j_m_k20fe",
@@ -303,6 +307,10 @@ def get_2MASS_catalog_entries(objectfile, mags="AB"):
             "h_msig_ext", "k_m_ext", "k_msig_ext"), clearentries=[])
     if mags == "AB":
         conv.convert_2MASS_table_to_AB(twomassTable)
+    tablelen = len(twomassTable)
+    twomassTable["j_mlim_k20fe"] = stat.generate_limit(None, tablelen)
+    twomassTable["h_mlim_k20fe"] = stat.generate_limit(None, tablelen)
+    twomassTable["k_mlim_k20fe"] = stat.generate_limit(None, tablelen)
     return twomassTable
 
 def query_metadata(ra, dec, survey):

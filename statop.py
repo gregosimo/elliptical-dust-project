@@ -23,6 +23,8 @@ The function returns a 3-tuple containing the new value, error and limit.
 import numpy as np
 import matplotlib.pyplot as plt
 
+import band_conversions as conv
+
 UPPER_LIMIT_SYMBOL = 'u'
 LOWER_LIMIT_SYMBOL = 'l'
 DATA_POINT_SYMBOL = 'd'
@@ -31,6 +33,15 @@ UPPER = UPPER_LIMIT_SYMBOL
 LOWER = LOWER_LIMIT_SYMBOL
 NA = NO_LIMIT_SYMBOL
 DETECTION = DATA_POINT_SYMBOL
+
+def filter_limit_bands(runbands):
+    '''Removes all bands which do not have limits calculated by this pipeline.
+
+    This currently removes all bands which are not WISE or GALEX bands.
+    '''
+    filteredbands = filter(lambda x: x in (conv.WISE_bands + conv.GALEX_bands),
+                           runbands)
+    return filteredbands
 
 def generate_limit(testlim, length):
     '''If testlim is None, generate an array of default limits with length.
@@ -280,13 +291,14 @@ def get_lim(val, valerr=None, vallim=None, lim=DETECTION):
         newval = val
         newvalerr = valerr
     else: 
+        if len(val) != len(vallim):
+            raise ValueError("Value and Limits need to be the same size.")
         limind = np.where(vallim == lim)
         newval = val[limind]
         if valerr is None:
             newvalerr = None
         else:
             newvalerr = valerr[limind]
-
     return newval, newvalerr
 
 def errorbar(x, y, *args, **kwargs):
@@ -328,8 +340,13 @@ def _errorbar(x, y, **kwargs):
     keywords are passed to the matplotlib errorbar function.
     '''
     ylim = kwargs.pop("ylim", None)
-    ufmt = kwargs.pop("ufmt", "v")
-    lfmt = kwargs.pop("lfmt", "^")
+    fmt = kwargs.get("fmt")
+    if fmt is None:
+        fmtc=""
+    else:
+        fmtc=fmt[0]
+    ufmt = kwargs.pop("ufmt", fmtc+"v")
+    lfmt = kwargs.pop("lfmt", fmtc+"^")
     if ylim is None:
         plt.errorbar(x, y, **kwargs)
     else:
@@ -351,9 +368,9 @@ def _errorbar(x, y, **kwargs):
         for prop in ["fmt", "label"]:
             if prop in kwargs:
                 del(kwargs[prop])
-        plt.errorbar(ux, uy, fmt=ufmt, uplims=True, **kwargs)
+        plt.errorbar(ux, uy, fmt=ufmt, **kwargs)
 
         # Now lower limits
         lx, lxerr = get_lim(x, xerr, ylim, LOWER)
         ly, lyerr = get_lim(y, yerr, ylim, LOWER)
-        plt.errorbar(lx, ly, fmt=lfmt, lolims=True, **kwargs)
+        plt.errorbar(lx, ly, fmt=lfmt, **kwargs)
