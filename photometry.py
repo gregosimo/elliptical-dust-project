@@ -585,7 +585,29 @@ def astropy_table_index(table, column, value):
     There are often times when you want to know the index of the row
     where a certain column has a value. This function will return a 
     list of row indices that match the value in the column.'''
-    return np.where(table[column] == value)
+    return astropy_table_indices(table, column, [value])
+
+def astropy_table_indices(table, column, values):
+    '''Returns the row indices of the table which have the values in column.
+
+    If you need to get the indices of values located in the column of a table,
+    this function will determine that for you.
+    '''
+    return np.where(multi_logical_or(*[table[column] == v for v in values]))
+
+def multi_logical_or(*arrs):
+    '''Performs a logical and for an arbitrary number of boolean arrays.'''
+    if len(arrs) == 1:
+        return arrs[0]
+    elif len(arrs) == 2:
+        return np.logical_or(*arrs)
+    elif len(arrs) > 2:
+        return np.logical_or(arrs[0], multi_logical_and(*arrs[1:]))
+    elif len(arrs) == 0:
+        raise ValueError("Need values to perform logical and")
+    else:
+        raise ValueError("Array somehow has negative length.")
+
 
 def astropy_table_row(table, column, value):
     '''Returns the row of the table which has the value in column.
@@ -603,16 +625,7 @@ def extract_subtable_from_column(table, column, selections):
     This function will create a Table whose values in column are only
     those found in selections.
     '''
-    indices = []
-    for selection in selections:
-        try:
-            foundindex = astropy_table_index(table, column, selection)[0][0]
-        except IndexError:
-            # If it's not found, then skip to the next row!
-            pass
-        else:
-            indices.append(foundindex)
-    return table[indices]
+    table[astropy_table_indices(table, column, selections)]
 
 def filterTable(BASEDIR, fulltable, isTrue, **kwargs):
     '''Filters a table based on a boolean method isTrue.
@@ -2214,9 +2227,9 @@ def doubleDifferencePlot(xfirst, xsecond, yfirst, ysecond, xfirsterr,
     This plot can be used to add even more information about data consistency
     than a single difference plot.
     '''
-    xdiff, xerrs = stat.subtract(xfirst, xsecond, xfirsterr,
+    xdiff, xerrs, xlims = stat.subtract(xfirst, xsecond, xfirsterr,
             xseconderr)
-    ydiff, yerrs = stat.subtract(yfirst, ysecond, yfirsterr,
+    ydiff, yerrs, ylims = stat.subtract(yfirst, ysecond, yfirsterr,
             yseconderr)
     maxdiff = max(np.absolute(xdiff).max(), np.absolute(ydiff).max())
     plt.errorbar(xdiff, ydiff, yerrs, xerrs, fmt=fmt, label=label)

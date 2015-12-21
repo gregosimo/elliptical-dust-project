@@ -50,12 +50,12 @@ def read_specs(specfile, extinction=""):
     '''
     f = open(specfile, 'r')
     fullfile = f.readlines()
-    specfile = fullfile[9::2]
-    infofile = fullfile[10::2]
+    speclines = fullfile[9::2]
+    infolines = fullfile[10::2]
 
-    spectable = Table.read(specfile, format="ascii.basic")
+    spectable = Table.read(speclines, format="ascii.basic")
     infotable = Table.read(
-        infofile, format="ascii.no_header", 
+        infolines, format="ascii.no_header", 
         names=("log(age)", "log(mass)", "log(lbol)", "log(SFR)"))
 
     fulltable = hstack([infotable, spectable])
@@ -87,13 +87,13 @@ def filter_mag_table(magtable):
 
     These entries will namely be age, W1, W2, W3, W4, NUV, and FUV.
     '''
-    newtable = Table([10**magtable["log(age)"], 10**magtable["log(SFR)"],
+    newtable = Table([magtable["log(age)"], magtable["log(SFR)"],
                       magtable["filter10"], magtable["filter11"], 
                       magtable["filter12"], magtable["filter83"], 
                       magtable["filter84"], magtable["filter85"], 
                       magtable["filter86"], magtable["filter62"], 
                       magtable["filter63"]], 
-                     names=("Age", "SFR", 
+                     names=("log(age)", "log(SFR)", 
                             "J", "H", "Ks", 
                             "W1", "W2", "W3", "W4", 
                             "FUV", "NUV"))
@@ -183,7 +183,8 @@ def tburst_data_plot(times, lowmet, highmet, atlas3dtable,
         if SSPfile:
             filename = os.path.join(TBURST_DIR, "ssp.mags")
             magtable = read_mags(filename)
-            plt.plot(magtable["Age"]/1e9, magtable[blueband] - magtable[redband],
+            sspages = 10**(magtable["log(age)"]-9)
+            plt.plot(sspages, magtable[blueband] - magtable[redband],
                      label="SSP")
         # Make the tracks for desired times.
         plot_tburst_tracks(times, TBURST_DIR, blueband, redband, t_fileformat,
@@ -213,9 +214,11 @@ def plot_metallicity_bounds(lowzh, highzh, MET_PATH, blueband, redband,
     lowmetmagtable = read_mags(lowmetfilename)
     highmetfilename = os.path.join(MET_PATH, fileformat.format(highzh))
     highmetmagtable = read_mags(highmetfilename)
-    plt.plot(lowmetmagtable["Age"]/1e9, lowmetmagtable[blueband] -
-             lowmetmagtable[redband], 'b-', label=label.format(lowzh))
-    plt.plot(highmetmagtable["Age"]/1e9, highmetmagtable[blueband] -
+    lowmetspsages = 10**(lowmetmagtable["log(age)"]-9)
+    highmetspsages = 10**(highmetmagtable["log(age)"]-9)
+    plt.plot(lowmetspsages, lowmetmagtable[blueband] - lowmetmagtable[redband], 
+             'b-', label=label.format(lowzh))
+    plt.plot(highmetspsages, highmetmagtable[blueband] -
              highmetmagtable[redband], 'r-', label=label.format(highzh))
 
 def plot_dust_toggled_metallicity_bounds(FILE_PATH, blueband, redband,
@@ -245,13 +248,18 @@ def plot_dust_toggled_metallicity_bounds(FILE_PATH, blueband, redband,
     lowdusthighmetlabel="[Z/H]={0:.2f}{1}".format(highmet, nodustsuffix)
     lowdustlowmetlabel="[Z/H]={0:.2f}{1}".format(lowmet, nodustsuffix)
 
-    plt.plot(highdusthighmettable["Age"]/1e9, highdusthighmettable[blueband] -
+    highdusthighmetages = 10**(highdusthighmettable["log(age)"]-9)
+    highdustlowmetages = 10**(highdustlowmettable["log(age)"]-9)
+    lowdusthighmetages = 10**(lowdusthighmettable["log(age)"]-9)
+    lowdustlowmetages = 10**(lowdustlowmettable["log(age)"]-9)
+
+    plt.plot(highdusthighmetages, highdusthighmettable[blueband] -
              highdusthighmettable[redband], 'r-', label=highdusthighmetlabel)
-    plt.plot(highdustlowmettable["Age"]/1e9, highdustlowmettable[blueband] -
+    plt.plot(highdustlowmetages, highdustlowmettable[blueband] -
              highdustlowmettable[redband], 'b-', label=highdustlowmetlabel)
-    plt.plot(lowdusthighmettable["Age"]/1e9, lowdusthighmettable[blueband] -
+    plt.plot(lowdusthighmetages, lowdusthighmettable[blueband] -
              lowdusthighmettable[redband], 'r--', label=lowdusthighmetlabel)
-    plt.plot(lowdustlowmettable["Age"]/1e9, lowdustlowmettable[blueband] -
+    plt.plot(lowdustlowmetages, lowdustlowmettable[blueband] -
              lowdustlowmettable[redband], 'b--', label=lowdustlowmetlabel)
 
 def plot_tburst_tracks(times, TBURST_DIR, blueband, redband, 
@@ -261,8 +269,9 @@ def plot_tburst_tracks(times, TBURST_DIR, blueband, redband,
     for i, fmt in zip(times, fmts):
         filename = os.path.join(TBURST_DIR, fileformat.format(i))
         magtable = read_mags(filename)
-        plt.plot(magtable["Age"]/1e9, magtable[blueband] - 
-                 magtable[redband], fmt, label=label.format(i))
+        spsages = 10**(magtable["log(age)"]-9)
+        plt.plot(spsages, magtable[blueband] - magtable[redband], fmt, 
+                 label=label.format(i))
 
 def plot_atlas3d_coded_by_metallicity(xvalues, yvalues, yerrs, xerrs, ylims, zh, 
                                       zh_lim=0.0):
@@ -321,10 +330,10 @@ def color_difference_plot(times, outputdir=TBURST_PATH, prefix1="early_t",
                                     "{0}{1:02d}.mags".format(prefix2, t))
             bottomtable = read_mags(bottomfile)
 
-            if not np.array_equal(bottomtable["Age"], toptable["Age"]):
+            if not np.array_equal(bottomtable["log(age)"], toptable["log(age)"]):
                 raise ValueError("FSPS model ages do not match!")
             else:
-                ages = bottomtable["Age"]
+                ages = 10**(bottomtable["log(age)"]-9)
             topcolor = toptable[blueband] - toptable[redband]
             bottomcolor = bottomtable[blueband] - bottomtable[redband]
             colordiff = topcolor - bottomcolor
@@ -475,14 +484,39 @@ def plot_data_SED(
                       ylim=galaxy_sed_lims, fmt=fmt, label=label)
         label=None
 
+def plot_FSPS_SED_at_ages(
+    FSPS_DIR, modelbase="SSP.out", label="t={0:.1g}", fmts=None,
+    runbands=(conv.WISE_bands + conv.TWOMASS_bands + conv.GALEX_bands),
+    ages=[0], normband="Ks", normvalue=1, plotquant="Flux"):
+    '''Plots a series of FSPS models at different ages.
+
+    Plots different ages from the data from modelbase. It labels them based on
+    their ages. fmts and ages shoul be of the same length (or fmts should be
+    None for the default matplotlib color rotation). Ages should be in years,
+    and not a log, despite how it's reported in FSPS. The only plotquant that's
+    working right now is flux. Mags is broken because it's a bit of work to
+    fix, and it's not useful right now.
+    '''
+    if fmts is None:
+        fmts = ['']*len(ages)
+    for (age, fmt) in zip(ages, fmts):
+        agelabel = label.format(age)
+        plot_FSPS_SED(FSPS_DIR, modelbase, agelabel, fmt, runbands, age,
+                      normband, normvalue, plotquant)
+
+# I might want to break this function up into two functions. Because they are
+# EXTREMELY disparate. The one piece of code they share isn't really even
+# shared, since the function call is completely different.
 def plot_FSPS_SED(
         FSPS_DIR, modelbase="SSP.out", label="FSPS", fmt="k-",  
         runbands=(conv.WISE_bands + conv.TWOMASS_bands + conv.GALEX_bands),
-        ageindex=-1, normband="Ks", normvalue=1, plotquant="Flux"):
+        age=0, normband="Ks", normvalue=1, plotquant="Flux"):
     '''Plots a model FSPS SED with data.
 
     Takes an FSPS directory and file with a table full of data, and then plots
-    both as an SED. 
+    both as an SED. NOTE: Plotting magnitudes for a specific age is not working
+    right now. That will need to be implemented in the future. Right now,
+    leaving the age value at its default value will use the oldest SSP model.
     '''
 
     if plotquant is "Mag":
@@ -491,6 +525,8 @@ def plot_FSPS_SED(
         filepath = os.path.join(
             FSPS_DIR, "OUTPUTS", ".".join([modelbase, "mags"]))
         magtable = read_mags(filepath)
+        if age == 0:
+            ageindex = -1
 
         mags = np.array([magtable[ageindex][band] for band in runbands])
         normedSED = normalize_magnitude_SED(mags, 1, normvalue, runbands,
@@ -501,13 +537,19 @@ def plot_FSPS_SED(
             FSPS_DIR, "OUTPUTS", ".".join([modelbase, "spec"]))
         fluxtable = read_specs(filepath)
         # Remember that this is a logarithm
-        ages = fluxtable["log(age)"]
         spectable = Table(fluxtable.columns[4:])
         wavelengths = np.asarray(spectable.colnames, dtype=np.float)*1e-4
         specdata = Astropy_Table_to_numpy_array(spectable)
+        # Now we want a spectrum at the given age.
+        ages = fluxtable["log(age)"]
+        if age == 0:
+            fluxes = specdata[-1, :]
+        else:
+            logage = np.log10(age)
+            ageinterp = interp1d(ages, specdata, axis=0)
+            fluxes = ageinterp(logage)
         frequencies = 3e14 / wavelengths
         # I want fluxes to be an array. An astropy row is NOT an array.
-        fluxes = specdata[ageindex, :]
         normedSED = normalize_flux_SED(fluxes, 1, normvalue, wavelengths, 
                                        normband)[0]
         normedSED *= frequencies
@@ -517,3 +559,17 @@ def plot_FSPS_SED(
             "plotquant must be either Flux or Mag, not {0}".format(plotquant))
 
     plotfunc(wavelengths, normedSED, fmt, label=label)
+
+def plot_FSPS_color_color(
+    FSPS_DIR, xband1, xband2, yband1, yband2, 
+    modelbase="SSP.out", label="FSPS", fmt="k-", agecutoff=0):
+    '''Plots an FSPS track'''
+    filepath = os.path.join(
+        FSPS_DIR, ".".join([modelbase, "mags"]))
+    magtable = read_mags(filepath)
+    agedtable = magtable[np.where(magtable["log(age)"] > np.log10(agecutoff))]
+    ycolor = agedtable[yband1] - agedtable[yband2]
+    xcolor = agedtable[xband1] - agedtable[xband2]
+    plt.plot(xcolor[0], ycolor[0], fmt[0]+"*")
+    plt.plot(xcolor, ycolor, fmt, label=label)
+

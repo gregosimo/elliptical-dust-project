@@ -11,8 +11,10 @@ import matplotlib
 matplotlib.use("PDF")
 import matplotlib.pyplot as plt
 from astropy.table import Table, vstack
+from astropy.modeling import models, fitting
 from astropy.io.ascii import masked
 import numpy as np
+import numpy.core.defchararray as npstr
 
 import photometry as phot
 import queries
@@ -21,13 +23,16 @@ import fsps
 import band_conversions as conv
 import atlas3d
 import statop as stat
+import parsec
 
 BASEPATH = "/home/regulus/simonian/year1/wise"
 FSPSPATH = "/home/regulus/simonian/year1/fsps"
+PARSECPATH = "/home/regulus/simonian/year1/parsec"
 
 ATLAS3DBASE = os.path.join(BASEPATH, "ATLAS3D_DB")
 RAMPAZZOBASE = os.path.join(BASEPATH, "Rampazzo_DB")
 JARRETTBASE = os.path.join(BASEPATH, "Jarrett_DB")
+GDPBASE = os.path.join(BASEPATH, "GdP_sample_test")
 
 PAPERPATH = "/home/regulus/simonian/papers/wise14"
 TABLEPATH = os.path.join(PAPERPATH, "tables")
@@ -36,6 +41,7 @@ FIGUREPATH = os.path.join(PAPERPATH, "fig")
 FULL_ATLAS3D_TABLE = os.path.join(ATLAS3DBASE, "atlas3d.tbl")
 FULL_RAMPAZZO_TABLE = os.path.join(RAMPAZZOBASE, "rampazzo.tbl")
 FULL_JARRETT_TABLE = os.path.join(JARRETTBASE, "jarrett.tbl")
+FULL_GIL_DE_PAZ_TABLE = os.path.join(GDPBASE, "gil_de_paz.tbl")
 
 # If we want to change the type of file which is exported, just change this
 # extension!
@@ -69,6 +75,14 @@ try:
     jarrett_table = Table.read(FULL_JARRETT_TABLE, format="ascii.csv")
 except IOError:
     jarrett_table=[]
+
+# I made this a csv because the astropy ipac routine doesn't believe in having
+# periods in ipac column names.
+try:
+    gdp_table = Table.read(FULL_GIL_DE_PAZ_TABLE, format="ascii.csv")
+except IOError:
+    gdp_table=[]
+
 
 
 def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
@@ -262,10 +276,13 @@ def create_W1W2_W2W3_MIR_plot(table=rampazzo_table,
     w1err = table["w1unexterr"]
     w2err = table["w2unexterr"]
     w3err = table["w3unexterr"]
+    w1lim = table["w1unextlim"]
+    w2lim = table["w2unextlim"]
+    w3lim = table["w3unextlim"]
     MIR = table["MIR_class"]
 
-    w1w2, w1w2err = stat.subtract(w1, w2, w1err, w2err)
-    w2w3, w2w3err = stat.subtract(w2, w3, w2err, w3err)
+    w1w2, w1w2err, w1w2lim = stat.subtract(w1, w2, w1err, w2err, w1lim, w2lim)
+    w2w3, w2w3err, w2w3lim = stat.subtract(w2, w3, w2err, w3err, w2lim, w3lim)
 
     rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, xrange(5), xlabel,
                ylabel, "", loc="upper left")
@@ -305,11 +322,15 @@ def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
     w2err = table["w2unexterr"]
     w3err = table["w3unexterr"]
     w4err = table["w4unexterr"]
+    w1lim = table["w1unextlim"]
+    w2lim = table["w2unextlim"]
+    w3lim = table["w3unextlim"]
+    w4lim = table["w4unextlim"]
     MIR = table["MIR_class"]
 
-    w1w2, w1w2err = stat.subtract(w1, w2, w1err, w2err)
-    w2w3, w2w3err = stat.subtract(w2, w3, w2err, w3err)
-    w3w4, w3w4err = stat.subtract(w3, w4, w3err, w4err)
+    w1w2, w1w2err, w1w2lim = stat.subtract(w1, w2, w1err, w2err, w1lim, w2lim)
+    w2w3, w2w3err, w2w3lim = stat.subtract(w2, w3, w2err, w3err, w2lim, w3lim)
+    w3w4, w3w4err, w3w4lim = stat.subtract(w3, w4, w3err, w4err, w3lim, w4lim)
 
     w1w2label = "W1-W2"
     w2w3label = "W2-W3"
@@ -317,13 +338,14 @@ def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
 
     plt.subplot(1, 2, 1)
     rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, xrange(5), w2w3label,
-               w1w2label, "", loc="upper left")
+               w1w2label, "", loc="lower right")
     plt.axis([-1.5, 0, -0.75, -0.6])
 
     plt.subplot(1, 2, 2)
     rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, xrange(5), w3w4label,
-               w2w3label, "", loc="upper left")
+               w2w3label, "", loc=None)
     plt.axis([-1.5, 0, -1.5, 0])
+    plt.tight_layout()
     plt.savefig(dest)
     plt.close()
 
@@ -383,20 +405,14 @@ def create_stellar_mass_ATLAS3D_comparison(
 def create_stellar_mass_luminosity_relation(
         table=atlas3d_table, dest=os.path.join(FIGUREPATH, 
         "mass-luminosity.pdf")):
-    atlas3d_params = read_Cappellari11_Table_3()
-    atlas3d_params = generate_ATLAS3D_distance_errors(atlas3d_params)
-    atlas3d_lums = read_Cappellari13a_Table_1()
-    atlas3d_masstolight = read_Cappellari13b_Table_1()
-    joinedtable = phot.multijoin_by_galaxy_name(
-        table, atlas3d_params, atlas3d_masstolight, atlas3d_lums,
-        names=("objstr_01", "Galaxy", "Galaxy", "Galaxy"))
+    joinedtable = table
 
-    atlas3d_stellar_mass, atlas3d_stellar_mass_err = stat.add(
+    atlas3d_stellar_mass, atlas3d_stellar_mass_err, _ = stat.add(
         joinedtable["logML_star"], joinedtable["logLum"], 0.06/np.log(10),
         0.1/np.log(10))
-    distance_modulus, distance_modulus_err = stat.logarithm(
+    distance_modulus, distance_modulus_err, _ = stat.logarithm(
         joinedtable["D"]*1e5, joinedtable["D_err"]*1e5)
-    absolute_w1, absolute_w1_err = stat.subtract(
+    absolute_w1, absolute_w1_err, _ = stat.subtract(
         joinedtable["w1unextmag"], 5 * distance_modulus, 
         joinedtable["w1unexterr"], 5 * distance_modulus_err)
     lum, lum_err = (-0.4 * (absolute_w1 - 
@@ -409,10 +425,19 @@ def create_stellar_mass_luminosity_relation(
     plt.savefig(dest)
     plt.close()
 
+    p1 = models.Polynomial1D(1)
+    pfit = fitting.LinearLSQFitter()
+    mass_lum_model = pfit(p1, lum, atlas3d_stellar_mass)
+
+    print "Best fit is  log M* = {0:.1f} log L_W1 + {1:.1f}".format(
+        mass_lum_model.c1.value, mass_lum_model.c0.value)
+    
+
 def create_cutout_grid(
-        table=atlas3d_table[:2], dest=os.path.join(FIGUREPATH, "cutouts.png")):
+        table=atlas3d_table[:2], dest=os.path.join(FIGUREPATH, "cutouts.png"),
+        BASEDIR=ATLAS3DBASE):
     gridfig = phot.ellipse_cutout_grid(
-        ATLAS3DBASE, table, ignore_exception=True)
+        BASEDIR, table, ignore_exception=True)
     gridfig.savefig(dest)
     plt.close(gridfig)
 
@@ -529,8 +554,8 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
     pah113 = classtable["11.3 um"]
     pah113_err = classtable["11.3 um err"]
 
-    xcolor, xcolorerr = stat.subtract(nuv, j, nuv_err, j_err)
-    yratio, yratioerr = stat.divide(pah77, pah113,
+    xcolor, xcolorerr, _ = stat.subtract(nuv, j, nuv_err, j_err)
+    yratio, yratioerr, _ = stat.divide(pah77, pah113,
                                                        pah77_err, pah113_err)
 
     rp.MIRplot(xcolor, yratio, classtable["MIR_class"], yerr=yratioerr, 
@@ -538,23 +563,26 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
                ylabel="7.7 um / 11.3 um")
     plt.xlabel("NUV-J")
     plt.ylabel("7.7 um/11.3 um")
-    plt.title("Correlation for PAH-detected galaxies")
     plt.savefig(dest)
     plt.close()
 
     return classtable
 
-def create_SED(table=fulltable, dest=build_filepath(FIGUREPATH, "sed",
-                                                        EXT)):
+def create_SED(
+    table=fulltable, dest=build_filepath(FIGUREPATH, "sed", EXT), 
+    ages=[1e8, 1e9, 1e9, 1e10]):
 
-    fsps.plot_FSPS_SED(FSPSPATH, plotquant="Flux", fmt="k-")
+    fsps.plot_FSPS_SED_at_ages(
+        FSPSPATH, plotquant="Flux", fmts=None, ages=ages, 
+        modelbase="toggle_dust_met_bounds/dust_highmet")
     fsps.plot_data_SED(table, plotquant="Flux")
 
     plt.xlabel("Wavelength (um)")
     plt.ylabel("nu f_nu")
     plt.xlim([0.1, 100])
+    plt.ylim([1e8, 1e16])
 #    plt.gca().invert_yaxis()
-    plt.legend(loc="lower left")
+    plt.legend(loc="lower right")
     plt.savefig(dest)
     plt.close()
 
@@ -566,6 +594,20 @@ def create_circumstellar_verification_plot(
     # We want to set up our datasets of dustless ATLAS3D and Class-0 Rampazzo
     # galaxies.
     dcat = atlas3d.filter_ATLAS3D_table_for_dustless_galaxies(atable)
+
+    amblard_objects = read_Amblard_Table_4()
+    amblard_overlap = phot.join_by_galaxy_name(dcat, amblard_objects, 
+                                               names=("objstr_01", "Name"))
+    amblard_dusty = amblard_overlap[np.where(
+        np.logical_and(
+            amblard_overlap["250_mum"] > 5*amblard_overlap["250_mum_err"],
+            amblard_overlap["350_mum"] > 5*amblard_overlap["350_mum_err"],
+            amblard_overlap["500_mum"] > 5*amblard_overlap["500_mum_err"]))]
+
+    dusty_atlas3d_indices = phot.astropy_table_indices(
+        dcat, "objstr_01", amblard_dusty["objstr_01"])
+    print "% of overlapped galaxies w/ FIR Dust detections: {0:.2f}".format(
+        float(len(amblard_dusty["objstr_01"]))/len(amblard_overlap)*100)
 
     class0 = rp.extract_MIR_class_sample(rtable, 0, "MIR_class")
 
@@ -586,7 +628,35 @@ def create_circumstellar_verification_plot(
                   class0w1w4_lim, label="Class 0", ufmt="kv", lfmt="k^", 
                   **rp.MIR_Symbols[0])
     stat.errorbar(dcatw1w3, dcatw1w4, dcatw1w4_err, dcatw1w3_err,
-                  dcatw1w4_lim, 'bx', label="ATLAS3D", ufmt="bv", lfmt="k^")
+                  dcatw1w4_lim, 'gx', label="ATLAS3D", ufmt="gv", lfmt="g^")
+    stat.errorbar(dcatw1w3[dusty_atlas3d_indices],
+                  dcatw1w4[dusty_atlas3d_indices],
+                  dcatw1w4_err[dusty_atlas3d_indices],
+                  dcatw1w3_err[dusty_atlas3d_indices],
+                  dcatw1w4_lim[dusty_atlas3d_indices], 'mx', 
+                  label="ATLAS3D (FIR Det)", ufmt="mv", lfmt="m^")
+    fsps.plot_FSPS_color_color(
+        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
+        modelbase=os.path.join("toggle_dust_met_bounds", "dust_highmet"),
+        label="[Z/H] = 0.2", fmt="r-", agecutoff=1e9)
+    fsps.plot_FSPS_color_color(
+        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
+        modelbase=os.path.join("toggle_dust_met_bounds", "dust_lowmet"),
+        label="[Z/H] = -0.89", fmt="b-", agecutoff=1e9)
+    fsps.plot_FSPS_color_color(
+        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
+        modelbase=os.path.join("toggle_dust_met_bounds", "nodust_highmet"),
+        label="[Z/H] = 0.2", fmt="r:", agecutoff=1e9)
+    fsps.plot_FSPS_color_color(
+        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
+        modelbase=os.path.join("toggle_dust_met_bounds", "nodust_lowmet"),
+        label="[Z/H] = -0.89", fmt="b:", agecutoff=1e9)
+    parsec.plot_parsec_color_color(PARSECPATH, "marigo_highmet.dat", "W1", "W3",
+                                   "W1", "W4", label="PARSEC (high met)",
+                                   fmt="r--", agecutoff=1e9)
+    parsec.plot_parsec_color_color(PARSECPATH, "marigo_lowmet.dat", "W1", "W3",
+                                   "W1", "W4", label="PARSEC (low met)",
+                                   fmt="b--", agecutoff=1e9)
     plt.xlabel("W1-W3")
     plt.ylabel("W1-W4")
     plt.legend(loc="lower right")
@@ -639,47 +709,59 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     plt.savefig(dest)
     plt.close()
 
-def create_jarrett_comparison_plot(table=jarrett_table,
-                                   dest=build_filepath(FIGUREPATH, "jarrett",
-                                                       EXT)):
-    smallobjs = ["NGC584", "NGC777"]
+def create_comparison_plot(wisetable=jarrett_table, galextable=gdp_table,
+                           dest=build_filepath(FIGUREPATH, "photocomp", EXT)):
+    smallobjs = ["NGC584", "NGC777", "NGC4486"]
 
-    smallindices = np.searchsorted(table["objstr_01"], smallobjs)
-    orig_fluxes = table
-    my_mags = table
+    usableindices = np.where(np.logical_and(
+        wisetable["objstr_01"] != "NGC5194", wisetable["objstr_01"] !=
+        "NGC5195"))
+    usabletable = wisetable[usableindices]
+    smallindices = np.searchsorted(usabletable["objstr_01"], smallobjs)
+    orig_fluxes = usabletable
+    my_mags = usabletable
+    specindices = np.ones(len(orig_fluxes))*-2
 
-    orig_w1 = conv.Jansky2Vegamag("W1", orig_fluxes["W1"])
+    orig_w1 = conv.Jansky2Vegamag("W1", orig_fluxes["W1"], specindices)
     orig_w1_err = conv.Jansky_err_to_mag_err("W1", orig_fluxes["W1"], 
                                   orig_fluxes["W1_err"])
     myw1 = my_mags["w1apmag"]
     myw1err = my_mags["w1aperr"]
-    orig_w2 = conv.Jansky2Vegamag("W2", orig_fluxes["W2"])
+    orig_w2 = conv.Jansky2Vegamag("W2", orig_fluxes["W2"], specindices)
     orig_w2_err = conv.Jansky_err_to_mag_err("W2", orig_fluxes["W2"], 
                                   orig_fluxes["W2_err"])
     myw2 = my_mags["w2apmag"]
     myw2err = my_mags["w2aperr"]
-    orig_w3 = conv.Jansky2Vegamag("W3", orig_fluxes["W3"])
+    orig_w3 = conv.Jansky2Vegamag("W3", orig_fluxes["W3"], specindices)
     orig_w3_err = conv.Jansky_err_to_mag_err("W3", orig_fluxes["W3"], 
                                   orig_fluxes["W3_err"])
     myw3 = my_mags["w3apmag"]
     myw3err = my_mags["w3aperr"]
-    orig_w4 = conv.Jansky2Vegamag("W4", orig_fluxes["W4"])
+    orig_w4 = conv.Jansky2Vegamag("W4", orig_fluxes["W4"], specindices)
     orig_w4_err = conv.Jansky_err_to_mag_err("W4", orig_fluxes["W4"], 
                                   orig_fluxes["W4_err"])
     myw4 = my_mags["w4apmag"]
     myw4err = my_mags["w4aperr"]
 
-    w1diff, w1differr = stat.subtract(myw1, orig_w1,
+    # I'm throwing away the limits because they're not useful.
+    w1diff, w1differr, _ = stat.subtract(myw1, orig_w1,
         myw1err, orig_w1_err)
-    w2diff, w2differr = stat.subtract(myw2, orig_w2,
+    w2diff, w2differr, _ = stat.subtract(myw2, orig_w2,
         myw2err, orig_w2_err)
-    w3diff, w3differr = stat.subtract(myw3, orig_w3,
+    w3diff, w3differr, _ = stat.subtract(myw3, orig_w3,
         myw3err, orig_w3_err)
-    w4diff, w4differr = stat.subtract(myw4, orig_w4,
+    w4diff, w4differr, _ = stat.subtract(myw4, orig_w4,
         myw4err, orig_w4_err)
+    # The more equivalent dataset would be the Bai et al. dataset.
+    nuvdiff, nuvdifferr, _ = stat.subtract(
+        galextable["NUVunextmag"], galextable["D25NUV_2"],
+        galextable["NUVunexterr"], galextable["e_D25NUV_2"])
+    fuvdiff, fuvdifferr, _ = stat.subtract(
+        galextable["FUVunextmag"], galextable["D25FUV_2"],
+        galextable["FUVunexterr"], galextable["e_D25FUV_2"])
 
-    plt.figure(figsize=(10,5))
-    plt.subplot(1, 2, 1)
+    plt.figure(figsize=(15,5))
+    plt.subplot(1, 3, 1)
     phot.doubleDifferencePlot(
         myw1, orig_w1, myw2, orig_w2, myw1err, orig_w1_err, myw2err, 
         orig_w2_err, "W1 Difference", "W2 Difference", "", fmt="b.")
@@ -689,7 +771,7 @@ def create_jarrett_comparison_plot(table=jarrett_table,
         orig_w1_err[smallindices], myw2err[smallindices],
         orig_w2_err[smallindices], "W1 Difference", "W2 Difference", "", 
         fmt="r.")
-    plt.subplot(1, 2, 2)
+    plt.subplot(1, 3, 2)
     phot.doubleDifferencePlot(
         myw3, orig_w3, myw4, orig_w4, myw3err, orig_w3_err, myw4err, 
         orig_w4_err, "W1 Difference", "W2 Difference", "", fmt="b.")
@@ -699,6 +781,21 @@ def create_jarrett_comparison_plot(table=jarrett_table,
         orig_w3_err[smallindices], myw4err[smallindices],
         orig_w4_err[smallindices], "W3 Difference", "W4 Difference", "", 
         fmt="r.")
+    plt.subplot(1, 3, 3)
+    phot.doubleDifferencePlot(
+        galextable["NUVapmag"], galextable["D25NUV_1"], galextable["FUVapmag"],
+        galextable["D25FUV_1"], galextable["NUVaperr"], 
+        galextable["e_D25NUV_1"], galextable["FUVaperr"], 
+        galextable["e_D25FUV_1"], "NUV (mine) - NUV (survey)", 
+        "FUV (mine) - FUV (survey)", "", label="Gil de Paz", fmt="b.")
+    phot.doubleDifferencePlot(
+        galextable["NUVunextmag"], galextable["D25NUV_2"], 
+        galextable["FUVunextmag"], galextable["D25FUV_2"], 
+        galextable["NUVunexterr"], galextable["e_D25NUV_2"],
+        galextable["FUVunexterr"], galextable["e_D25FUV_2"], 
+        "NUV (mine) - NUV (survey)", "FUV (mine) - FUV (survey)", "", 
+        label="Bai", fmt="r.")
+    plt.legend(loc="upper left")
     plt.savefig(dest)
     plt.close()
 
@@ -706,6 +803,8 @@ def create_jarrett_comparison_plot(table=jarrett_table,
     print "W2 Difference: {0:.2g}".format(np.std(w2diff))
     print "W3 Difference: {0:.2g}".format(np.std(w3diff))
     print "W4 Difference: {0:.2g}".format(np.std(w4diff))
+    print "NUV Difference: {0:.2g}".format(np.std(nuvdiff))
+    print "FUV Difference: {0:.2g}".format(np.std(fuvdiff))
 
 def move_rampazzo():
     # First read in Table 1
@@ -862,6 +961,18 @@ def read_Cappellari13b_Table_1(
                                fill_values=[("",0), ("----", 0)])
     return atlas3dsample
 
+def read_Young_Table_1(
+    tablepath=os.path.join(BASEPATH, "Young11_Table1.txt")):
+    '''Reads in the CO measurement table from Young et al (2011).'''
+    cosample = Table.read(
+        tablepath, format="ascii.fixed_width", names=(
+            "Galaxy", "rms(1-0)", "rms(2-1)", "Start", "End", "I(1-0)", 
+            "I(1-0) unc", "I(2-1)", "I(2-1) unc", "2-1/1-0", "2-1/1-0 unc",
+            "Src", "log M(H2)", "log M(H2) unc"), guess=False,
+        fill_values=[("",0), ("...", 0), ("...   ...", 0)])
+    separate_limit(cosample, ["2-1/1-0", "log M(H2)"])
+    return cosample
+
 def read_McDermid15_Table_3(
     tablepath=os.path.join(ATLAS3DBASE, 
                            "McDermid2015_Atlas3D_Paper30_Table3.txt")):
@@ -890,6 +1001,71 @@ def read_McDermid_Table_4(
 
     return mcdermid_table
 
+def read_Krajnovic_Table_D1(
+        URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
+             "Krajnovic2011_Atlas3D_Paper2_TableD1.txt")):
+    '''Reads the table from Krajnovich 2011
+
+    In particular, this table contains information about dust.'''
+    krajnovic_table = Table.read(
+        URL, format="ascii.commented_header", guess=False, header_start=-5, 
+        data_start=0)
+    return krajnovic_table
+
+def read_Gil_de_Paz_Table_1(
+    URL=("/home/regulus/simonian/year1/wise/"
+         "Gil_de_Paz_Table1.txt")):
+    '''Reads in Table 1 from Gil de Paz (2007).
+
+    This table mainly contains the coordinates and other basic information
+    about the galaxy.
+    '''
+    gdptable = Table.read(URL, format="ascii.cds")
+    return gdptable
+
+def read_Gil_de_Paz_Table_2(
+    URL=("/home/regulus/simonian/year1/wise/"
+         "Gil_de_Paz_Table2.txt")):
+    '''Reads in Table 2 from Gil de Paz (2007).
+
+    This table mainly contains information about the GALEX observations.
+    about the galaxy.
+    '''
+    gdptable = Table.read(URL, format="ascii.cds")
+    return gdptable
+
+def read_Gil_de_Paz_Table_3(
+    URL=("/home/regulus/simonian/year1/wise/"
+         "Gil_de_Paz_Table3.txt")):
+    '''Reads in Table 3 from Gil de Paz (2007).
+
+    This table contains the magnitudes of all of the galaxies.
+    '''
+    gdptable = Table.read(URL, format="ascii.cds")
+    return gdptable
+
+def read_Bai_Table_2(
+    URL=("/home/regulus/simonian/year1/wise/Bai_Table2.txt")):
+    '''Reads Table 2 from Bai et al. (2015).
+
+    This table contains the magnitudes of all the galaxies.
+    '''
+    gdptable = Table.read(URL, format="ascii.cds")
+    return gdptable
+
+def read_Amblard_Table_4(
+    URL=("/home/regulus/simonian/year1/wise/Amblard_Table4.txt")):
+    '''Reads Table 4 from Amblard et al (2014).
+
+    This table contains 250um, 350um, and 500um detections for galaxies from
+    the Amblard et al. sample.
+    '''
+    amblard_table = Table.read(URL, format="ascii.tab", header_start=2,
+                               data_start=4, guess=False)
+    revised_amblard_table = separate_errors_in_table(amblard_table,
+                                                     seperator="+or-")
+    return revised_amblard_table
+
 def separate_errors_in_table(fulltable, seperator="+/-", suffix="_err",
                              mask="--"):
     '''Formats table to have separate error column.
@@ -902,7 +1078,7 @@ def separate_errors_in_table(fulltable, seperator="+/-", suffix="_err",
     for colname in fulltable.colnames:
         col = fulltable[colname]
         if np.issubdtype(col.dtype, np.str):
-            splitcol = np.core.defchararray.split(col, sep=seperator)
+            splitcol = npstr.split(col, sep=seperator)
             if len(splitcol[0]) == 1:
                 newtable[colname] = collapse_list_nested_array(splitcol)
             elif len(splitcol[0]) == 2:
@@ -910,12 +1086,12 @@ def separate_errors_in_table(fulltable, seperator="+/-", suffix="_err",
                 # "array" yields the same array of lists. While adding a list to 
                 # "array" yields a 2-d array.
                 combinedarray = np.array(list(splitcol))
-                maskedvalarray = np.core.defchararray.replace(
+                maskedvalarray = npstr.replace(
                     combinedarray[:,0], mask, 'NaN')
                 floatvalarray = maskedvalarray.astype(np.float)
                 newtable[colname] = np.ma.masked_invalid(floatvalarray)
                 errcolname = "{0}{1}".format(colname, suffix)
-                maskederrarray = np.core.defchararray.replace(
+                maskederrarray = npstr.replace(
                     combinedarray[:,1], mask, 'NaN')
                 floaterrarray = maskederrarray.astype(np.float)
                 newtable[errcolname] = np.ma.masked_invalid(floaterrarray)
@@ -925,7 +1101,6 @@ def separate_errors_in_table(fulltable, seperator="+/-", suffix="_err",
             newtable[colname] = col
     return newtable
 
-
 def collapse_list_nested_array(arr):
     '''Collapses an array of singleton lists.
 
@@ -933,6 +1108,54 @@ def collapse_list_nested_array(arr):
     5]).'''
     return np.hstack(arr)
 
+def separate_limit(table, limcols, updelim="<", lowdelim=">", eqdelim="=",
+                   coltemplate="{0} lim"):
+    '''Takes limcols from a table and splits them into limit columns.
+
+    For all columns in the list of limcols, this function will split them into
+    a limit column and a numerical value column. The column will change dtype
+    to be numerical. The limit will have a column name as determined by
+    coltemplate, which shoul be a format string which takes the column name as
+    the first argument.
+    '''
+    for col in limcols:
+        strcol = table[col]
+        valcol, limcol = split_limit_col(strcol, updelim, lowdelim, eqdelim)
+        del(table[col])
+        table[col] = valcol
+        table[coltemplate.format(col)] = limcol
+
+def split_limit_col(initcol, updelim="<", lowdelim=">", eqdelim="=",
+                    dtype=np.float):
+    '''Splits a column into a limit and numerical value column.
+
+    One problem with table representations of limits is that the symbols for
+    limits cause the columns to be represented as a string, not as a numerical
+    limit. Therefore, this function splits a string column into two arrays:
+    one with a limit representation, another with the numerical values.
+    '''
+    limcol = stat.generate_limit(None, len(initcol))
+    try:
+        upperindices = np.where(npstr.startswith(initcol, updelim))
+    except TypeError:
+        print "{0} is not a string column. Ignoring.".format(initcol.name)
+    initcol = npstr.lstrip(initcol, updelim)
+    lowerindices = np.where(npstr.startswith(initcol, lowdelim))
+    initcol = npstr.lstrip(initcol, lowdelim)
+    if eqdelim is not "":
+        eqindices = np.where(npstr.startswith(initcol, eqdelim))
+        initcol = npstr.lstrip(initcol, eqdelim)
+    newcol = np.asanyarray(initcol, dtype=dtype)
+    limcol[upperindices] = stat.UPPER
+    limcol[lowerindices] = stat.LOWER
+    # If there is a mask, then we want to ensure that the masked values are
+    # considered to be invalid data points.
+    try:
+        limcol[initcol.mask] = stat.NA
+    except AttributeError:
+        pass
+
+    return newcol, limcol
 
 def read_Diamond_Stanic_Table1(
     tablepath=os.path.join(BASEPATH, "Diamond_Stanic_Table1.txt")):
@@ -1055,8 +1278,8 @@ def format_mag_column(mags, limits):
     magstr = np.ma.asanyarray(mags, 'a5')
     upperlims = np.where(limits == stat.UPPER)
     lowerlims = np.where(limits == stat.LOWER)
-    magstr[upperlims] = np.core.defchararray.add("<", magstr[upperlims])
-    magstr[lowerlims] = np.core.defchararray.add(">", magstr[lowerlims])
+    magstr[upperlims] = npstr.add("<", magstr[upperlims])
+    magstr[lowerlims] = npstr.add(">", magstr[lowerlims])
     return magstr
 
 def format_mag_err(err):

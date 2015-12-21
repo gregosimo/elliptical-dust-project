@@ -224,7 +224,8 @@ def MIRplot(x, y, mirindex, yerr=None, xerr=None, classes=xrange(5), xlabel="",
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.title(title)
-    plt.legend(loc=loc)
+    if loc:
+        plt.legend(loc=loc)
 
 def generateCMDs(magtable):
     '''Generates permutations of Color-Magnitude Diagrams.
