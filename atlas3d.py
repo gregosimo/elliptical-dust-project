@@ -9,6 +9,7 @@ import scipy.special
 import photometry as phot
 import band_conversions as conv
 import statop as stat
+import paperexport as pe
 
 # Maybe I want to subclass figure later on. But now... meh.
 class SED(object):
@@ -179,18 +180,6 @@ def atlas3d_ml_to_wise_ml(log_atlas3d_ml, log_atlas3d_lum, w1_mag, distance,
         (0.4 * w1_mag_err)**2 + log_atlas3d_lum_err**2)
     return new_ml, new_ml_err
 
-
-def read_Krajnovic_Table_D1(
-        URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
-             "Krajnovic2011_Atlas3D_Paper2_TableD1.txt")):
-    '''Reads the table from Krajnovich 2011
-
-    In particular, this table contains information about dust.'''
-    krajnovic_table = Table.read(
-        URL, format="ascii.commented_header", guess=False, header_start=-5, 
-        data_start=0)
-    return krajnovic_table
-
 def read_MGE_model(modelfolder, galname, galcol="Galaxy"):
     '''Reads an MGE model file from Scott et al 2013.
 
@@ -337,25 +326,30 @@ def get_largest_gaussian(
     sigtable = Table([mgegals, mgesigs], names=(galname, signame))
     return sigtable
 
-def get_dustless_galaxies(krajnovic_table=None):
+def get_ATLAS3D_dustless_galaxies():
     '''Gets dustless galaxies in ATLAS3D. 
 
     If the krajnovic table is provided, it will filter it. Otherwise, it will
     return its own table.'''
-    if krajnovic_table is None:
-        krajnovic_table = read_Krajnovic_Table_D1()
-    dustless = phot.astropy_table_row(krajnovic_table, "dust", ["N"])
-    return dustless
+    krajnovic_table = pe.read_Krajnovic_Table_D1()
+    young_table = pe.read_Young_Table_1()
+
+    extless = phot.astropy_table_row(krajnovic_table, "dust", ["N"])
+    gasless = phot.astropy_table_row(young_table, "log M(H2) lim", stat.UPPER)
+
+    dustless = phot.join_by_galaxy_name(extless, gasless, names=("name",
+                                                                 "Galaxy"))
+    return dustless["name"]
 
 def filter_ATLAS3D_table_for_dustless_galaxies(atlas3d_table):
     '''Picks out dustless galaxies from the atlas3d_table.
 
     Takes the atlas3d table and uses the Krajnovic et al 2011 table D1 to pick
     out the galaxies without signs of diffuse dust.'''
-    dustless_galaxies = get_dustless_galaxies()
+    dustless_galaxies = get_ATLAS3D_dustless_galaxies()
 
     filteredtable = phot.extract_subtable_from_column(
-        atlas3d_table, "objstr_01", dustless_galaxies["name"])
+        atlas3d_table, "objstr_01", dustless_galaxies)
     return filteredtable
 
 def filter_out_bad_targets(atlas3d_table):

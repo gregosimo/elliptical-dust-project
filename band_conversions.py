@@ -9,9 +9,14 @@ IRAC_bands = ["[3.6]", "[4.5]"]
 GALEX_bands = ["NUV", "FUV"]
 
 # Isophotal wavelengths of the bands:
-WAVELENGTHS = {"W1": 3.4e-6, "W2": 4.6e-6, "W3": 12e-6, "W4": 22e-6, "J":
-               1.24e-6, "H": 1.66e-6, "Ks": 2.16e-6, "NUV": 2267e-10, "FUV":
-               1516e-10}
+WAVELENGTHS = {"W1": 3.3526e-6, "W2": 4.6028e-6, "W3": 11.5608e-6, 
+               "W4": 22.0883e-6, "J": 1.24e-6, "H": 1.66e-6, "Ks": 2.16e-6, 
+               "NUV": 2267e-10, "FUV": 1516e-10}
+# Isophotal frequencies of the bands:
+FREQUENCIES = {"W1": 8.8560e13, "W2": 6.4451e13, "W3": 2.6753e13, "W4":
+               1.3456e13, "J": 2.428e14, "H": 1.783e14, "Ks": 1.39e14, "NUV":
+               1.322e15, "FUV": 1.978e15}
+
 
 # Dictionaries of Zero-points for bands
 # All of these zero-point fluxes are given in Janskys.
@@ -115,6 +120,50 @@ def magerr2fluxerr(mag, magerr, calibmag, calibmagerr, calibflux, calibfluxerr):
     fluxerr = 10**(-(mag-calibmag)/2.5) * np.sqrt(calibfluxerr**2 + 0.8483 *
             calibflux**2 * (magerr**2 + calibmagerr**2))
     return fluxerr
+
+def mag2lum(mag, calibmag, caliblum):
+    '''Converts an absolute magnitude to a luminosity.
+
+    This function can take both a calibration magnitude and calibration flux,
+    such that calibmag corresponds to caliblum. Oftentimes, only one is
+    specified; with either calibmag=0 when a zero-point luminosity is given, or
+    calibflux=1 when the absolute magnitude of the Sun is used and the
+    luminosity is given in solar luminosities. However, this doesn't
+    necessarily have to be the case.
+    '''
+    # The translation between flux and apparent magnitudes should be exactly
+    # the same as the translation between luminosity and absolute magnitudes.
+    return mag2flux(mag, calibmag, caliblum)
+
+def lum2mag(lum, caliblum, calibmag):
+    '''Converts a luminosity to an absolute magnitude.
+    
+    This function takes a luminosity, along with zero-point values to generate
+    a magnitude in a specific band. The calibpoints should be defined such 
+    that mag=calibmag corresponds to lum=caliblum.  
+    
+    Most of the time, either caliblum will be one or calibmag will be zero 
+    since that's how most photometric systems are defined.'''
+    return calibmag - 2.5 * np.log10(flux/calibflux)
+
+def fluxerr2magerr(flux, fluxerr, calibflux, calibfluxerr, calibmag,
+        calibmagerr):
+    '''Converts an error in flux to an error in magnitude given calibration
+    errors.
+
+    Usually, only one of calibflux/calibfluxerr or calibmag/calibmagerr will be
+    used.
+    '''
+    magerr = np.sqrt(calibmagerr**2 + 1.179 * ((fluxerr / flux)**2 +
+            (calibfluxerr / calibflux)**2))
+    return magerr
+
+def magerr2lumerr(mag, magerr, calibmag, calibmagerr, caliblum, caliblumerr):
+    '''Converts an absolute magnitude error to a luminosity error.'''
+    # This should also be done in exactly the same way as with apparent
+    # magnitudes and fluxes.
+    return magerr2fluxerr(mag, magerr, calibmag, calibmagerr, caliblum,
+                          caliblumerr)
 
 ###############################################################################
 # Data Number Conversions
@@ -395,8 +444,15 @@ def Mag_err_to_Jansky_err(band, mag, magerr):
 # Luminosity-Magnitude Conversions #
 ###############################################################################
 
-#TBD
-
+def solarLum2Vegamag(band, lum, colorIndex=-2):
+    '''Converts a luminosity in Solar luminosities to Vega magnitudes.
+    
+    Note that GALEX magnitudes aren't expressed in Vega mags, so if a band is
+    in GALEX, and error will be issued.'''
+    if band in GALEX_bands:
+        raise ValueError("Could not convert GALEX band to Vega system.")
+    mag = lum2mag(lum, get_zero_point_flux_level(band, colorIndex), 0)
+    return mag
 
 ###############################################################################
 # Zero-point Utilities
@@ -462,7 +518,10 @@ def color_correction(band, index):
     '''
     if band not in WISE_bands:
         return 1.0
-    return fluxcorrection[band][3-index]
+    try:
+        return np.array(map(lambda i: fluxcorrection[band][3-i], index))
+    except TypeError:
+        return fluxcorrection[band][3-index]
 
 def Flux_table_to_WISE_mag_Table(Flux_Table, color_indices, bands=WISE_bands):
     '''Takes a table and converts the flux measurements to magnitude
