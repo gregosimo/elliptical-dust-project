@@ -946,6 +946,16 @@ def complete_for_bands(BASEDIR, objname, checkbands=bands):
 # Astropy Utilities                                                           #
 ###############################################################################
 
+def change_column_dtype(table, colname, newdtype):
+    '''Changes the dtype of a column in a table.
+
+    Use this function to change the dtype of a particular column in a table.
+    '''
+    tempcol = table[colname]
+    colindex = table.colnames.index(colname)
+    del(table[colname])
+    table.add_column(np.asanyarray(tempcol, dtype=newdtype), index=colindex)
+
 def astropy_table_index(table, column, value):
     '''Returns the row index of the table which has the value in column.
 
@@ -2459,6 +2469,23 @@ def calc_statistical_elliptical_mass_to_light_ratio(
         masslighterr = np.log10(10) * masslight * masslightlogerr
 
         return masslight, masslighterr
+
+def calc_Calzetti_star_formation_rate(w4, w4err, w4lim, dist, disterr):
+    '''Calculates a star formation rate from W4.
+
+    The relation is given in Calzetti et al (2007), Equation 9.
+    SFR (Msun/yr) = 1.27e-38 * L_24um (erg/s)^0.8850
+    '''
+    # These functions should return values in erg/s
+    w4lum = conv.ABmag2specLum("W4", w4, dist)
+    w4lumerr = conv.mag_err_to_spec_lum_err("W4", w4, w4err, dist, disterr)
+    w4lumlim = stat.invert_limits(w4lim)
+
+    sfr = 1.27e-38 * w4lum**0.8850
+    sfr_err = 1.27e-38 * 0.8850 * w4lumerr / w4lum**(1-0.8850)
+    sfr_lim = w4lumlim
+    return (sfr, sfr_err, sfr_lim)
+
 
 def check_if_column(seq):
     '''Verifies that the sequence is an Astropy Column.'''

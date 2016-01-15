@@ -22,10 +22,12 @@ FREQUENCIES = {"W1": 8.8560e13, "W2": 6.4451e13, "W3": 2.6753e13, "W4":
 # All of these zero-point fluxes are given in Janskys.
 ZERO_POINT_FLUXES = {"W1": 306.682, "W2": 170.663, "W3": 29.0448, "W4": 8.2839, 
                      "NUV": 3810, "FUV": 3620, "J": 1594, "H": 1024, 
-                     "Ks": 666.7, "[3.6]": 280.9, "[4.5]": 179.7}
+                     "Ks": 666.7, "[3.6]": 280.9, "[4.5]": 179.7, "24um": 7.17,
+                     "70um": 0.778, "160um": 0.159}
 ZERO_POINT_FLUX_UNCERTAINTIES = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124, 
                                  "NUV": 0, "FUV": 0, "J": 27.8, "H": 20.0,
-                                 "Ks": 12.6, "[3.6]": 0, "[4.5]": 0}
+                                 "Ks": 12.6, "[3.6]": 0, "[4.5]": 0, "24um":
+                                 0.11, "70um": 0.012, "160um": 0.020}
 # NOTE: These magnitues are for going from data numbers to magnitudes. They are
 # not related to Janskys at all.
 # Unfortunately, magnitudes are given in either Vega or AB. And WISE does
@@ -71,6 +73,8 @@ COLOR_CORRECTIONS = {"W1": np.array([1.0283, 1.0084, 0.9961, 0.9907, 0.9921,
     # Neither does Spitzer (as far as I know)
     "[3.6]": np.ones(8),
     "[4.5]": np.ones(8)}
+
+SOLAR_LUMINOSITY = 3.826e33 # erg/s
 
 ###############################################################################
 # Generic conversion routines
@@ -144,18 +148,18 @@ def lum2mag(lum, caliblum, calibmag):
     
     Most of the time, either caliblum will be one or calibmag will be zero 
     since that's how most photometric systems are defined.'''
-    return calibmag - 2.5 * np.log10(flux/calibflux)
+    return calibmag - 2.5 * np.log10(lum/caliblum)
 
-def fluxerr2magerr(flux, fluxerr, calibflux, calibfluxerr, calibmag,
+def lumerr2magerr(lum, lumerr, caliblum, caliblumerr, calibmag,
         calibmagerr):
-    '''Converts an error in flux to an error in magnitude given calibration
+    '''Converts an error in lum to an error in magnitude given calibration
     errors.
 
-    Usually, only one of calibflux/calibfluxerr or calibmag/calibmagerr will be
+    Usually, only one of caliblum/caliblumerr or calibmag/calibmagerr will be
     used.
     '''
-    magerr = np.sqrt(calibmagerr**2 + 1.179 * ((fluxerr / flux)**2 +
-            (calibfluxerr / calibflux)**2))
+    magerr = np.sqrt(calibmagerr**2 + 1.179 * ((lumerr / lum)**2 +
+            (caliblumerr / caliblum)**2))
     return magerr
 
 def magerr2lumerr(mag, magerr, calibmag, calibmagerr, caliblum, caliblumerr):
@@ -285,6 +289,37 @@ def abs_err_to_app_err(abserr, distance, disterr):
     '''
     return np.sqrt(apperr**2 - (5 / np.log(10) * disterr / distance)**2)
 
+def flux2lum(flux, distance):
+    '''Converts a flux to a luminosity.
+
+    This assumes that distances are given in Mpc. Luminosities will have the
+    dimensions of [flux]*cm**2.
+    '''
+    return flux * (4 * np.pi * (distance*3.086e24)**2)
+
+def lum2flux(lum, distance):
+    '''Converts a luminosity to a flux.
+
+    This assumes that distances are given in Mpc. Fluxes will have the
+    dimensions of [lum]/cm**2.
+    '''
+    return lum / (4 * np.pi * (distance*3.086e24)**2)
+
+def flux_err_to_lum_err(flux, dist, fluxerr, disterr):
+    '''Converts an uncertainty in flux to an uncertainty in luminosity.'''
+    return (4 * np.pi * np.sqrt(
+        (2 * dist * flux * disterr)**2 + (dist**2 * fluxerr)**2))
+
+def lum_err_to_flux_err(lum, dist, lumerr, disterr):
+    '''Converts an uncertainty in luminosity to an uncertainty in flux.
+
+    NOTE: Since luminosity is always derived while flux is always measured,
+    this function will REMOVE the influence of distance uncertainty from the
+    overall uncertainty.
+    '''
+    return np.sqrt(
+        (lumerr / (4 * np.pi / dist**2))**2 - (2 * flux * disterr / dist)**2)
+
 ###############################################################################
 # AB and Vega conversions
 ###############################################################################
@@ -397,9 +432,9 @@ def Jansky2ABmag(band, flux, colorIndex=-2):
     '''Converts a flux in Janskys to an AB magnitude.'''
     basemag = flux2mag(flux, get_zero_point_flux_level(band, colorIndex), 0)
     if band not in GALEX_bands:
-        mag = basemag
-    else:
         mag = Vega2ABmag(band, basemag)
+    else:
+        mag = basemag
     return mag
 
 def Jansky_err_to_mag_err(band, flux, fluxerr, invert=False):
@@ -441,18 +476,355 @@ def Mag_err_to_Jansky_err(band, mag, magerr):
     return err
 
 ###############################################################################
-# Luminosity-Magnitude Conversions #
+# In-band Luminosity-Absolute Magnitude Conversions #
 ###############################################################################
 
-def solarLum2Vegamag(band, lum, colorIndex=-2):
-    '''Converts a luminosity in Solar luminosities to Vega magnitudes.
+def inbandLum2Vegaabsmag(band, lum):
+    '''Converts an in-band luminosity to Vega magnitudes.
     
+    This function assumes the given luminosity is in solar luminosities.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+
     Note that GALEX magnitudes aren't expressed in Vega mags, so if a band is
-    in GALEX, and error will be issued.'''
-    if band in GALEX_bands:
-        raise ValueError("Could not convert GALEX band to Vega system.")
-    mag = lum2mag(lum, get_zero_point_flux_level(band, colorIndex), 0)
+    in GALEX, an error will be issued.
+    '''
+    try:
+        mag = lum2mag(lum, 1, SOLAR_ABSOLUTE_MAGNITUDES_VEGA[band])
+    except KeyError:
+        if band in GALEX_bands:
+            raise ValueError("Could not convert GALEX band to Vega system.")
+        else:
+            raise
     return mag
+
+def inbandLum2ABabsmag(band, lum):
+    '''Converts an in-band luminosity to AB magnitudes.
+
+    This function assumes the given luminosity is in solar luminosities.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+    '''
+    mag = lum2mag(lum, 1, SOLAR_ABSOLUTE_MAGNITUDES_AB[band])
+    return mag
+
+def Vegaabsmag2inbandLum(band, mag):
+    '''Converts a Vega magnitude to an in-band luminosity.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+
+    Note that GALEX magnitudes aren't expressed in Vega mags, so if a band is
+    in GALEX, an error will be issued.
+    '''
+    try:
+        lum = mag2lum(mag, SOLAR_ABSOLUTE_MAGNITUDES_VEGA[band], 1)
+    except KeyError:
+        if band in GALEX_bands:
+            raise ValueError("Could not convert GALEX band to Vega system.")
+        else:
+            raise
+    return lum
+
+def ABabsmag2inbandLum(band, mag):
+    '''Converts an AB magnitude to an in-band luminosity.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+    '''
+    lum = mag2lum(mag, SOLAR_ABSOLUTE_MAGNITUDES_AB[band], 1)
+    return lum
+
+def abs_mag_err_to_inband_lum_err(band, mag, magerr):
+    '''Converts an error in absolute magnitude to an error in in-band
+    luminosity.
+    '''
+    return magerr2lumerr(mag, magerr, 0, 0, 1, 0)
+
+def inband_lum_err_to_abs_mag_err(band, lum, lumerr):
+    '''Converts an error in absolute magnitude to an error in in-band
+    luminosity.
+    '''
+    return lumerr2magerr(lum, lumerr, 1, 0, 0, 0)
+
+###############################################################################
+# Flux-Luminosity Conversions #
+###############################################################################
+
+def Jansky2specLum(band, flux, distance):
+    '''Converts a flux in Janskys to a spectral luminosity.
+
+    This function assumes that distance is given in Mpc. The luminosity will 
+    be given in terms of erg/s.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+    '''
+
+    lum = flux2lum(flux*1e-23, distance) * FREQUENCIES[band] 
+    return lum
+
+def specLum2Jansky(band, lum, distance):
+    '''Converts a spectral luminosity to a flux in Janskys.
+
+    This function assumes that the distance is given in Mpc, and that the
+    luminosity is given in erg/s.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+    '''
+    flux = lum2flux(lum, distance) / FREQUENCIES[band] * 1e23
+    return flux
+
+def Jansky_err_to_spec_lum_err(flux, dist, fluxerr, disterr):
+    '''Converts a flux uncertainty to an uncertainty in spectral luminosity.
+
+    This function assumes the distance is in Mpc, and will return an
+    uncertainty in erg/s.
+    '''
+    return (flux_err_to_lum_err(
+        flux, dist, fluxerr, disterr) * FREQUENCIES[band] / 1e23)
+
+def spec_lum_err_to_Jansky_err(lum, dist, lumerr, disterr):
+    '''Converts a spectral luminosity uncertainty to a flux uncertainty.
+
+    This function assumes the distance is in Mpc and the luminosity is in
+    erg/s.
+
+    NOTE: Since luminosity is always derived while flux is always measured,
+    this function will REMOVE the influence of distance uncertainty from the
+    overall uncertainty.
+    '''
+    return (lum_err_to_flux_err(
+        lum, dist, lumerr, disterr) / FREQUENCIES[band] * 1e23)
+
+
+###############################################################################
+# Apparent Magnitude - Luminosity Conversions #
+###############################################################################
+
+def specLum2Vegamag(band, lum, distance, colorIndex=-2):
+    '''Converts a spectral Luminosity to a Vega magnitude.
+
+    This function assumes lum is in erg/s and distance is in Mpc.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+
+    Note that GALEX magnitudes aren't expressed in Vega mags, so if a band is
+    in GALEX, an error will be issued.
+    '''
+    try:
+        flux = specLum2Jansky(band, lum, distance)
+        mag = Jansky2Vegamag(band, flux, colorIndex)
+    except KeyError:
+        if band in GALEX_bands:
+            raise ValueError("Could not convert GALEX band to Vega system.")
+        else:
+            raise
+    return mag
+
+def specLum2ABmag(band, lum, distance, colorIndex=-2):
+    '''Converts a spectral Luminosity to a Vega apparent magnitude.
+
+    This function assumes lum is in erg/s and distance is in Mpc.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+
+    Note that GALEX magnitudes aren't expressed in Vega mags, so if a band is
+    in GALEX, an error will be issued.
+    '''
+    flux = specLum2Jansky(band, lum, distance)
+    mag = Jansky2ABmag(band, flux, colorIndex)
+    return mag
+
+
+def Vegamag2specLum(band, mag, distance, colorIndex=-2):
+    '''Converts a Vega apparent magnitude to a spectral luminosity.
+
+    This function assumes distance is in Mpc, and will return a luminosity in
+    erg/s.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+
+    Note that GALEX magnitudes aren't expressed in Vega mags, so if a band is
+    in GALEX, an error will be issued.
+    '''
+    try:
+        flux = Vegamag2Jansky(band, mag, colorIndex)
+        lum = Jansky2specLum(band, flux, distance)
+    except KeyError:
+        if band in GALEX_bands:
+            raise ValueError("Could not convert GALEX band to Vega system.")
+        else:
+            raise
+    return lum
+
+def ABmag2specLum(band, mag, distance, colorIndex=-2):
+    '''Converts a Vega apparent magnitude to a spectral luminosity.
+
+    This function assumes distance is in Mpc, and will return a luminosity in
+    erg/s.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+
+    Note that GALEX magnitudes aren't expressed in Vega mags, so if a band is
+    in GALEX, an error will be issued.
+    '''
+    flux = ABmag2Jansky(band, mag, colorIndex)
+    lum = Jansky2specLum(band, flux, distance)
+    return lum
+
+def inbandLum2Vegamag(band, lum, distance):
+    '''Converts an in-band luminosity to a Vega apparent magnitude.
+
+    This function assumes distance is in Mpc, and will return a luminosity in
+    solar luminosities.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+
+    Note that GALEX magnitudes aren't expressed in Vega mags, so if a band is
+    in GALEX, an error will be issued.
+    '''
+    try:
+        absmag = inbandLum2Vegaabsmag(band, lum)
+        mag = abs2appmag(absmag, distance)
+    except KeyError:
+        if band in GALEX_bands:
+            raise ValueError("Could not convert GALEX band to Vega system.")
+        else:
+            raise
+    return mag
+
+def inbandLum2ABmag(band, lum, distance):
+    '''Converts an in-band luminosity to an AB apparent magnitude.
+
+    This function assumes distance is in Mpc, and will return a luminosity in
+    solar luminosities.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+    '''
+    absmag = inbandLum2ABabsmag(band, lum)
+    mag = abs2appmag(absmag, distance)
+    return mag
+
+def Vegamag2inbandLum(band, mag, distance):
+    '''Converts a Vega magnitude to an in-band luminosity.
+
+    This function assumes distance is in Mpc, and will return a luminosity in
+    solar luminosities.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+
+    Note that GALEX magnitudes aren't expressed in Vega mags, so if a band is
+    in GALEX, an error will be issued.
+    '''
+    absmag = app2absmag(mag, distance)
+    lum = Vegaabsmag2inbandLum(band, absmag)
+    return lum
+
+def ABmag2inbandLum(band, mag, distance):
+    '''Converts an AB magnitude to an in-band luminosity.
+
+    This function assumes distance is in Mpc, and will return a luminosity in
+    solar luminosities.
+
+    An in-band luminosity is one which is normalized in terms of solar
+    luminosities. The alternative is the spectral luminosity, which is usually
+    given as nu L_nu, which is essentially taken from a spectrum. There is a
+    not-so-subtle difference between them by factors of up to 200 or so. For
+    more info, look at footnote 23 in Jarrett et al (2013).
+    '''
+    absmag = app2absmag(mag, distance)
+    lum = ABabsmag2inbandLum(band, absmag)
+    return lum
+
+def mag_err_to_spec_lum_err(band, mag, magerr, dist, disterr, colorIndex=-2):
+    '''Converts an uncertainty in magnitude to one in spectral luminosity.
+
+    This function assumes distance is in Mpc, and will return a luminosity in
+    erg/s.
+    '''
+    raise ValueError("Not sure of what to do here yet")
+    flux = ABmag2Jansky(band, mag, colorIndex)
+    fluxerr = Mag_err_to_Jansky_err(band, mag, magerr)
+    lumerr = Jansky_err_to_spec_lum_err(flux, dist, fluxerr, disterr)
+    return lumerr
+
+def spec_lum_err_to_mag_err(band, lum, lumerr, dist, disterr, colorIndex=-2):
+    '''Converts an uncertainty in spectral luminosity to one in magnitude.
+    
+    This function assumes lum is in erg/s and distance is in Mpc.
+
+    NOTE: Since apparent magnitude is the observable quantity'''
+    raise ValueError("Not sure of what to do here yet")
+    flux = lum2flux(lum, dist) / FREQUENCIES[band] * 1e23
+    fluxerr = spec_lum_err_to_Jansky_err(lum, dist, lumerr, disterr)
+    magerr = Jansky_err_to_mag_err(band, flux, fluxerr, invert=True)
+    return magerr
+
+def mag_err_to_inband_lum_err(band, mag, magerr, dist, disterr):
+    '''Converts an uncertainty in magnitude to one in in-band luminosity.
+
+    This function assumes distances are in Mpc, and will return a luminosity
+    error in solar luminosities.
+    '''
+    raise ValueError("Not sure of what to do here yet")
+
+def inband_lum_err_to_mag_err(band, lum, lumerr, dist, disterr):
+    '''Converts an uncertainty in in-band luminosity to one in magnitude.
+
+    This function assumes distances are in Mpc, and that luminosity is in solar
+    luminosities.
+    '''
+    raise ValueError("Not sure of what to do here yet")
 
 ###############################################################################
 # Zero-point Utilities

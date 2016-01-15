@@ -19,8 +19,9 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5, 
                    "ecolor": "red", "elinewidth": 0.7, "capthick": 1.0}}
 
-def extract_MIR_class_sample(ramptable, classnum, groupcol="MIR_class"):
+def extract_MIR_class_sample(table, classnum, groupcol="MIR_class"):
     '''Extracts the subtable from ramptable which is Class-classnum.'''
+    ramptable = table[~table["MIR_class"].mask]
     rampgroups = ramptable.group_by(groupcol)
     subtable = rampgroups.groups[classnum]
     return subtable
