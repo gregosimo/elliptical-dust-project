@@ -132,6 +132,21 @@ def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
     else:
         pass
 
+def remove_duplicate_galaxies(table):
+    '''If the table has duplicate galaxies, they will be removed.
+
+    This function doesn't check if the rows are equal or not. It just
+    determines the row by the name.
+    '''
+    groupedtable = table.group_by('objstr_01')
+    fulltable = Table(rows=groupedtable.groups[0][0])
+    for ix in xrange(1, len(groupedtable.groups)):
+        tablegroup = groupedtable.groups[ix]
+        addrow = tablegroup[0]
+        fulltable.add_row(addrow)
+    fulltable.sort("objstr_01")
+    return fulltable
+
 def build_filepath(basepath, filename, extension=EXT):
     '''Builds a full file path of a file.
 
@@ -570,19 +585,25 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
 
 def create_SED(
     table=fulltable, dest=build_filepath(FIGUREPATH, "sed", EXT), 
-    ages=[1e8, 1e9, 1e9, 1e10]):
+    ages=[1e8, 1e9, 5e9, 1e10]):
 
     fsps.plot_FSPS_SED_at_ages(
         FSPSPATH, plotquant="Flux", fmts=None, ages=ages, 
         modelbase="toggle_dust_met_bounds/dust_highmet")
-    fsps.plot_data_SED(table, plotquant="Flux")
+
+    passive_sample = separate_passive_galaxies(table)
+    fsps.plot_data_SED(passive_sample, plotquant="Flux", fmt="r.", 
+                       label="Passive galaxies")
+    active_sample = get_complement_table(passive_sample, table)
+    fsps.plot_data_SED(active_sample, plotquant="Flux", fmt="b.", 
+                       label="Non-passive galaxies")
 
     plt.xlabel("Wavelength (um)")
     plt.ylabel("nu f_nu")
-    plt.xlim([0.1, 100])
+    plt.xlim([0.1, 50])
     plt.ylim([1e8, 1e16])
 #    plt.gca().invert_yaxis()
-    plt.legend(loc="lower right")
+    plt.legend(loc="lower left")
     plt.savefig(dest)
     plt.close()
 
@@ -709,6 +730,56 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     plt.savefig(dest)
     plt.close()
 
+def create_star_formation_plot(table=atlas3d_table):
+    '''Creates a plot similar to Figure 1 in Davis et al 2014.
+
+    This will be a log-log plot of the W4 vs Ks band luminosities of the
+    ATLAS3D sample. However, instead of separating H2 detected and
+    non-detected, we will separate the dustless from dusty based on our color
+    cut in the plane.
+    '''
+    dustless_table = atlas3d.color_cut_dustless_table(table)
+    dustless_ones = dustless_table["w4unexterr"] / dustless_table["w4unexterr"]
+    dusty_table = get_complement_table(dustless_table, table)
+    dusty_ones = dusty_table["w4unexterr"] / dusty_table["w4unexterr"]
+
+    dustless_klum = (conv.ABabsmag2inbandLum(
+        "Ks", conv.app2absmag(
+            dustless_table[phot.name_photometry_column("Ks")],
+        dustless_table["D"]) * dustless_ones))
+    dusty_klum = (conv.ABabsmag2inbandLum(
+        "Ks", conv.app2absmag(
+            dusty_table[phot.name_photometry_column("Ks")], dusty_table["D"])
+                  * dusty_ones)) 
+
+    dustless_w4lum = (conv.ABmag2specLum(
+        "W4", dustless_table[phot.name_photometry_column("W4")],
+        dustless_table["D"]) * dustless_ones)
+    dusty_w4lum = (conv.ABmag2specLum(
+        "W4", dusty_table[phot.name_photometry_column("W4")], dusty_table["D"])
+                   * dusty_ones)
+
+    plt.plot(np.log10(dusty_klum), np.log10(dusty_w4lum), 'bo', 
+             label="Dusty color")
+    plt.plot(np.log10(dustless_klum), np.log10(dustless_w4lum), 'ro',
+             label="Dustless color")
+
+    logksrange_inband = np.linspace(9.5, 12.0, 2)
+    logksrange_spec = np.log10(conv.ABmag2specLum(
+        "Ks", conv.abs2appmag(
+            conv.inbandLum2ABabsmag(
+                "Ks", 10**logksrange_inband), 1), 1)/3.826e33)
+    print logksrange_spec
+    for logsSFR in [-10, -11, -12]:
+        logw4lum = (logsSFR + -1.6 - np.log10(1.27e-38) + 
+                    1.12 * logksrange_spec)/0.8850
+        plt.plot(logksrange_inband, logw4lum,
+                 label="logsSFR={0}".format(logsSFR))
+
+    plt.xlabel("log L_Ks [Lsun]")
+    plt.ylabel("log vL_W4 [erg/s]")
+    plt.legend(loc="lower right")
+
 def create_comparison_plot(wisetable=jarrett_table, galextable=gdp_table,
                            dest=build_filepath(FIGUREPATH, "photocomp", EXT)):
     smallobjs = ["NGC584", "NGC777", "NGC4486"]
@@ -805,6 +876,37 @@ def create_comparison_plot(wisetable=jarrett_table, galextable=gdp_table,
     print "W4 Difference: {0:.2g}".format(np.std(w4diff))
     print "NUV Difference: {0:.2g}".format(np.std(nuvdiff))
     print "FUV Difference: {0:.2g}".format(np.std(fuvdiff))
+
+def separate_passive_galaxies(totaltable):
+    '''Removes galaxies which have indications of dust in them.
+
+    Totaltable should contain only ATLAS3D and Rampazzo galaxies. It will then
+    return only the galaxies which do not have dust in them according to
+    lacking visible dust lanes or molecular hydrogen clouds for ATLAS3D 
+    galaxies, or the Class-0 galaxies for Rampazzo galaxies.
+    '''
+    atlasgals = atlas3d.filter_ATLAS3D_table_for_dustless_galaxies(totaltable)
+    try:
+        rampgals = rp.extract_MIR_class_sample(totaltable, 0)
+    except KeyError:
+        pass
+
+    newgals = vstack([atlasgals, rampgals])
+    uniqgals = remove_duplicate_galaxies(newgals)
+    return uniqgals
+
+def get_complement_table(partialtable, totaltable):
+    '''Returns a subtable of total table without rows in partialtable.
+
+    This is kinda like an operation to create a table which when stacked with
+    partialtable and sorted by objstr_01, will create totaltable.
+    '''
+    partial_indices = phot.astropy_table_indices(
+        totaltable, "objstr_01", partialtable["objstr_01"])
+    compmask = np.ones(len(totaltable), np.bool)
+    compmask[partial_indices] = 0
+    comp_sample = totaltable[compmask]
+    return comp_sample
 
 def move_rampazzo():
     # First read in Table 1

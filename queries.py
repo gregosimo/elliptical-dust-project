@@ -170,6 +170,7 @@ def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE,
     for colname in clearentries:
         ipac_table = clear_invalid_entries(ipac_table, ipac_table[colname])
     ipac_table["cat"] = np.str(INVERTED_CATALOG_NAMES[catalog])
+    phot.change_column_dtype(ipac_table, "clon", str)
     return ipac_table
 	
 def clear_invalid_entries(fulltable, indexcolumn):
@@ -255,9 +256,10 @@ def get_WISE_catalog_entries(objectfile, localallwise="", localallsky="",
         try:
             # If there is saturation, pick from allsky, otherwise, pick from
             # allwise.
-            newcolumn = np.ma.where(
+            newcolumn = np.asarray(np.ma.where(
                 sat_allwiseobjects, combinedtable[colname_allsky],
-                combinedtable[colname_allwise])
+                combinedtable[colname_allwise]),
+                                   dtype=combinedtable[colname_allwise].dtype)
         except KeyError:
             # This means that there was no conflict, so just add colname.
             # If this throws an error, something is weird and I would like to
@@ -297,7 +299,7 @@ def get_2MASS_catalog_entries(objectfile, mags="AB"):
             "j_msig_k20fe", "h_m_k20fe", "h_msig_k20fe", "k_m_k20fe",
             "k_msig_k20fe", "j_m_fe", "j_msig_fe", "h_m_fe", "h_msig_fe",
             "k_m_fe", "k_msig_fe", "j_m_ext", "j_msig_ext", "h_m_ext", 
-            "h_msig_ext", "k_m_ext", "k_msig_ext"), clearentries=[])
+            "h_msig_ext", "k_m_ext", "k_msig_ext", "r_k20fe"), clearentries=[])
     if mags == "AB":
         conv.convert_2MASS_table_to_AB(twomassTable)
     tablelen = len(twomassTable)

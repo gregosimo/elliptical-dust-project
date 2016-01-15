@@ -352,6 +352,25 @@ def filter_ATLAS3D_table_for_dustless_galaxies(atlas3d_table):
         atlas3d_table, "objstr_01", dustless_galaxies)
     return filteredtable
 
+def color_cut_dustless_table(atlas3d_table):
+    '''Picks out dustless galaxies from the given table via color cuts.
+
+    The color cut consists of W1-W3 > -1.8 and W1-W4 > -2.23. This was the
+    region in W1-W3 vs W1-W4 where there are no measured galaxies with cold
+    gas.
+    '''
+    w1 = atlas3d_table[phot.name_photometry_column("W1")]
+    w3 = atlas3d_table[phot.name_photometry_column("W3")]
+    w4 = atlas3d_table[phot.name_photometry_column("W4")]
+
+    w1w3 = w1-w3
+    w1w4 = w1-w4
+
+    newtable = atlas3d_table[
+        np.where(np.logical_and(w1w3 < -1.8, w1w4 < -2.23))]
+    return newtable
+
+
 def filter_out_bad_targets(atlas3d_table):
     '''Objects which cause errors for some reason or another.
 
