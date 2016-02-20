@@ -348,6 +348,14 @@ def AB2Vegamag(band, ABmag):
     except KeyError:
         raise ValueError("Could not convert GALEX BAND to Vega system.")
 
+def AB2Vegacolor(band1, band2, ABcolor):
+    '''Converts a color in AB magnitudes to a Vega color.'''
+    return (ABcolor + AB2Vegamag(band1, 0) - AB2Vegamag(band2, 0))
+
+def Vega2ABcolor(band1, band2, Vegacolor):
+    '''Converts a color in Vega magnitudes to an AB color.'''
+    return (Vegacolor + Vega2ABmag(band1, 0) - Vega2ABmag(band2, 0))
+
 ###############################################################################
 # WISE to IRAC conversions
 ###############################################################################
@@ -412,6 +420,16 @@ def WISE2IRACmag(wiseband, wisemag, wisesystem="Vega"):
     iracmag = Jansky2Vegamag(iracband, iracflux)
     return iracmag
 
+def IRAC2WISEcolor(iracband1, iracband2, iraccolor, wisesystem="Vega"):
+    '''Converts a color in IRAC bands to correspond to that in WISE bands.'''
+    return (iraccolor + (IRAC2WISEmag(iracband1, 0, wisesystem) -
+                         IRAC2WISEmag(iracband2, 0, wisesystem)))
+
+def WISE2IRACcolor(wiseband1, wiseban2, wisecolor, wisesystem="Vega"):
+    '''Converts a color in WISE bands to correspond to that in IRAC bands.'''
+    return (wisecolor + (WISE2IRACmag(wiseband1, 0, wisesystem) -
+                         WISE2IRACmag(wiseband1, 0, wisesystem)))
+
 ###############################################################################
 # Flux-Magnitude Conversions
 ###############################################################################
@@ -437,7 +455,27 @@ def Jansky2ABmag(band, flux, colorIndex=-2):
         mag = basemag
     return mag
 
-def Jansky_err_to_mag_err(band, flux, fluxerr, invert=False):
+def Jansky_err_to_Vega_mag_err(band, flux, fluxerr, invert=False):
+    '''Converts an error in Janskys to an error in magnitudes.
+    
+    Inverting the calculation means that an uncertainty which was previously
+    included is now undone, meaning the uncertainty should get smaller.
+    According to the WISE atlas, the zero-point flux adds additional
+    uncertainty, which should go away when we use magnitudes again.'''
+    if band in GALEX_bands:
+        raise ValueError("Could not convert GALEX band to Vega system.")
+    zp = get_zero_point_flux_level(band)
+    zperr = get_zero_point_flux_uncertainty(band)
+    # The zperr array is generally squared and then added in quadrature.
+    # Therefore, by making it imaginary, upon squaring it will be negative, and
+    # therefore subtracted. This is entirely a mathematical trick and has
+    # nothing to do with physical errors.
+    if invert:
+        zperr *= np.array(0+1j)
+    err = np.absolute(fluxerr2magerr(flux, fluxerr, zp, zperr, 0, 0))
+    return err
+
+def Jansky_err_to_AB_mag_err(band, flux, fluxerr, invert=False):
     '''Converts an error in Janskys to an error in magnitudes.
     
     Inverting the calculation means that an uncertainty which was previously
@@ -446,6 +484,8 @@ def Jansky_err_to_mag_err(band, flux, fluxerr, invert=False):
     uncertainty, which should go away when we use magnitudes again.'''
     zp = get_zero_point_flux_level(band)
     zperr = get_zero_point_flux_uncertainty(band)
+    if band not in GALEX_bands:
+        zp *= 10**(0.4 * Vega2ABmag(band, 0))
     # The zperr array is generally squared and then added in quadrature.
     # Therefore, by making it imaginary, upon squaring it will be negative, and
     # therefore subtracted. This is entirely a mathematical trick and has
@@ -462,6 +502,13 @@ def Vegamag2Jansky(band, mag, colorIndex=-2):
     flux = mag2flux(mag, 0, get_zero_point_flux_level(band))
     return flux
 
+def Vegamag2Jansky(band, mag, colorIndex=-2):
+    '''Converts a Vega magnitude into Janskys.'''
+    if band in GALEX_bands:
+        raise ValueError("Could not convert GALEX band to Vega system.")
+    flux = mag2flux(mag, 0, get_zero_point_flux_level(band))
+    return flux
+
 def ABmag2Jansky(band, mag, colorIndex=-2):
     '''Converts an AB magnitude into Janskys.'''
     if band not in GALEX_bands:
@@ -469,8 +516,18 @@ def ABmag2Jansky(band, mag, colorIndex=-2):
     flux = mag2flux(mag, 0, get_zero_point_flux_level(band))
     return flux
 
-def Mag_err_to_Jansky_err(band, mag, magerr):
+def Vega_mag_err_to_Jansky_err(band, mag, magerr):
     '''Converts an error in WISE magnitudes to an error in Janskys.'''
+    if band in GALEX_bands:
+        raise ValueError("Could not convert GALEX band to Vega system.")
+    err =  magerr2fluxerr(mag, magerr, 0, 0, get_zero_point_flux_level(band),
+                          get_zero_point_flux_uncertainty(band))
+    return err
+
+def AB_mag_err_to_Jansky_err(band, mag, magerr):
+    '''Converts an error in WISE magnitudes to an error in Janskys.'''
+    if band not in GALEX_bands:
+        mag = AB2Vegamag(band, mag)
     err =  magerr2fluxerr(mag, magerr, 0, 0, get_zero_point_flux_level(band),
                           get_zero_point_flux_uncertainty(band))
     return err
@@ -596,7 +653,7 @@ def specLum2Jansky(band, lum, distance):
     flux = lum2flux(lum, distance) / FREQUENCIES[band] * 1e23
     return flux
 
-def Jansky_err_to_spec_lum_err(flux, dist, fluxerr, disterr):
+def Jansky_err_to_spec_lum_err(band, flux, dist, fluxerr, disterr):
     '''Converts a flux uncertainty to an uncertainty in spectral luminosity.
 
     This function assumes the distance is in Mpc, and will return an
@@ -605,7 +662,7 @@ def Jansky_err_to_spec_lum_err(flux, dist, fluxerr, disterr):
     return (flux_err_to_lum_err(
         flux, dist, fluxerr, disterr) * FREQUENCIES[band] / 1e23)
 
-def spec_lum_err_to_Jansky_err(lum, dist, lumerr, disterr):
+def spec_lum_err_to_Jansky_err(band, lum, dist, lumerr, disterr):
     '''Converts a spectral luminosity uncertainty to a flux uncertainty.
 
     This function assumes the distance is in Mpc and the luminosity is in
@@ -786,45 +843,75 @@ def ABmag2inbandLum(band, mag, distance):
     lum = ABabsmag2inbandLum(band, absmag)
     return lum
 
-def mag_err_to_spec_lum_err(band, mag, magerr, dist, disterr, colorIndex=-2):
-    '''Converts an uncertainty in magnitude to one in spectral luminosity.
+def Vega_mag_err_to_spec_lum_err(
+        band, mag, magerr, dist, disterr, colorIndex=-2):
+    '''Converts an uncertainty in Vega magnitudes to one in spectral luminosity.
 
     This function assumes distance is in Mpc, and will return a luminosity in
     erg/s.
     '''
-    raise ValueError("Not sure of what to do here yet")
-    flux = ABmag2Jansky(band, mag, colorIndex)
-    fluxerr = Mag_err_to_Jansky_err(band, mag, magerr)
-    lumerr = Jansky_err_to_spec_lum_err(flux, dist, fluxerr, disterr)
+    flux = Vegamag2Jansky(band, mag, colorIndex)
+    fluxerr = Vega_mag_err_to_Jansky_err(band, mag, magerr)
+    lumerr = Jansky_err_to_spec_lum_err(band, flux, dist, fluxerr, disterr)
     return lumerr
 
-def spec_lum_err_to_mag_err(band, lum, lumerr, dist, disterr, colorIndex=-2):
-    '''Converts an uncertainty in spectral luminosity to one in magnitude.
+def AB_mag_err_to_spec_lum_err(
+        band, mag, magerr, dist, disterr, colorIndex=-2):
+    '''Converts an uncertainty in AB magnitudes to one in spectral luminosity.
+
+    This function assumes distance is in Mpc, and will return a luminosity in
+    erg/s.
+    '''
+    flux = ABmag2Jansky(band, mag, colorIndex)
+    fluxerr = AB_mag_err_to_Jansky_err(band, mag, magerr)
+    lumerr = Jansky_err_to_spec_lum_err(band, flux, dist, fluxerr, disterr)
+    return lumerr
+
+def spec_lum_err_to_Vega_mag_err(
+        band, lum, lumerr, dist, disterr, colorIndex=-2):
+    '''Converts an uncertainty in spectral luminosity to one in Vega magnitudes.
     
     This function assumes lum is in erg/s and distance is in Mpc.
 
     NOTE: Since apparent magnitude is the observable quantity'''
-    raise ValueError("Not sure of what to do here yet")
     flux = lum2flux(lum, dist) / FREQUENCIES[band] * 1e23
     fluxerr = spec_lum_err_to_Jansky_err(lum, dist, lumerr, disterr)
-    magerr = Jansky_err_to_mag_err(band, flux, fluxerr, invert=True)
+    magerr = Jansky_err_to_Vega_mag_err(band, flux, fluxerr, invert=True)
     return magerr
 
-def mag_err_to_inband_lum_err(band, mag, magerr, dist, disterr):
-    '''Converts an uncertainty in magnitude to one in in-band luminosity.
+def spec_lum_err_to_AB_mag_err(
+        band, lum, lumerr, dist, disterr, colorIndex=-2):
+    '''Converts an uncertainty in spectral luminosity to one in AB magnitudes.
+    
+    This function assumes lum is in erg/s and distance is in Mpc.
 
-    This function assumes distances are in Mpc, and will return a luminosity
-    error in solar luminosities.
+    NOTE: Since apparent magnitude is the observable quantity'''
+    flux = lum2flux(lum, dist) / FREQUENCIES[band] * 1e23
+    fluxerr = spec_lum_err_to_Jansky_err(lum, dist, lumerr, disterr)
+    magerr = Jansky_err_to_AB_mag_err(band, flux, fluxerr, invert=True)
+    return magerr
+
+def Vega_mag_err_to_inband_lum_err(band, mag, magerr, dist, disterr):
+    '''Converts an uncertainty in Vega magnitudes to one in in-band luminosity.
+
+    This function assumes distance is in Mpc, and will return a luminosity in
+    solar luminosities.
     '''
-    raise ValueError("Not sure of what to do here yet")
+    absmag = app2absmag(mag, dist)
+    abserr = app_err_to_abs_err(magerr, dist, disterr)
+    lumerr = abs_mag_err_to_inband_lum_err(band, absmag, abserr)
+    return lumerr
 
-def inband_lum_err_to_mag_err(band, lum, lumerr, dist, disterr):
-    '''Converts an uncertainty in in-band luminosity to one in magnitude.
+def AB_mag_err_to_inband_lum_err(band, mag, magerr, dist, disterr):
+    '''Converts an uncertainty in AB magnitudes to one in in-band luminosity.
 
-    This function assumes distances are in Mpc, and that luminosity is in solar
-    luminosities.
+    This function assumes distance is in Mpc, and will return a luminosity in
+    solar luminosities.
     '''
-    raise ValueError("Not sure of what to do here yet")
+    absmag = app2absmag(mag, dist)
+    abserr = app_err_to_abs_err(magerr, dist, disterr)
+    lumerr = abs_mag_err_to_inband_lum_err(band, absmag, abserr)
+    return lumerr
 
 ###############################################################################
 # Zero-point Utilities

@@ -61,8 +61,19 @@ def invert_limits(limits):
     newlimits = np.copy(limits)
     upperindices = np.where(limits == UPPER)
     lowerindices = np.where(limits == LOWER)
-    newlimits[upperindices] = LOWER
-    newlimits[lowerindices] = UPPER
+    # For the case when limits is not an array, but just a float.
+    try:
+        newlimits[upperindices] = LOWER
+        newlimits[lowerindices] = UPPER
+    except IndexError:
+        if upperindices[0].shape[0] == 1:
+            newlimits = LOWER
+        elif lowerindices[0].shape[0] == 1:
+            newlimits = UPPER
+        elif limits == DETECTION or limits == NA:
+            newlimits = limits
+        else:
+            raise ValueError("Limit is not recognizable")
     return newlimits
 
 def combine_limits(lim1, lim2):
@@ -143,8 +154,14 @@ def subtract(minuend, subtrahend, minuerr, subtraerr,
     If limits are not given, then the third element will simply be limits
     indicating all data points are valid.
     '''
-    minulim = generate_limit(minulim, len(minuend))
-    subtralim = generate_limit(subtralim, len(subtrahend))
+    try:
+        minulim = generate_limit(minulim, len(minuend))
+    except TypeError:
+        minulim = generate_limit(minulim, 1)[0]
+    try:
+        subtralim = generate_limit(subtralim, len(subtrahend))
+    except TypeError:
+        subtralim = generate_limit(subtralim, 1)[0]
     difference, differr, difflim = add(
         minuend, -subtrahend, minuerr, subtraerr, minulim,
         invert_limits(subtralim))
@@ -157,8 +174,14 @@ def add(augend, addend, augerr, adderr, auglim=None, addlim=None):
     then returns a 2-tuple. The first value is simply the sum, and the second
     is the error on the sum.
     '''
-    auglim = generate_limit(auglim, len(augend))
-    addlim = generate_limit(addlim, len(addend))
+    try:
+        auglim = generate_limit(auglim, len(augend))
+    except TypeError:
+        auglim = generate_limit(auglim, 1)[0]
+    try:
+        addlim = generate_limit(addlim, len(addend))
+    except TypeError:
+        addlim = generate_limit(addlim, 1)[0]
     sums = augend + addend
     sumerr = np.sqrt(augerr**2 + adderr**2)
     sumlim = combine_limits(auglim, addlim)
@@ -172,8 +195,14 @@ def divide(dividend, divisor, dividenderr, divisorerr, dividendlim=None,
     This function takes two arrays involving two measurements with errors. It
     then returns a 2-tuple. The first is simply the ratio of the numbers. The
     second is the error of that ratio.'''
-    dividendlim = generate_limit(dividendlim, len(dividend))
-    divisorlim = generate_limit(divisorlim, len(divisor))
+    try:
+        dividendlim = generate_limit(dividendlim, len(dividend))
+    except TypeError:
+        dividendlim = generate_limit(dividendlim, 1)[0]
+    try:
+        divisorlim = generate_limit(divisorlim, len(divisor))
+    except TypeError:
+        divisorlim = generate_limit(divisorlim, 1)[0]
     quotient = dividend / divisor
     # This is more robust to the dividend being equal to zero. If the divisor
     # is equal to zero, we will still have problems.
@@ -190,8 +219,15 @@ def multiply(multiplicand, multiplier, multiplicerr, multiplierr,
     returns a 2-tuple. The first value of the tuple is the product; the second
     is the error of that product.
     '''
-    multipliclim = generate_limit(multipliclim, len(multiplicand))
-    multiplilim = generate_limit(multiplilim, len(multiplier))
+    try:
+        multipliclim = generate_limit(multipliclim, len(multiplicand))
+    except TypeError:
+        multipliclim = generate_limit(multipliclim, 1)[0]
+    try:
+        multiplilim = generate_limit(multiplilim, len(multiplier))
+    except TypeError:
+        multiplilim = generate_limit(multiplilim, 1)[0]
+
     product = multiplicand * multiplier
     # I could do this the fancy way, but the fancy way fails if either of the
     # multiplicand or multiplier are zero. So let's not.
@@ -220,8 +256,14 @@ def exponentiate(base, power, baserr, powerr, baselim=None, powlim=None):
     tuple is the exponentiation, and the second is the error on that
     exponentiation.
     '''
-    baselim = generate_limit(baselim, len(base))
-    powlim = generate_limit(powlim, len(power))
+    try:
+        baselim = generate_limit(baselim, len(base))
+    except TypeError:
+        baselim = generate_limit(baselim, 1)[0]
+    try:
+        powlim = generate_limit(powlim, len(power))
+    except TypeError:
+        powlim = generate_limit(powlim, 1)[0]
     logarithm = base**power
     logerr = np.sqrt((logarithm * np.log(base) * powerr)**2 + (
         power * base**(power-1) * baserr)**2)
@@ -234,7 +276,10 @@ def logarithm(num, numerr, base=10, numlim=None):
     Base can be given as any base. It returns a 2-tuple. The first value of the
     tuple is the logarithm, and the second is the error on the logarithm.
     '''
-    numlim = generate_limit(numlim, len(num))
+    try:
+        numlim = generate_limit(numlim, len(num))
+    except TypeError:
+        numlim = generate_limit(numlim, 1)[0]
     exponent = np.log(num) / np.log(base)
     experr = numerr / num / np.log(base)
     return exponent, experr, numlim

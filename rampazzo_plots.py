@@ -112,7 +112,7 @@ def plot_PAH_flux_ratios(pahtable, mirtable, title):
     linetable["short err"] = shortratio_err
     linetable["long"] = longratio
     linetable["long err"] = longratio_err
-    linegroups = linetable.group_by("MIR_Class")
+    linegroups = linetable.group_by("MIR_class")
 
     class2table = linegroups.groups[0]
     class3table = linegroups.groups[1]
@@ -151,7 +151,7 @@ def plot_rampazzo_line_ratios(linetable, mirtable, title):
     linetable["Sratioerr"] = sulfurlineerrs
     linetable["Hratio"] = hydrogenlines
     linetable["Hratioerr"] = hydrogenlineerrs
-    linegroups = linetable.group_by("MIR_Class")
+    linegroups = linetable.group_by("MIR_class")
     
     class2table = linegroups.groups[1]
     class3table = linegroups.groups[2]

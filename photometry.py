@@ -979,7 +979,7 @@ def multi_logical_or(*arrs):
     elif len(arrs) == 2:
         return np.logical_or(*arrs)
     elif len(arrs) > 2:
-        return np.logical_or(arrs[0], multi_logical_and(*arrs[1:]))
+        return np.logical_or(arrs[0], multi_logical_or(*arrs[1:]))
     elif len(arrs) == 0:
         raise ValueError("Need values to perform logical and")
     else:
@@ -1002,7 +1002,7 @@ def extract_subtable_from_column(table, column, selections):
     This function will create a Table whose values in column are only
     those found in selections.
     '''
-    table[astropy_table_indices(table, column, selections)]
+    return table[astropy_table_indices(table, column, selections)]
 
 def filterTable(BASEDIR, fulltable, isTrue, **kwargs):
     '''Filters a table based on a boolean method isTrue.
@@ -3061,7 +3061,13 @@ def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
                     join_type=join_type, table_names=list(conflict_suffixes),
                     uniq_col_name="{col_name}{table_name}")
     if name1 != name2:
-        del(newtable[name2])
+        try:
+            del(newtable[name2])
+        except KeyError:
+            if name2 in table1.colnames:
+                pass
+            else:
+                raise
     # Set columns back.
     table1[name1] = tempcol1
     return newtable
