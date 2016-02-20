@@ -115,8 +115,10 @@ def construct_image_url(survey, coaddid, band):
     fullurl = urlparse.urljoin(firstbase+"/", fileextend)
     return fullurl
 
-def batch_download_images(BASEDIR, objects, ras, decs, surveys, size=600, 
-        upgrade=False, uncertainty=True, overwrite=True):
+def batch_download_images(
+        BASEDIR, objects, ras, decs, surveys, size=600, 
+        upgrade=False, uncertainty=True, overwrite=True, 
+        clearentries=["w1rsemi"]):
     '''Downloads all images for many objects.
 
     The objects, ras, and decs variables should be arrays with the same length.
@@ -128,9 +130,11 @@ def batch_download_images(BASEDIR, objects, ras, decs, surveys, size=600,
     catalogtablepath = "/tmp/table"
     objecttable = Table({"objstr": objects, "ra": ras, "dec": decs})
     objecttable.write(catalogtablepath, format="ascii.ipac")
-    objectcatalog = get_WISE_catalog_entries(catalogtablepath)
-    for object, ra, dec, survey in objectcatalog[["objstr_01", "ra", "dec",
-            "cat"]]:
+    objectcatalog = get_WISE_catalog_entries(
+        catalogtablepath, missing_galaxies_error=False,
+        clearentries=clearentries)
+    for object, ra, dec, survey in objectcatalog[[
+            "objstr_01", "ra", "dec", "cat"]]:
         coaddID = query_metadata(ra, dec, survey)
         query_image(BASEDIR, object, survey, coaddID, ra, dec, size=size,
                 uncertainty=uncertainty, overwrite=overwrite)
@@ -169,6 +173,7 @@ def query_WISE_catalog_file_upload(inputpath, url=CATALOG_BASE,
     # I'm willing to make.
     for colname in clearentries:
         ipac_table = clear_invalid_entries(ipac_table, ipac_table[colname])
+    print catalog
     ipac_table["cat"] = np.str(INVERTED_CATALOG_NAMES[catalog])
     phot.change_column_dtype(ipac_table, "clon", str)
     return ipac_table
@@ -184,8 +189,9 @@ def clear_invalid_entries(fulltable, indexcolumn):
     except AttributeError:
         return fulltable
 
-def get_WISE_catalog_entries(objectfile, localallwise="", localallsky="",
-                             missing_galaxies_error=True):
+def get_WISE_catalog_entries(
+        objectfile, localallwise="", localallsky="", 
+        missing_galaxies_error=True, clearentries=["w1rsemi"]):
     '''Gets entries from objectfile and returns it as a table.
 	
     This function first gets the AllWISE data for the objects in objectfile,
@@ -221,13 +227,13 @@ def get_WISE_catalog_entries(objectfile, localallwise="", localallsky="",
         allwiseTable = Table.read(localallwise, format="ascii.ipac")
     else:
         allwiseTable = query_WISE_catalog_file_upload(objectfile, 
-                catalog=CATALOG_NAMES["AllWISE"], clearentries=["w1rsemi"])
+                catalog=CATALOG_NAMES["AllWISE"], clearentries=clearentries)
 
     if localallsky:
         allskyTable = Table.read(localallwise, format="ascii.ipac")
     else:
         allskyTable = query_WISE_catalog_file_upload(objectfile, 
-                catalog=CATALOG_NAMES["All-Sky"], clearentries=["w1rsemi"])
+                catalog=CATALOG_NAMES["All-Sky"], clearentries=clearentries)
 
     combinedtable = join(allwiseTable, allskyTable, join_type="outer",
                          table_names=["allwise", "allsky"], keys="objstr_01")

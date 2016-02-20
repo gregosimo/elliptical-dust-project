@@ -88,12 +88,12 @@ def filter_mag_table(magtable):
     These entries will namely be age, W1, W2, W3, W4, NUV, and FUV.
     '''
     newtable = Table([magtable["log(age)"], magtable["log(SFR)"],
-                      magtable["filter10"], magtable["filter11"], 
-                      magtable["filter12"], magtable["filter83"], 
-                      magtable["filter84"], magtable["filter85"], 
-                      magtable["filter86"], magtable["filter62"], 
-                      magtable["filter63"]], 
-                     names=("log(age)", "log(SFR)", 
+                      magtable["log(mass)"], magtable["filter10"], 
+                      magtable["filter11"], magtable["filter12"], 
+                      magtable["filter83"], magtable["filter84"], 
+                      magtable["filter85"], magtable["filter86"], 
+                      magtable["filter62"], magtable["filter63"]], 
+                     names=("log(age)", "log(SFR)", "log(mass)",
                             "J", "H", "Ks", 
                             "W1", "W2", "W3", "W4", 
                             "FUV", "NUV"))
@@ -439,7 +439,8 @@ def normalize_flux_SED(SED, SEDerr, normvalue, wavelengths, normband):
 def plot_data_SED(
         datatable, label="Data", fmt="r.", 
         runbands=(conv.GALEX_bands + conv.TWOMASS_bands + conv.WISE_bands),
-        normband="Ks", normvalue=1, inputzp="AB", plotquant="Flux"):
+        normband="Ks", normvalue=1, inputzp="AB", plotquant="Flux",
+        markersize=10):
     # In order to make a plot of nu-fnu, we need fluxes.
     if plotquant is "Flux":
         datatable = mag_table_to_flux_table(datatable, runbands=runbands,
@@ -481,7 +482,8 @@ def plot_data_SED(
             normed_sed, normed_sed_err = normalize_magnitude_SED(
                 galaxy_sed, galaxy_sed_err, normvalue, runbands, normband)
         stat.errorbar(wavelengths, normed_sed, normed_sed_err,
-                      ylim=galaxy_sed_lims, fmt=fmt, label=label)
+                      ylim=galaxy_sed_lims, fmt=fmt, label=label,
+                      markersize=markersize)
         label=None
 
 def plot_FSPS_SED_at_ages(
@@ -525,10 +527,11 @@ def plot_FSPS_SED(
         filepath = os.path.join(
             FSPS_DIR, "OUTPUTS", ".".join([modelbase, "mags"]))
         magtable = read_mags(filepath)
+        magonlytable = Table(magtable.columns[4:])
         if age == 0:
-            ageindex = -1
-
-        mags = np.array([magtable[ageindex][band] for band in runbands])
+            mags = magdata[-1, :]
+        else:
+            mags = FSPS_data_at_age(magtable["log(age)"], magonlytable, age)
         normedSED = normalize_magnitude_SED(mags, 1, normvalue, runbands,
                                             normband)[0]
         plotfunc = plt.semilogx
@@ -539,15 +542,11 @@ def plot_FSPS_SED(
         # Remember that this is a logarithm
         spectable = Table(fluxtable.columns[4:])
         wavelengths = np.asarray(spectable.colnames, dtype=np.float)*1e-4
-        specdata = Astropy_Table_to_numpy_array(spectable)
         # Now we want a spectrum at the given age.
-        ages = fluxtable["log(age)"]
         if age == 0:
-            fluxes = specdata[-1, :]
+            fluxes = spectable[-1, :]
         else:
-            logage = np.log10(age)
-            ageinterp = interp1d(ages, specdata, axis=0)
-            fluxes = ageinterp(logage)
+            fluxes = FSPS_data_at_age(fluxtable["log(age)"], spectable, age)
         frequencies = 3e14 / wavelengths
         # I want fluxes to be an array. An astropy row is NOT an array.
         normedSED = normalize_flux_SED(fluxes, 1, normvalue, wavelengths, 
@@ -559,6 +558,22 @@ def plot_FSPS_SED(
             "plotquant must be either Flux or Mag, not {0}".format(plotquant))
 
     plotfunc(wavelengths, normedSED, fmt, label=label)
+
+def FSPS_data_at_age(logages, datatable, age):
+    '''Interpolates the datablock at age.
+
+    Logages should be an array which contains the log of all of the ages of 
+    the model. Datatable should be a table which is the same length as logages,
+    but only has the data which should be interpolated. A numpy array
+    will be output which is the result of the interpolation. Age should be in 
+    the same units as logages, but for ease of
+    use, should not be a logarithm.
+    '''
+    datablock = Astropy_Table_to_numpy_array(datatable)
+    logage = np.log10(age)
+    ageinterp = interp1d(logages, datablock, axis=0)
+    return ageinterp(logage)
+
 
 def plot_FSPS_color_color(
     FSPS_DIR, xband1, xband2, yband1, yband2, 

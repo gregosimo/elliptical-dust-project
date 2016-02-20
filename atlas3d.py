@@ -152,9 +152,9 @@ def plot_dustless_galaxy_histogram(
     plt.ylabel("N")
     plt.title(title)
 
-def atlas3d_ml_to_wise_ml(log_atlas3d_ml, log_atlas3d_lum, w1_mag, distance,
-                          log_atlas3d_ml_err, log_atlas3d_lum_err, w1_mag_err,
-                          distance_err):
+def atlas3d_ml_to_wise_ml(log_atlas3d_ml, log_atlas3d_lum, w1_mag_mge, distance,
+                          log_atlas3d_ml_err, log_atlas3d_lum_err, 
+                          w1_mag_mge_err, distance_err, w1_mag_mge_lim):
     '''Converts the (M/L) in r-band for ATLAS3D to W1 with K20fe.
     
     Takes the mass-to-light ratio given in the ATLAS3D papers and performs a
@@ -172,13 +172,18 @@ def atlas3d_ml_to_wise_ml(log_atlas3d_ml, log_atlas3d_lum, w1_mag, distance,
     both the r-band and W1 fluxes. Typical errors for modeling as given in
     ATLAS3D are 6%. Errors for the photometry are 10%
     '''
-    new_ml = (log_atlas3d_ml + 0.4 * (
-        w1_mag - 5 * np.log10(distance*1e5) - 
-        conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"]) + log_atlas3d_lum)
-    new_ml_err = np.sqrt(
-        log_atlas3d_ml_err**2 + (2 * distance_err / distance / np.log(10))**2 +
-        (0.4 * w1_mag_err)**2 + log_atlas3d_lum_err**2)
-    return new_ml, new_ml_err
+    DM, DMerr, DMlim = stat.logarithm(distance*1e5, distance_err*1e5)
+    magdiff, magdifferr, magdifflim = stat.subtract(
+        w1_mag_mge, 5 * DM + conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"], 
+        w1_mag_mge_err, 5 * DMerr, w1_mag_mge_lim, DMlim)
+
+    stelmass, stelmasserr, stelmasslim = stat.add(
+        log_atlas3d_ml, log_atlas3d_lum, log_atlas3d_ml_err,
+        log_atlas3d_lum_err)
+    newml, newmlerr, newmllim = stat.add(
+        stelmass, 0.4*magdiff, stelmasserr, 0.4*magdifferr, stelmasslim, 
+        magdifflim)
+    return newml, newmlerr, newmllim
 
 def read_MGE_model(modelfolder, galname, galcol="Galaxy"):
     '''Reads an MGE model file from Scott et al 2013.
@@ -352,6 +357,19 @@ def filter_ATLAS3D_table_for_dustless_galaxies(atlas3d_table):
         atlas3d_table, "objstr_01", dustless_galaxies)
     return filteredtable
 
+def ATLAS3D_dustless_galaxy_indices(atlas3d_table):
+    '''Picks out indicies for galaxies on atlas3dtable which are dustless.
+
+    "Dustless" means that there are no signs of diffuse dust according to
+    Krajnovic et al (2011), or signs of cold gas according to Young et al
+    (2011).
+    '''
+    dustless_galaxies = get_ATLAS3D_dustless_galaxies()
+
+    indices = phot.astropy_table_indices(atlas3d_table, "objstr_01",
+                                         dustless_galaxies)
+    return indices
+
 def color_cut_dustless_table(atlas3d_table):
     '''Picks out dustless galaxies from the given table via color cuts.
 
@@ -369,6 +387,43 @@ def color_cut_dustless_table(atlas3d_table):
     newtable = atlas3d_table[
         np.where(np.logical_and(w1w3 < -1.8, w1w4 < -2.23))]
     return newtable
+
+def color_cut_dustless_indices(w1, w3, w4):
+    '''Returns indicies that would register as dustless from a color cut.
+
+    The color cut consists of W1-W3 > -1.8 and W1-W4 > -2.23. This was the
+    region in W1-W3 and W1-W4 where there are no measured galaxies with cold
+    gas.
+    '''
+    w1w3 = w1 - w3
+    w1w4 = w1 - w4
+
+    return np.where(np.logical_and(w1w3 < -1.8, w1w4 < -2.23))
+
+def plot_dustless_separation(
+    atlas3d_table, xval, yval, yerr, xerr, ylim, fmt, color=True, **kwargs):
+    '''Makes an errorbar plot separating dustless from other galaxies.
+
+    The dustless galaxies will be full markers of format while the dusty ones
+    will be empty markers.
+    '''
+    if color:
+        dustlessindices = color_cut_dustless_indices(
+            atlas3d_table[phot.name_photometry_column("W1")],
+            atlas3d_table[phot.name_photometry_column("W3")],
+            atlas3d_table[phot.name_photometry_column("W4")])
+    else:
+        dustlessindices = ATLAS3D_dustless_galaxy_indices(atlas3d_table)
+
+    dustindices = pe.get_complement_indices(dustlessindices, len(atlas3d_table))
+
+    stat.errorbar(
+        xval[dustlessindices], yval[dustlessindices], yerr[dustlessindices], 
+        xerr[dustlessindices], ylim[dustlessindices], fmt, **kwargs)
+    kwargs.pop("label")
+    stat.errorbar(
+        xval[dustindices], yval[dustindices], yerr[dustindices], 
+        xerr[dustindices], ylim[dustindices], fmt, fillstyle="none", **kwargs)
 
 
 def filter_out_bad_targets(atlas3d_table):
