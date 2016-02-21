@@ -129,6 +129,16 @@ def build_filepath(basepath, filename, extension=EXT):
     fullpath = os.path.join(basepath, fullfilename)
     return fullpath
 
+def remove_bad_galaxies(table, galcol="objstr_01", badgals=["NGC2974"]):
+    '''Creates a new table without galaxies in badgals.
+
+    This is done to sanitize plots without making any persistent changes to the
+    raw tables, since there are other functions which still need the full
+    tables. Also, bad galaxies for one plot may not necessarily be bad galaxies
+    for other plots.
+    '''
+    badindices = phot.astropy_table_index(table, galcol, 
+
 #######################################################################
 # Create Tables #
 #######################################################################
