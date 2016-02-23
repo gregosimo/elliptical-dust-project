@@ -413,9 +413,9 @@ def _errorbar(x, y, **kwargs):
         for prop in ["fmt", "label"]:
             if prop in kwargs:
                 del(kwargs[prop])
-        plt.errorbar(ux, uy, fmt=ufmt, **kwargs)
+        plt.errorbar(ux, uy, fmt=ufmt, fillstyle="none", **kwargs)
 
         # Now lower limits
         lx, lxerr = get_lim(x, xerr, ylim, LOWER)
         ly, lyerr = get_lim(y, yerr, ylim, LOWER)
-        plt.errorbar(lx, ly, fmt=lfmt, **kwargs)
+        plt.errorbar(lx, ly, fmt=lfmt, fillstyle="none", **kwargs)

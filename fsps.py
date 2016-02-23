@@ -474,9 +474,9 @@ def plot_data_SED(
         galaxy_sed_lims = sed_lim_table[gal]
         # If we change to fluxes, we want to plot nu-fnu.
         if plotquant is "Flux":
+            galaxy_sed *= frequencies
             normed_sed, normed_sed_err = normalize_flux_SED(
                 galaxy_sed, galaxy_sed_err, normvalue, wavelengths, normband)
-            normed_sed *= frequencies
             normed_sed_err *= frequencies
         elif plotquant is "Mag":
             normed_sed, normed_sed_err = normalize_magnitude_SED(
@@ -487,7 +487,7 @@ def plot_data_SED(
         label=None
 
 def plot_FSPS_SED_at_ages(
-    FSPS_DIR, modelbase="SSP.out", label="t={0:.1g}", fmts=None,
+    FSPS_DIR, modelbase="SSP.out", label=r"t=$10^{0:.1f}$ yr", fmts=None,
     runbands=(conv.WISE_bands + conv.TWOMASS_bands + conv.GALEX_bands),
     ages=[0], normband="Ks", normvalue=1, plotquant="Flux"):
     '''Plots a series of FSPS models at different ages.
@@ -502,9 +502,24 @@ def plot_FSPS_SED_at_ages(
     if fmts is None:
         fmts = ['']*len(ages)
     for (age, fmt) in zip(ages, fmts):
-        agelabel = label.format(age)
+        agelabel = format_mpl_age(age)
         plot_FSPS_SED(FSPS_DIR, modelbase, agelabel, fmt, runbands, age,
                       normband, normvalue, plotquant)
+
+def format_mpl_age(age):
+    '''Takes an age in years and formats it so it looks nice in a legend.
+
+    This function will essentially convert the age to Gigayears. If the
+    converted age is not an integer number of Gyr, then it will be formatted as
+    a float. Otherwise, it will be formatted as an integer.
+    '''
+    gigage = age / 1e9
+    if float.is_integer(gigage):
+        gigage = int(gigage)
+        label = "{0:d} Gyr".format(gigage)
+    else:
+        label = "{0:.1f} Gyr".format(gigage)
+    return label
 
 # I might want to break this function up into two functions. Because they are
 # EXTREMELY disparate. The one piece of code they share isn't really even
@@ -544,14 +559,15 @@ def plot_FSPS_SED(
         wavelengths = np.asarray(spectable.colnames, dtype=np.float)*1e-4
         # Now we want a spectrum at the given age.
         if age == 0:
-            fluxes = spectable[-1, :]
+            specfluxes = spectable[-1, :]
         else:
-            fluxes = FSPS_data_at_age(fluxtable["log(age)"], spectable, age)
+            specfluxes = FSPS_data_at_age(fluxtable["log(age)"], spectable, 
+                                          age)
         frequencies = 3e14 / wavelengths
+        fluxes = frequencies * specfluxes
         # I want fluxes to be an array. An astropy row is NOT an array.
         normedSED = normalize_flux_SED(fluxes, 1, normvalue, wavelengths, 
                                        normband)[0]
-        normedSED *= frequencies
         plotfunc = plt.loglog
     else:
         raise ValueError(
