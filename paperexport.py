@@ -130,13 +130,13 @@ def generate_fulltable(rampazzo=rampazzo_table, atlas3d=atlas3d_table):
         fulltable["w1apmag"].mask = np.isnan(fulltable["w1apmag"])
         fulltable["w2apmag"].mask = np.isnan(fulltable["w2apmag"])
         fulltable["w3apmag"].mask = np.isnan(fulltable["w3apmag"])
-        fulltable["w4apmag"].mask = np.isnan(fulltable["w4apmag"])
+        fulltable["w3apmag"].mask = np.isnan(fulltable["w3apmag"])
         fulltable["NUVaperr"].mask = np.isnan(fulltable["NUVaperr"])
         fulltable["FUVaperr"].mask = np.isnan(fulltable["FUVaperr"])
         fulltable["w1aperr"].mask = np.isnan(fulltable["w1aperr"])
         fulltable["w2aperr"].mask = np.isnan(fulltable["w2aperr"])
         fulltable["w3aperr"].mask = np.isnan(fulltable["w3aperr"])
-        fulltable["w4aperr"].mask = np.isnan(fulltable["w4aperr"])
+        fulltable["w3aperr"].mask = np.isnan(fulltable["w3aperr"])
     else:
         pass
 
@@ -166,7 +166,7 @@ def build_filepath(basepath, filename, extension=EXT):
     fullpath = os.path.join(basepath, fullfilename)
     return fullpath
 
-def remove_bad_galaxies(table, galcol="objstr_01", badgals=["NGC2974"]):
+def remove_bad_galaxies(table, galcol="objstr_01", badgals=["NGC2973"]):
     '''Creates a new table without galaxies in badgals.
 
     This is done to sanitize plots without making any persistent changes to the
@@ -174,7 +174,9 @@ def remove_bad_galaxies(table, galcol="objstr_01", badgals=["NGC2974"]):
     tables. Also, bad galaxies for one plot may not necessarily be bad galaxies
     for other plots.
     '''
-    badindices = phot.astropy_table_index(table, galcol, 
+    badindices = phot.astropy_table_indices(table, galcol, badgals)
+    goodindices = get_complement_indices(badindices, len(table))
+    return table[goodindices]
 
 #######################################################################
 # Create Tables #
@@ -184,7 +186,7 @@ def create_Rampazzo_sample_table(table=rampazzo_table,
                                                    "rampazzotbl.tex")):
     '''Table corresponding to information about Rampazzo galaxies.'''
     caption = r"""Properties of the galaxies in the Rampazzo sample. Columns:
-    (1) galaxy name; (2) Morphological type; (3) Distance; (4) MIR Class.
+    (1) galaxy name; (2) Morphological type; (3) Distance; (3) MIR Class.
     References can be found as \citet{Rampazzo13}.
     \label{tab:rampazzosample}"""
     columns = ["objstr_01", "RSA_morph_type", "D", "MIR_class", "w1rsemi",
@@ -223,10 +225,10 @@ def create_param_table(table=fulltable[:10], dest=os.path.join(TABLEPATH,
     caption = r"""Aperture photometry parameters for galaxies in the \ATLAS{}
     and Rampazzo samples
     \label{tab:params}"""
-    columns = ["objstr_01", "type", "D", "sample", "w1rsemi", "w4rsemi", 
-               "w1ba", "w4ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
-    names = ["Galaxy", "Morph", "D", "S", r"\(a_{W1}\)", r"\(a_{W4}\)",
-             r"\(b/a_{W1}\)", r"\(b/a_{W4}\)", "PA", "Survey", "NUV Tile", 
+    columns = ["objstr_01", "type", "D", "sample", "w1rsemi", "w3rsemi", 
+               "w1ba", "w3ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
+    names = ["Galaxy", "Morph", "D", "S", r"\(a_{W1}\)", r"\(a_{W3}\)",
+             r"\(b/a_{W1}\)", r"\(b/a_{W3}\)", "PA", "Survey", "NUV Tile", 
              "FUV Tile"]
     preamble = r"""\tabletypesize{\scriptsize}"""
     writetable = table[columns]
@@ -243,20 +245,20 @@ def create_magnitude_table(table=rampazzo_table[:10],
     tablefoot = r"""\tablecomments{Magnitudes are reported in the AB system. 
     They have not been corrected for extinction.}"""
     columns = ["objstr_01", "FUVaperr", "NUVaperr", "w1aperr", "w2aperr", 
-               "w3aperr", "w4aperr"]
+               "w3aperr", "w3aperr"]
     column_order = ["objstr_01", "FUVapmag", "FUVaperr", "NUVapmag", "NUVaperr", 
                     "w1apmag", "w1aperr", "w2apmag", "w2aperr", "w3apmag", 
-                    "w3aperr", "w4apmag", "w4aperr"]
+                    "w3aperr", "w3apmag", "w3aperr"]
     names = ["Galaxy", "FUV", r"\(\sigma_{FUV}\)", "NUV", r"\(\sigma_{NUV}\)", 
              "W1", r"\(\sigma_{W1}\)", "W2", r"\(\sigma_{W2}\)", "W3",
-             r"\(\sigma_{W3}\)", "W4", r"\(\sigma_{W4}\)"]
+             r"\(\sigma_{W3}\)", "W3", r"\(\sigma_{W3}\)"]
     preamble = r"""\tabletypesize{\scriptsize}"""
     formats = {"Galaxy": format_reflect, r"\(\sigma_{FUV}\)": format_mag_err, 
                r"\(\sigma_{NUV}\)": format_mag_err, 
                r"\(\sigma_{W1}\)": format_mag_err, 
                r"\(\sigma_{W2}\)": format_mag_err, 
                r"\(\sigma_{W3}\)": format_mag_err, 
-               r"\(\sigma_{W4}\)": format_mag_err}
+               r"\(\sigma_{W3}\)": format_mag_err}
     export = table[columns]
     export["FUVapmag"] = format_mag_column(table["FUVapmag"],
                                            table["FUVaplim"])
@@ -268,8 +270,8 @@ def create_magnitude_table(table=rampazzo_table[:10],
                                            table["w2aplim"])
     export["w3apmag"] = format_mag_column(table["w3apmag"],
                                            table["w3aplim"])
-    export["w4apmag"] = format_mag_column(table["w4apmag"],
-                                           table["w4aplim"])
+    export["w3apmag"] = format_mag_column(table["w3apmag"],
+                                           table["w3aplim"])
     export[column_order].write(
         dest, format="ascii.aastex", names=names, formats=formats,
         latexdict={"caption": caption, "tablefoot": tablefoot,
@@ -278,6 +280,7 @@ def create_magnitude_table(table=rampazzo_table[:10],
 def create_W2_W3_histogram(table=rampazzo_table, 
                            dest=build_filepath(FIGUREPATH, "w2w3hist")):
     '''Creates the histogram which plots all of the objects in W2-W3.'''
+    table = remove_bad_galaxies(table)
     xlabel = "W2-W3"
     rp.color_histogram_by_class(table["w2unextmag"],
                                 table["w3unextmag"],
@@ -290,6 +293,7 @@ def create_W2_W3_cumulative_histogram(
         table=rampazzo_table, dest=build_filepath(FIGUREPATH,
                                                   "class023_cumhist")):
     '''Cumulative histogram illustrating difference between Class 0 and 2/3.'''
+    table = remove_bad_galaxies(table)
     xlabel = "W2-W3"
     rp.color_cumulative_histogram_by_class(
         table["w2unextmag"], table["w3unextmag"], table["MIR_class"], "W2-W3",
@@ -300,6 +304,7 @@ def create_W2_W3_cumulative_histogram(
 def create_W1W2_W2W3_MIR_plot(table=rampazzo_table,
                               dest=build_filepath(FIGUREPATH, "w1w2w2w3_mir")):
     '''Plots W1-W2 vs W2-W3'''
+    table = remove_bad_galaxies(table)
     ylabel = "W1-W2"
     xlabel = "W2-W3"
 
@@ -322,24 +327,25 @@ def create_W1W2_W2W3_MIR_plot(table=rampazzo_table,
     plt.savefig(dest)
     plt.close()
 
-def create_W2W3_W3W4_MIR_plot(table=rampazzo_table,
-                              dest=build_filepath(FIGUREPATH, "w2w3w3w4_mir")):
-    '''Plots W2-W3 vs W3-W4'''
+def create_W2W3_W3W3_MIR_plot(table=rampazzo_table,
+                              dest=build_filepath(FIGUREPATH, "w2w3w3w3_mir")):
+    '''Plots W2-W3 vs W3-W3'''
+    table = remove_bad_galaxies(table)
     ylabel = "W2-W3"
-    xlabel = "W3-W4"
+    xlabel = "W3-W3"
 
     w2 = table["w2unextmag"]
     w3 = table["w3unextmag"]
-    w4 = table["w4unextmag"]
+    w3 = table["w3unextmag"]
     w2err = table["w2unexterr"]
     w3err = table["w3unexterr"]
-    w4err = table["w4unexterr"]
+    w3err = table["w3unexterr"]
     MIR = table["MIR_class"]
 
     w2w3, w2w3err = stat.subtract(w2, w3, w2err, w3err)
-    w3w4, w3w4err = stat.subtract(w3, w4, w3err, w4err)
+    w3w3, w3w3err = stat.subtract(w3, w3, w3err, w3err)
 
-    rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, xrange(5), xlabel,
+    rp.MIRplot(w3w3, w2w3, MIR, w2w3err, w3w3err, xrange(5), xlabel,
                ylabel, "", loc="upper left")
     plt.axis([-1.5, 0, -1.5, 0])
     plt.savefig(dest)
@@ -347,34 +353,36 @@ def create_W2W3_W3W4_MIR_plot(table=rampazzo_table,
 
 def create_sulfur_h2_plot(
     table=rampazzo_table, dest=build_filepath(FIGUREPATH, "lineratios")):
+    table = remove_bad_galaxies(table)
     linetable = read_Rampazzo_TableA2()
     rp.plot_rampazzo_line_ratios(linetable, table, "")
     plt.savefig(dest)
     plt.close()
 
-def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
+def create_dual_panel_W1W2_W2W3_W3W3_MIR_plot(
     table=rampazzo_table, dest=build_filepath(FIGUREPATH, "dual_mir_plot")):
+    table = remove_bad_galaxies(table)
     w1 = table["w1unextmag"]
     w2 = table["w2unextmag"]
     w3 = table["w3unextmag"]
-    w4 = table["w4unextmag"]
+    w3 = table["w3unextmag"]
     w1err = table["w1unexterr"]
     w2err = table["w2unexterr"]
     w3err = table["w3unexterr"]
-    w4err = table["w4unexterr"]
+    w3err = table["w3unexterr"]
     w1lim = table["w1unextlim"]
     w2lim = table["w2unextlim"]
     w3lim = table["w3unextlim"]
-    w4lim = table["w4unextlim"]
+    w3lim = table["w3unextlim"]
     MIR = table["MIR_class"]
 
     w1w2, w1w2err, w1w2lim = stat.subtract(w1, w2, w1err, w2err, w1lim, w2lim)
     w2w3, w2w3err, w2w3lim = stat.subtract(w2, w3, w2err, w3err, w2lim, w3lim)
-    w3w4, w3w4err, w3w4lim = stat.subtract(w3, w4, w3err, w4err, w3lim, w4lim)
+    w3w3, w3w3err, w3w3lim = stat.subtract(w3, w3, w3err, w3err, w3lim, w3lim)
 
     w1w2label = "W1-W2"
     w2w3label = "W2-W3"
-    w3w4label = "W3-W4"
+    w3w3label = "W3-W3"
 
     plt.subplot(1, 2, 1)
     rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, xrange(5), w2w3label,
@@ -382,7 +390,7 @@ def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
     plt.axis([-1.5, 0, -0.75, -0.6])
 
     plt.subplot(1, 2, 2)
-    rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, xrange(5), w3w4label,
+    rp.MIRplot(w3w3, w2w3, MIR, w2w3err, w3w3err, xrange(5), w3w3label,
                w2w3label, "", loc=None)
     plt.axis([-1.5, 0, -1.5, 0])
     plt.tight_layout()
@@ -393,6 +401,7 @@ def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
 
 def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
        dest=os.path.join(FIGUREPATH, "shortpahs.pdf")):
+    table = remove_bad_galaxies(table)
     pahtable = read_Rampazzo_TableA1()
     fulltable = phot.join_by_galaxy_name(table, pahtable,
                                     names=("objstr_01", "Galaxy"))
@@ -424,6 +433,7 @@ def create_PAH113_17_PAH77_113_plot(table=rampazzo_table,
 
 def create_stellar_mass_ATLAS3D_comparison(
         table=atlas3d_table, dest=os.path.join(FIGUREPATH, "stellarmass.pdf")):
+    table = remove_bad_galaxies(table)
     atlas3d_params = read_Cappellari11_Table_3()
     atlas3d_lums = read_Cappellari13a_Table_1()
     atlas3d_masstolight = read_Cappellari13b_Table_1()
@@ -432,7 +442,7 @@ def create_stellar_mass_ATLAS3D_comparison(
         names=("objstr_01", "Galaxy", "Galaxy", "Galaxy"))
     absmag_w1 = joinedtable["w1unextmag"] - (5 *
         np.log10(joinedtable["D"]*1e6/10))
-    logluminosity_w1 = -0.4 * (
+    logluminosity_w1 = -0.3 * (
         absmag_w1 - conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"])
     mass_jarrett = 10**(joinedtable["logML_W1"] + logluminosity_w1)
     mass_atlas3d = 10**(joinedtable["logML_star"] + joinedtable["logLum"])
@@ -445,6 +455,7 @@ def create_stellar_mass_ATLAS3D_comparison(
 def create_stellar_mass_luminosity_relation(
         table=atlas3d_table, dest=os.path.join(FIGUREPATH, 
         "mass-luminosity.pdf")):
+    table = remove_bad_galaxies(table)
     joinedtable = table
 
     atlas3d_stellar_mass, atlas3d_stellar_mass_err, _ = stat.add(
@@ -455,9 +466,9 @@ def create_stellar_mass_luminosity_relation(
     absolute_w1, absolute_w1_err, _ = stat.subtract(
         joinedtable["w1unextmag"], 5 * distance_modulus, 
         joinedtable["w1unexterr"], 5 * distance_modulus_err)
-    lum, lum_err = (-0.4 * (absolute_w1 - 
+    lum, lum_err = (-0.3 * (absolute_w1 - 
                            conv.SOLAR_ABSOLUTE_MAGNITUDES_AB["W1"]),
-                    0.4 * absolute_w1_err)
+                    0.3 * absolute_w1_err)
     plt.errorbar(lum, atlas3d_stellar_mass, atlas3d_stellar_mass_err, lum_err, 
                  'bo', label="ATLAS3D")
     plt.xlabel("log L_W1 (Lsun)")
@@ -483,7 +494,9 @@ def create_cutout_grid(
 
 
 def create_mass_to_light_ATLAS3D_comparison(
-        table=atlas3d_table, dest=os.path.join(FIGUREPATH, "masstolight.pdf")):
+        table=atlas3d_table, dest=build_filepath(
+            FIGUREPATH, "masstolight", "pdf")):
+    table = remove_bad_galaxies(table)
     # Calculate the mass-to-light ratio for the ATLAS3D points in WISE.
     w1w2, w1w2err, w1w2lim = stat.subtract(
         table["w1unextmag"], table["w2unextmag"], table["w1unexterr"], 
@@ -495,8 +508,8 @@ def create_mass_to_light_ATLAS3D_comparison(
 
 
     # Remember that these will be given in Vega mags.
-    meidt_limits_IRAC = np.linspace(-0.12, -0.04, 2)
-    meidt_limits = conv.IRAC2WISEcolor("[3.6]", "[4.5]", meidt_limits_IRAC,
+    meidt_limits_IRAC = np.linspace(-0.12, -0.03, 2)
+    meidt_limits = conv.IRAC2WISEcolor("[3.6]", "[3.5]", meidt_limits_IRAC,
                                        wisesystem="AB")
     meidt_ML = (3.98 * meidt_limits_IRAC + 0.13 - 
                 np.log10(conv.IRACflux2WISEflux("[3.6]", 1)))
@@ -510,10 +523,10 @@ def create_mass_to_light_ATLAS3D_comparison(
     const_ML = np.log10(0.6 / conv.IRAC_TO_WISE_FACTOR["[3.6]"])
     plt.plot(meidt_limits, [const_ML, const_ML], 'g:')
 
-    # Relations from Cluver et al( 2014)
+    # Relations from Cluver et al( 2013)
     cluver_limits_VEGA = np.linspace(-0.3, 0.7, 2)
     cluver_limits = conv.Vega2ABcolor("W1", "W2", cluver_limits_VEGA)
-    cluver_ML = -2.54 * (cluver_limits_VEGA) - 0.17
+    cluver_ML = -2.53 * (cluver_limits_VEGA) - 0.17
     plt.plot(cluver_limits, cluver_ML, 'r-', label="Cluver M/L")
 
     # FSPS output
@@ -580,7 +593,7 @@ def create_mass_to_light_ATLAS3D_comparison(
     plt.plot(fit_limits, [flatlogval, flatlogval], 'k--', label="This work")
 
     plt.xlabel("W1-W2 (AB)")
-    plt.ylabel("log (M*/L)_W1")
+    plt.ylabel(r"$\log\ \frac{M^*}{L_{W1}} \left(\frac{M_\odot}{L_\odot}\right)$")
     # Not shown is PGC029321 all the way to the right.
     plt.xlim([-0.75, -0.6])
     plt.ylim([-1.0, 0.5])
@@ -592,6 +605,8 @@ def create_mass_to_light_ATLAS3D_comparison(
 
 def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table, 
         dest=os.path.join(FIGUREPATH, "nuvw1.pdf")):
+    rtable = remove_bad_galaxies(rtable)
+    atable = remove_bad_galaxies(atable)
     rnuv = rtable[phot.name_photometry_column("NUV")]
     rnuv_e = rtable[phot.name_photometry_column("NUV", error=True)]
     rnuv_l = rtable[phot.name_photometry_column("NUV", limit=True)]
@@ -622,19 +637,18 @@ def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table,
     aw1abs_e = conv.app_err_to_abs_err(aw1_e, ad, ad_e)
 
     plt.errorbar(aw1abs, anuvw1, anuvw1_e, aw1abs_e, 'kx', label="ATLAS3D")
-    rp.MIRplot(rw1abs, rnuvw1, rtable["MIR_class"], rnuvw1_e, xlabel="M_{W1}",
-               ylabel="NUV-W1")
-    print rtable["objstr_01"][np.where(np.logical_and(rnuvw1 < 4, rw1abs <
-                                                      -23))]
+    rp.MIRplot(rw1abs, rnuvw1, rtable["MIR_class"], rnuvw1_e, 
+               xlabel=r"M$_{W1}$", ylabel="NUV-W1")
 
     plt.ylim([2, 7])
-    plt.xlim([-18, -24])
+    plt.xlim([-18, -23])
     plt.legend(loc="lower right", bbox_to_anchor=(0.85, 0.01))
     plt.savefig(dest)
     plt.close()
 
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
                                 dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
+    table = remove_bad_galaxies(table)
     pahtable = read_Rampazzo_TableA1()
     fulltable = phot.join_by_galaxy_name(table, pahtable,
                                     names=("objstr_01", "Galaxy"))
@@ -671,23 +685,24 @@ def create_SED(
     ages=[1e8, 1e9, 5e9, 1e10], 
     modelbase="toggle_dust_met_bounds/dust_highmet"):
 
+    table = remove_bad_galaxies(table)
     fsps.plot_FSPS_SED_at_ages(
         FSPSPATH, plotquant="Flux", fmts=None, ages=ages, 
-        modelbase=modelbase)
+        modelbase=modelbase, normvalue=1)
 
     passive_indices = atlas3d.ATLAS3D_dustless_galaxy_indices(table)
     active_indices = get_complement_indices(passive_indices, len(table))
-    fsps.plot_data_SED(table[passive_indices], plotquant="Flux", fmt="rx", 
-                       label="Passive galaxies", markersize=8)
-    fsps.plot_data_SED(table[active_indices], plotquant="Flux", fmt="b.", 
-                       label="Non-passive galaxies", markersize=10)
+    fsps.plot_data_SED(table[active_indices], plotquant="Flux", fmt="bx", 
+                       label="Non-passive", markersize=10)
+    fsps.plot_data_SED(table[passive_indices], plotquant="Flux", fmt="r.", 
+                       label="Passive", markersize=8)
 
-    plt.xlabel("Wavelength (um)")
-    plt.ylabel("nu f_nu")
+    plt.xlabel(r"Wavelength ($\mu m$)")
+    plt.ylabel(r"Normalized $\nu f_\nu$")
     plt.xlim([0.1, 50])
-    plt.ylim([1e8, 1e16])
+    plt.ylim([1e-3, 1e2])
 #    plt.gca().invert_yaxis()
-    plt.legend(loc="lower left")
+    plt.legend(loc="lower center")
     plt.savefig(dest)
     plt.close()
 
@@ -696,6 +711,8 @@ def create_circumstellar_verification_plot(
     dest=build_filepath(FIGUREPATH, "dustless", EXT)):
     '''Plot showing where Class-0 and dustless ATLAS3D objects lie.'''
 
+    atable = remove_bad_galaxies(atable)
+    rtable = remove_bad_galaxies(rtable)
     # We want to set up our datasets of dustless ATLAS3D and Class-0 Rampazzo
     # galaxies.
     dcat_indices  = atlas3d.ATLAS3D_dustless_galaxy_indices(atable)
@@ -705,7 +722,7 @@ def create_circumstellar_verification_plot(
     colorcut_dustless_indices = atlas3d.color_cut_dustless_indices(
         dcat[phot.name_photometry_column("W1")],
         dcat[phot.name_photometry_column("W3")],
-        dcat[phot.name_photometry_column("W4")])
+        dcat[phot.name_photometry_column("W3")])
     colorcut_dusty_indices = get_complement_indices(
         colorcut_dustless_indices, len(dcat))
     # These represent all of the "dustless" galaxies which pass the color cut.
@@ -715,8 +732,8 @@ def create_circumstellar_verification_plot(
 
     class0 = rp.extract_MIR_class_sample(rtable, 0, "MIR_class")
 
-    # These are the Amblard et al 2014 objects. 
-    amblard_objects = read_Amblard_Table_4()
+    # These are the Amblard et al 2013 objects. 
+    amblard_objects = read_Amblard_Table_3()
     amblard_overlap = phot.join_by_galaxy_name(dcat, amblard_objects, 
                                                names=("objstr_01", "Name"))
     amblard_dusty = amblard_overlap[np.where(
@@ -734,61 +751,61 @@ def create_circumstellar_verification_plot(
     class0w1w3, class0w1w3_err, class0w1w3_lim = stat.subtract(
         class0["w1unextmag"], class0["w3unextmag"], class0["w1unexterr"],
         class0["w3unexterr"], class0["w1unextlim"], class0["w3unextlim"])
-    class0w1w4, class0w1w4_err, class0w1w4_lim = stat.subtract(
-        class0["w1unextmag"], class0["w4unextmag"], class0["w1unexterr"],
-        class0["w4unexterr"], class0["w1unextlim"], class0["w4unextlim"])
+    class0w1w3, class0w1w3_err, class0w1w3_lim = stat.subtract(
+        class0["w1unextmag"], class0["w3unextmag"], class0["w1unexterr"],
+        class0["w3unexterr"], class0["w1unextlim"], class0["w3unextlim"])
     dustyw1w3, dustyw1w3_err, dustyw1w3_lim = stat.subtract(
         colorcut_dusty["w1unextmag"], colorcut_dusty["w3unextmag"], 
         colorcut_dusty["w1unexterr"], colorcut_dusty["w3unexterr"], 
         colorcut_dusty["w1unextlim"], colorcut_dusty["w3unextlim"])
-    dustyw1w4, dustyw1w4_err, dustyw1w4_lim = stat.subtract(
-        colorcut_dusty["w1unextmag"], colorcut_dusty["w4unextmag"], 
-        colorcut_dusty["w1unexterr"], colorcut_dusty["w4unexterr"], 
-        colorcut_dusty["w1unextlim"], colorcut_dusty["w4unextlim"])
+    dustyw1w3, dustyw1w3_err, dustyw1w3_lim = stat.subtract(
+        colorcut_dusty["w1unextmag"], colorcut_dusty["w3unextmag"], 
+        colorcut_dusty["w1unexterr"], colorcut_dusty["w3unexterr"], 
+        colorcut_dusty["w1unextlim"], colorcut_dusty["w3unextlim"])
     colorcutw1w3, colorcutw1w3_err, colorcutw1w3_lim = stat.subtract(
         colorcut_dustless["w1unextmag"], colorcut_dustless["w3unextmag"], 
         colorcut_dustless["w1unexterr"], colorcut_dustless["w3unexterr"], 
         colorcut_dustless["w1unextlim"], colorcut_dustless["w3unextlim"])
-    colorcutw1w4, colorcutw1w4_err, colorcutw1w4_lim = stat.subtract(
-        colorcut_dustless["w1unextmag"], colorcut_dustless["w4unextmag"], 
-        colorcut_dustless["w1unexterr"], colorcut_dustless["w4unexterr"], 
-        colorcut_dustless["w1unextlim"], colorcut_dustless["w4unextlim"])
+    colorcutw1w3, colorcutw1w3_err, colorcutw1w3_lim = stat.subtract(
+        colorcut_dustless["w1unextmag"], colorcut_dustless["w3unextmag"], 
+        colorcut_dustless["w1unexterr"], colorcut_dustless["w3unexterr"], 
+        colorcut_dustless["w1unextlim"], colorcut_dustless["w3unextlim"])
 
-    stat.errorbar(class0w1w3, class0w1w4, class0w1w4_err, class0w1w3_err,
-                  class0w1w4_lim, label="Class 0", ufmt="kv", lfmt="k^", 
+    stat.errorbar(class0w1w3, class0w1w3, class0w1w3_err, class0w1w3_err,
+                  class0w1w3_lim, label="Class 0", ufmt="kv", lfmt="k^", 
                   **rp.MIR_Symbols[0])
-    stat.errorbar(dustyw1w3, dustyw1w4, dustyw1w4_err,
-                  dustyw1w3_err, dustyw1w4_lim, 'gx', 
+    stat.errorbar(dustyw1w3, dustyw1w3, dustyw1w3_err,
+                  dustyw1w3_err, dustyw1w3_lim, 'go', 
                   label="ATLAS3D (FIR Det)", ufmt="gv", lfmt="g^")
-    stat.errorbar(colorcutw1w3, colorcutw1w4, colorcutw1w4_err,
-                  colorcutw1w3_err, colorcutw1w4_lim,
-                  label="ATLAS3D", fmt="mx", ufmt="mv", lfmt="m^")
+    stat.errorbar(colorcutw1w3, colorcutw1w3, colorcutw1w3_err,
+                  colorcutw1w3_err, colorcutw1w3_lim,
+                  label="ATLAS3D", fmt="mo", ufmt="mv", lfmt="m^")
     fsps.plot_FSPS_color_color(
-        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
+        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W3", 
         modelbase=os.path.join("toggle_dust_met_bounds", "dust_highmet"),
         label="[Z/H] = 0.2", fmt="r-", agecutoff=1e9)
     fsps.plot_FSPS_color_color(
-        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
+        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W3", 
         modelbase=os.path.join("toggle_dust_met_bounds", "dust_lowmet"),
         label="[Z/H] = -0.89", fmt="b-", agecutoff=1e9)
     fsps.plot_FSPS_color_color(
-        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
+        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W3", 
         modelbase=os.path.join("toggle_dust_met_bounds", "nodust_highmet"),
         label="[Z/H] = 0.2", fmt="r:", agecutoff=1e9)
     fsps.plot_FSPS_color_color(
-        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
+        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W3", 
         modelbase=os.path.join("toggle_dust_met_bounds", "nodust_lowmet"),
         label="[Z/H] = -0.89", fmt="b:", agecutoff=1e9)
 #   parsec.plot_parsec_color_color(PARSECPATH, "marigo_highmet.dat", "W1", "W3",
-#                                  "W1", "W4", label="PARSEC (high met)",
+#                                  "W1", "W3", label="PARSEC (high met)",
 #                                  fmt="r--", agecutoff=1e9)
 #   parsec.plot_parsec_color_color(PARSECPATH, "marigo_lowmet.dat", "W1", "W3",
-#                                  "W1", "W4", label="PARSEC (low met)",
+#                                  "W1", "W3", label="PARSEC (low met)",
 #                                  fmt="b--", agecutoff=1e9)
     plt.xlabel("W1-W3 (AB)")
-    plt.ylabel("W1-W4 (AB)")
+    plt.ylabel("W1-W3 (AB)")
     add_Vega_axis("W1", "W3")
-    add_Vega_axis("W1", "W4", "y")
+    add_Vega_axis("W1", "W3", "y")
     plt.legend(loc="lower right")
     plt.savefig(dest)
     plt.close()
@@ -825,7 +842,8 @@ def add_Vega_axis(band1, band2, axis="x"):
 def create_circumstellar_dust_plot(table=atlas3d_table,
                                    dest=build_filepath(FIGUREPATH, "cdust",
                                                        EXT)):
-    '''Dual-paneled W1-W3 and W1-W4 vs age plot.'''
+    '''Dual-paneled W1-W3 and W1-W3 vs age plot.'''
+    table = remove_bad_galaxies(table)
     # Set up the data
     dustless_catalog = \
         atlas3d.filter_ATLAS3D_table_for_dustless_galaxies(table)
@@ -833,10 +851,10 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
         dustless_catalog["w1unextmag"], dustless_catalog["w3unextmag"], 
         dustless_catalog["w1unexterr"], dustless_catalog["w3unexterr"],
         dustless_catalog["w1unextlim"], dustless_catalog["w3unextlim"])
-    w1w4color, w1w4err, w1w4lim = stat.subtract(
-        dustless_catalog["w1unextmag"], dustless_catalog["w4unextmag"], 
-        dustless_catalog["w1unexterr"], dustless_catalog["w4unexterr"],
-        dustless_catalog["w1unextlim"], dustless_catalog["w4unextlim"])
+    w1w3color, w1w3err, w1w3lim = stat.subtract(
+        dustless_catalog["w1unextmag"], dustless_catalog["w3unextmag"], 
+        dustless_catalog["w1unexterr"], dustless_catalog["w3unexterr"],
+        dustless_catalog["w1unextlim"], dustless_catalog["w3unextlim"])
     atlas3d_ages = dustless_catalog["Age_SSP"]
     atlas3d_ages_err = dustless_catalog["Age_SSP_err"]
     atlas3d_metallicities = dustless_catalog["[Z/H]_SSP"]
@@ -854,15 +872,16 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     plt.legend(loc="upper right", fontsize="small")
     plt.ylabel("W1-W3")
 
-    # Now the second plot: W1-W4
+    # Now the second plot: W1-W3
     plt.sca(ax2)
     fsps.plot_atlas3d_coded_by_metallicity(
-        atlas3d_ages, w1w4color, w1w4err, atlas3d_ages_err, w1w4lim,
+        atlas3d_ages, w1w3color, w1w3err, atlas3d_ages_err, w1w3lim,
         atlas3d_metallicities, med_met)
     fsps.plot_dust_toggled_metallicity_bounds(
-        os.path.join(fsps.OUTPUT_PATH, "toggle_dust_met_bounds"), "W1", "W4")
-    ax2.set_ylim([-4, 1])
-    plt.ylabel("W1-W4")
+        os.path.join(fsps.OUTPUT_PATH, "toggle_dust_met_bounds"), "W1", "W3")
+    ax2.set_ylim([-3, 1])
+    plt.xlim(0, 19)
+    plt.ylabel("W1-W3")
     plt.xlabel("SSP Age (Gyr)")
     plt.tight_layout(0)
     plt.savefig(dest)
@@ -870,13 +889,15 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
 
 def create_star_formation_plot(
         table=atlas3d_table, dest=build_filepath(FIGUREPATH, "circsfr", EXT)):
-    '''Creates a plot similar to Figure 1 in Davis et al 2014.
+    '''Creates a plot similar to Figure 1 in Davis et al 2013.
 
-    This will be a log-log plot of the W4 vs Ks band luminosities of the
+    This will be a log-log plot of the W3 vs Ks band luminosities of the
     ATLAS3D sample. However, instead of separating H2 detected and
     non-detected, we will separate the dustless from dusty based on our color
     cut in the plane.
     '''
+    table = remove_bad_galaxies(table)
+    # Get the necessary information from the magnitude table.
     w1mag = table[phot.name_photometry_column("W1")]
     w1err = table[phot.name_photometry_column("W1", error=True)]
     w1lim = table[phot.name_photometry_column("W1", limit=True)]
@@ -889,103 +910,133 @@ def create_star_formation_plot(
     w4mag = table[phot.name_photometry_column("W4")]
     w4err = table[phot.name_photometry_column("W4", error=True)]
     w4lim = table[phot.name_photometry_column("W4", limit=True)]
+    ksmag = table[phot.name_photometry_column("Ks")]
+    kserr = table[phot.name_photometry_column("Ks", error=True)]
+    kslim = table[phot.name_photometry_column("Ks", limit=True)]
+    dist, disterr = table["D"], table["D_err"]
 
+    # Convert magnitudes to luminosities.
+    w1lum = conv.ABmag2inbandLum("W1", w1mag, dist)
+    w1lum_err = conv.AB_mag_err_to_inband_lum_err("W1", w1mag, w1err, dist,
+                                                  disterr)
+    w1lum_lim = stat.invert_limits(w1lim)
+    w2lum = conv.ABmag2inbandLum("W2", w2mag, dist)
+    w2lum_err = conv.AB_mag_err_to_inband_lum_err("W2", w2mag, w2err, dist,
+                                                  disterr)
+    w2lum_lim = stat.invert_limits(w2lim)
+    kslum = conv.ABmag2inbandLum("Ks", ksmag, dist)
+    kslum_err = conv.AB_mag_err_to_inband_lum_err("Ks", ksmag, kserr, dist,
+                                                  disterr)
+    kslum_lim = stat.invert_limits(kslim)
+
+    # W3 and W4 will be in spectral luminosities.
+    w3lum = conv.ABmag2specLum("W3", w3mag, dist)
+    w3lum_err = conv.AB_mag_err_to_spec_lum_err("W3", w3mag, w3err, dist,
+                                                  disterr)
+    w3lum_lim = stat.invert_limits(w3lim)
+    w4lum = conv.ABmag2specLum("W4", w4mag, dist)
+    w4lum_err = conv.AB_mag_err_to_spec_lum_err("W4", w4mag, w4err, dist,
+                                                  disterr)
+    w4lum_lim = stat.invert_limits(w4lim)
+
+    # Take the log of the luminosity.
+    w1loglum, w1loglum_err, w1loglum_lim = stat.logarithm(
+        w1lum, w1lum_err, numlim=w1lum_lim)
+    w2loglum, w2loglum_err, w2loglum_lim = stat.logarithm(
+        w2lum, w2lum_err, numlim=w2lum_lim)
+    w3loglum, w3loglum_err, w3loglum_lim = stat.logarithm(
+        w3lum, w3lum_err, numlim=w3lum_lim)
+    w4loglum, w4loglum_err, w4loglum_lim = stat.logarithm(
+        w4lum, w4lum_err, numlim=w4lum_lim)
+    ksloglum, ksloglum_err, ksloglum_lim = stat.logarithm(
+        kslum, kslum_err, numlim=kslum_lim)
+
+    # Now we're going to split into the dusty and dustless samples.
     dustless_indices = atlas3d.color_cut_dustless_indices(
         w1mag, w3mag, w4mag)
-    dustless_table = table[dustless_indices]
-    dustless_ks = dustless_table[phot.name_photometry_column("Ks")]
-    dustless_ks_err = dustless_table[
-        phot.name_photometry_column("Ks", error=True)]
-    dustless_ks_lim = dustless_table[
-        phot.name_photometry_column("Ks", limit=True)]
-    dustless_w1 = dustless_table[phot.name_photometry_column("W1")]
-    dustless_w1_err = dustless_table[
-        phot.name_photometry_column("W1", error=True)]
-    dustless_w1_lim = dustless_table[
-        phot.name_photometry_column("W1", limit=True)]
-    dustless_w2 = dustless_table[phot.name_photometry_column("W2")]
-    dustless_w4 = dustless_table[phot.name_photometry_column("W4")]
-    dustless_w4_err = dustless_table[
-        phot.name_photometry_column("W4", error=True)]
-    dustless_w4_lim = dustless_table[
-        phot.name_photometry_column("W4", limit=True)]
-
-    dustless_klum = conv.ABmag2inbandLum(
-        "Ks", dustless_ks, dustless_table["D"])
-    dustless_klum_err = conv.AB_mag_err_to_inband_lum_err(
-        "Ks", dustless_ks, dustless_ks_err, dustless_table["D"],
-        dustless_table["D_err"])
-    dustless_klum_lim = stat.invert_limits(dustless_ks_lim)
-    dustless_w1lum = conv.ABmag2inbandLum(
-        "W1", dustless_w1, dustless_table["D"])
-    dustless_w1lum_err = conv.AB_mag_err_to_inband_lum_err(
-        "W1", dustless_w1, dustless_w1_err, dustless_table["D"],
-        dustless_table["D_err"])
-    dustless_w1lum_lim = stat.invert_limits(dustless_w1_lim)
-    dustless_w4lum = conv.ABmag2specLum(
-        "W4", dustless_w4, dustless_table["D"])
-    dustless_w4lum_err = conv.AB_mag_err_to_spec_lum_err(
-        "W4", dustless_w4, dustless_w4_err, dustless_table["D"],
-        dustless_table["D_err"])
-    dustless_w4lum_lim = stat.invert_limits(dustless_w4_lim)
-    dustless_w1loglum, dustless_w1loglum_err, dustless_w1loglum_lim = \
-        stat.logarithm(dustless_w1lum, dustless_w1lum_err, 
-                       numlim=dustless_w1lum_lim)
-    dustless_w4loglum, dustless_w4loglum_err, dustless_w4loglum_lim = \
-        stat.logarithm(dustless_w4lum, dustless_w4lum_err, 
-                       numlim=dustless_w4lum_lim)
-
-
     dusty_indices = get_complement_indices(dustless_indices, len(table))
-    dusty_table = table[dusty_indices]
-    dusty_ks = dusty_table[phot.name_photometry_column("Ks")]
-    dusty_ks_err = dusty_table[
-        phot.name_photometry_column("Ks", error=True)]
-    dusty_ks_lim = dusty_table[
-        phot.name_photometry_column("Ks", limit=True)]
-    dusty_w1 = dusty_table[phot.name_photometry_column("W1")]
-    dusty_w1_err = dusty_table[
-        phot.name_photometry_column("W1", error=True)]
-    dusty_w1_lim = dusty_table[
-        phot.name_photometry_column("W1", limit=True)]
-    dusty_w2 = dusty_table[phot.name_photometry_column("W2")]
-    dusty_w4 = dusty_table[phot.name_photometry_column("W4")]
-    dusty_w4_err = dusty_table[
-        phot.name_photometry_column("W4", error=True)]
-    dusty_w4_lim = dusty_table[
-        phot.name_photometry_column("W4", limit=True)]
 
-    dusty_klum = conv.ABmag2inbandLum(
-        "Ks", dusty_ks, dusty_table["D"])
-    dusty_klum_err = conv.AB_mag_err_to_inband_lum_err(
-        "Ks", dusty_ks, dusty_ks_err, dusty_table["D"],
-        dusty_table["D_err"])
-    dusty_klum_lim = stat.invert_limits(dusty_ks_lim)
-    dusty_w1lum = conv.ABmag2inbandLum(
-        "W1", dusty_w1, dusty_table["D"])
-    dusty_w1lum_err = conv.AB_mag_err_to_inband_lum_err(
-        "W1", dusty_w1, dusty_w1_err, dusty_table["D"],
-        dusty_table["D_err"])
-    dusty_w1lum_lim = stat.invert_limits(dusty_w1_lim)
-    dusty_w4lum = conv.ABmag2specLum(
-        "W4", dusty_w4, dusty_table["D"])
-    dusty_w4lum_err = conv.AB_mag_err_to_inband_lum_err(
-        "W4", dusty_w4, dusty_w4_err, dusty_table["D"],
-        dusty_table["D_err"])
-    dusty_w4lum_lim = stat.invert_limits(dusty_w4_lim)
-    dusty_w1loglum, dusty_w1loglum_err, dusty_w1loglum_lim = \
-        stat.logarithm(dusty_w1lum, dusty_w1lum_err, 
-                       numlim=dusty_w1lum_lim)
-    dusty_w4loglum, dusty_w4loglum_err, dusty_w4loglum_lim = \
-        stat.logarithm(dusty_w4lum, dusty_w4lum_err, 
-                       numlim=dusty_w4lum_lim)
+    w1loglum_dustless = w1loglum[dustless_indices]
+    w1loglumerr_dustless = w1loglum_err[dustless_indices]
+    w1loglumlim_dustless = w1loglum_lim[dustless_indices]
+    w1loglum_dusty = w1loglum[dusty_indices]
+    w1loglumerr_dusty = w1loglum_err[dusty_indices]
+    w1loglumlim_dusty = w1loglum_lim[dusty_indices]
+    
+    w2loglum_dustless = w2loglum[dustless_indices]
+    w2loglumerr_dustless = w2loglum_err[dustless_indices]
+    w2loglumlim_dustless = w2loglum_lim[dustless_indices]
+    w2loglum_dusty = w2loglum[dusty_indices]
+    w2loglumerr_dusty = w2loglum_err[dusty_indices]
+    w2loglumlim_dusty = w2loglum_lim[dusty_indices]
+
+    w3loglum_dustless = w3loglum[dustless_indices]
+    w3loglumerr_dustless = w3loglum_err[dustless_indices]
+    w3loglumlim_dustless = w3loglum_lim[dustless_indices]
+    w3loglum_dusty = w3loglum[dusty_indices]
+    w3loglumerr_dusty = w3loglum_err[dusty_indices]
+    w3loglumlim_dusty = w3loglum_lim[dusty_indices]
+
+    w4loglum_dustless = w4loglum[dustless_indices]
+    w4loglumerr_dustless = w4loglum_err[dustless_indices]
+    w4loglumlim_dustless = w4loglum_lim[dustless_indices]
+    w4loglum_dusty = w4loglum[dusty_indices]
+    w4loglumerr_dusty = w4loglum_err[dusty_indices]
+    w4loglumlim_dusty = w4loglum_lim[dusty_indices]
+
+    ksloglum_dustless = ksloglum[dustless_indices]
+    ksloglumerr_dustless = ksloglum_err[dustless_indices]
+    ksloglumlim_dustless = ksloglum_lim[dustless_indices]
+    ksloglum_dusty = ksloglum[dusty_indices]
+    ksloglumerr_dusty = ksloglum_err[dusty_indices]
+    ksloglumlim_dusty = ksloglum_lim[dusty_indices]
+
+    # Now set up the plots.
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(10, 10))
+    plt.sca(ax1)
     
     stat.errorbar(
-        dusty_w1loglum, dusty_w4loglum, dusty_w4loglum_err, 
-        dusty_w1loglum_err, dusty_w4lum_lim, 'bo', label="Dusty color")
+        w1loglum_dusty, w3loglum_dusty, w3loglumerr_dusty, 
+        w1loglumerr_dusty, w3loglumlim_dusty, 'bo', label="Dusty color")
     stat.errorbar(
-        dustless_w1loglum, dustless_w4loglum, dustless_w4loglum_err, 
-        dustless_w1loglum_err, dustless_w4lum_lim, 'ro',
+        w1loglum_dustless, w3loglum_dustless, w3loglumerr_dustless, 
+        w1loglumerr_dustless, w3loglumlim_dustless, 'ro', 
+        label="Dustless color")
+
+    logw1range_inband = np.linspace(9.5, 12.0, 2)
+    w1w2color = conv.AB2Vegacolor("W1", "W2", np.mean(w1mag-w2mag))
+    for logsSFR in [-10, -11, -12]:
+        logw3lum = (logsSFR + 10.24 + (-2.53*w1w2color - 0.17) +
+                    logw1range_inband)/1.13 + np.log10(conv.SOLAR_LUMINOSITY)
+        plt.plot(logw1range_inband, logw3lum,
+                 label=r"$\log$ sSFR={0}".format(logsSFR))
+
+    p1 = models.Linear1D(1, 30)
+    pfit = fitting.LinearLSQFitter()
+    w1loglumdet, w1loglumdet_err = stat.get_lim(
+        w1loglum_dustless, vallim=w3loglumlim_dustless)
+    w3loglumdet, w3loglumdet_err = stat.get_lim(
+        w3loglum_dustless, vallim=w3loglumlim_dustless)
+    w1w3relation = pfit(p1, w1loglumdet, w3loglumdet)
+    plt.plot(logw1range_inband, w1w3relation(logw1range_inband), 'k-')
+    modelshow = "Fit: log L_W3 = {0:0.2f} log L_W1 + {1:0.2f}"
+    print modelshow.format(w1w3relation.slope.value,
+                           w1w3relation.intercept.value)
+    modelw3data = w1w3relation(w1loglumdet)
+    disp = np.std(modelw3data - w3loglumdet)
+    print "Dispersion is: {0:0.2f}".format(disp)
+
+    ax1.set_ylim((40.0, 43.5))
+    ax1.set_ylabel(r"$\log\ \nu L_{W3}$ (erg s$^{-1}$)")
+    
+    plt.sca(ax2)
+    
+    stat.errorbar(
+        w1loglum_dusty, w4loglum_dusty, w4loglumerr_dusty, 
+        w1loglumerr_dusty, w4loglumlim_dusty, 'bo', label="Dusty color")
+    stat.errorbar(
+        w1loglum_dustless, w4loglum_dustless, w4loglumerr_dustless, 
+        w1loglumerr_dustless, w4loglumlim_dustless, 'ro', 
         label="Dustless color")
 
     logw1range_inband = np.linspace(9.5, 12.0, 2)
@@ -994,14 +1045,14 @@ def create_star_formation_plot(
         logw4lum = (logsSFR + 7.3 + (-2.54*w1w2color - 0.17) +
                     logw1range_inband)/0.82 + np.log10(conv.SOLAR_LUMINOSITY)
         plt.plot(logw1range_inband, logw4lum,
-                 label="log sSFR={0}".format(logsSFR))
+                 label=r"$\log$ sSFR={0}".format(logsSFR))
 
     p1 = models.Linear1D(1, 30)
     pfit = fitting.LinearLSQFitter()
     w1loglumdet, w1loglumdet_err = stat.get_lim(
-        dustless_w1loglum, vallim=dustless_w4loglum_lim)
+        w1loglum_dustless, vallim=w4loglumlim_dustless)
     w4loglumdet, w4loglumdet_err = stat.get_lim(
-        dustless_w4loglum, vallim=dustless_w4loglum_lim)
+        w4loglum_dustless, vallim=w4loglumlim_dustless)
     w1w4relation = pfit(p1, w1loglumdet, w4loglumdet)
     plt.plot(logw1range_inband, w1w4relation(logw1range_inband), 'k-')
     modelshow = "Fit: log L_W4 = {0:0.2f} log L_W1 + {1:0.2f}"
@@ -1011,14 +1062,16 @@ def create_star_formation_plot(
     disp = np.std(modelw4data - w4loglumdet)
     print "Dispersion is: {0:0.2f}".format(disp)
     
+    ax2.set_ylim((40, 43.5))
+    ax2.set_ylabel(r"$\log\ \nu L_{W4}$ (erg s$^{-1}$)")
 
     plt.xlim(9.5, 12)
-    plt.ylim(39.9, 43.7)
-    plt.xlabel("log L_W1 [Lsun]")
-    plt.ylabel("log vL_W4 [erg/s]")
+    plt.xlabel(r"$\log\ L_{W1}\ (L_\odot)$")
     plt.legend(loc="lower right")
+    plt.tight_layout()
     plt.savefig(dest)
     plt.close()
+
 
 def create_comparison_plot(wisetable=jarrett_table, galextable=gdp_table,
                            dest=build_filepath(FIGUREPATH, "photocomp", EXT)):
