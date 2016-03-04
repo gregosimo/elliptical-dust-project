@@ -1498,21 +1498,45 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=bands,
         maskbase=maskbase, suffix=suffix, sizescale=sizescale)
     matplotlib.use(current_backend)
 
-def ellipse_cutout_grid(BASEDIR, WISEtable, runbands=bands, skyAperture=True,
-                        skyimage=False, skyprefix="sky_level",
-                        aperturefile="ellipse_aperture", skymethod="adaptive",
-                        maskbase="mask", sizescale=1.5, scalelength="ellipse", 
-                        ignore_exception=True):
+def ellipse_cutout_grid(
+        BASEDIR, WISEtable, runbands=bands, skyAperture=True, skyimage=False, 
+        skyprefix="sky_level", aperturefile="ellipse_aperture", 
+        skymethod="adaptive", maskbase="mask", sizescale=1.5, 
+        scalelength="ellipse", scalebarlength=15, scalebarband="FUV", 
+        ignore_exception=False):
     '''Returns a figure with a grid of cutout figures.
 
     The horizontal grid tracks are different bands in runbands. The vertical
     grid tracks are different images in WISEtable.
 
+    To display the sky aperture, enable the skyAperture flag. To show the sky
+    image rather than the main exposure, enable the skyimage flag. In order to
+    show the sky annulus, the skyprefix keyword is needed, which when
+    band-expanded will point to the sky file for that band. This is assisted by
+    skymethod, which will correctly extract the aperture size and shape from
+    the correct filename.
+
+    The aperturefile will, when band-expanded, point to the file which contains
+    the elliptical aperture size for that band.
+
+    The mask to be overlaid will be a file at the band-expanded maskbase.
+
+    The size of the cutout will be given by scalelength and sizescale. The
+    possibilities for scalelength are "ellipse", "sky", "W1", and "manual".
+    "Ellipse" will set the size of the cutout to be sizescale * major axis of
+    ellipse aperture. "Sky" will do the same, but with the sky aperture. "W1"
+    will set all the cutouts to be sizescale * major axis of W1 ellipse
+    aperture. A "manual" scalelength will set the size to sizescale in
+    arcseconds.
+
+    Lastly, ignore_exception will create the table while ignoring any
+    exceptions which come up. This is not recommended for the final run.
+
     WARNING: DO NOT SUPPLY THE ENTIRE TABLE TO THIS FUNCTION!
     '''
     if len(WISEtable) > 10:
         raise ValueError("Woah! Too many objects to render, buddy!")
-    f = plt.figure(figsize=(12,4))
+    f = plt.figure(figsize=(4*5, 4*len(WISEtable)))
     # Without these margins, the axes are impossible to see.
     top_margin = 0.1
     bottom_margin = 0.1
@@ -1528,6 +1552,16 @@ def ellipse_cutout_grid(BASEDIR, WISEtable, runbands=bands, skyAperture=True,
                 galname = WISErow["objstr_01"]
             else:
                 galname=""
+
+            # If we want W1, we're going to set it to be w1 manually.
+            if scalelength == "W1":
+                sizescale *= WISErow["w1rsemi"]
+                scalelength = "manual"
+            # Also, let's only set the scale bar on the last image.
+            if band == scalebarband:
+                scalebar=True
+            else:
+                scalebar=False
             try:
                 draw_ellipse_cutout(
                     BASEDIR, WISErow, band, f, skyAperture=skyAperture,
@@ -1536,7 +1570,8 @@ def ellipse_cutout_grid(BASEDIR, WISEtable, runbands=bands, skyAperture=True,
                     maskbase=maskbase, sizescale=sizescale,
                     coords=draw_coords, hide_x_labels=True, hide_y_labels=True,
                     galname=galname, galcoord=(0.4, 0.9),
-                    scalelength=scalelength)
+                    scalelength=scalelength, scalebar=scalebar,
+                    scalebarlength=scalebarlength)
             except iraf.IrafError as e:
                 continue
     return f
@@ -1581,7 +1616,8 @@ def draw_ellipse_cutout(
         skyprefix="sky_level", aperturefile="ellipse_aperture",
         skymethod="adaptive", maskbase="mask", sizescale=1.5, 
         coords=[1, 1, 1, 1], hide_x_labels=False, hide_y_labels=False, 
-        galname="", galcoord=(0.1, 0.9), scalelength="ellipse"):
+        galname="", galcoord=(0.1, 0.9), scalelength="ellipse", scalebar=True,
+        scalebarlength=5):
     '''Draws a cutout given for a particular band into a figure instance.
 
     A cutout for each band will be created that contains the aperture
@@ -1626,6 +1662,8 @@ def draw_ellipse_cutout(
         sl = WISErow["w1rsemi"]
     elif scalelength is "sky":
         sl = get_outer_sky_length(galaxydir, band)
+    elif scalelength is "manual":
+        sl = 1
     cutoutsize = sizescale * sl / 3600.0
     gc.recenter(Xval, Yval, radius=cutoutsize)
     # Now we want to put the name of the galaxy on the image.
@@ -1635,13 +1673,18 @@ def draw_ellipse_cutout(
     imgheight = coords[3]
     xcoord = coords[0] + galcoord[0] * imgwidth
     ycoord = coords[1] + galcoord[1] * imgheight
-    gc.add_label(galcoord[0], galcoord[1], galname, relative=True)
+    gc.add_label(galcoord[0], galcoord[1], galname, relative=True, size="large")
     if hide_x_labels:
         gc.hide_xtick_labels()
         gc.hide_xaxis_label()
     if hide_y_labels:
         gc.hide_ytick_labels()
         gc.hide_yaxis_label()
+    if scalebar:
+        gc.add_scalebar(scalebarlength / 3600.0)
+        gc.scalebar.set_label('{0:d}"'.format(scalebarlength))
+        gc.scalebar.set_linewidth(3)
+        gc.scalebar.set_font_size("large")
     gc.refresh()
 
 def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive"):

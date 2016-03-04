@@ -519,10 +519,15 @@ def create_stellar_mass_luminosity_relation(
     
 
 def create_cutout_grid(
-        table=atlas3d_table[:2], dest=os.path.join(FIGUREPATH, "cutouts.png"),
-        BASEDIR=ATLAS3DBASE):
+        table=atlas3d_table, 
+        tablenames = ["NGC4489", "PGC051753", "NGC2594", "NGC4570", "NGC6278"], 
+        dest=os.path.join(FIGUREPATH, "cutouts.png"), BASEDIR=ATLAS3DBASE):
+    
+    thumbtable = phot.extract_subtable_from_column(table, "objstr_01",
+                                                   tablenames)
     gridfig = phot.ellipse_cutout_grid(
-        BASEDIR, table, ignore_exception=True)
+        BASEDIR, thumbtable, scalelength="W1", sizescale=2.5, 
+        ignore_exception=False, runbands=["FUV", "NUV", "W1", "W2", "W3", "W4"] )
     gridfig.savefig(dest)
     plt.close(gridfig)
 
