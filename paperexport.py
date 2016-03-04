@@ -771,15 +771,17 @@ def create_circumstellar_verification_plot(
     amblard_overlap = phot.join_by_galaxy_name(dcat, amblard_objects, 
                                                names=("objstr_01", "Name"))
     amblard_dusty = amblard_overlap[np.where(
-        np.logical_and(
+        np.logical_or(np.logical_or(
             amblard_overlap["250_mum"] > 5*amblard_overlap["250_mum_err"],
-            amblard_overlap["350_mum"] > 5*amblard_overlap["350_mum_err"],
+            amblard_overlap["350_mum"] > 5*amblard_overlap["350_mum_err"]),
             amblard_overlap["500_mum"] > 5*amblard_overlap["500_mum_err"]))]
 
     dusty_atlas3d_indices = phot.astropy_table_indices(
         dcat, "objstr_01", amblard_dusty["objstr_01"])
     print "% of overlapped galaxies w/ FIR Dust detections: {0:.2f}".format(
         float(len(amblard_dusty["objstr_01"]))/len(amblard_overlap)*100)
+    print len(amblard_overlap)
+
 
 
     class0w1w3, class0w1w3_err, class0w1w3_lim = stat.subtract(
@@ -805,15 +807,18 @@ def create_circumstellar_verification_plot(
         colorcut_dustless["w1unexterr"], colorcut_dustless["w4unexterr"], 
         colorcut_dustless["w1unextlim"], colorcut_dustless["w4unextlim"])
 
-    stat.errorbar(class0w1w3, class0w1w4, class0w1w3_err, class0w1w4_err,
+    stat.errorbar(dustyw1w3, dustyw1w4, dustyw1w4_err,
+                  dustyw1w3_err, dustyw1w4_lim, 'go', 
+                  label="ATLAS3D (FIR Det)", ufmt="gv", lfmt="g^")
+    stat.errorbar(colorcutw1w3, colorcutw1w4, colorcutw1w4_err,
+                  colorcutw1w3_err, colorcutw1w4_lim,
+                  label="ATLAS3D", fmt="mo", ufmt="mv", lfmt="m^")
+    stat.errorbar(class0w1w3, class0w1w4, class0w1w4_err, class0w1w3_err,
                   class0w1w4_lim, label="Class 0", ufmt="kv", lfmt="k^", 
                   **rp.MIR_Symbols[0])
-    stat.errorbar(dustyw1w3, dustyw1w4, dustyw1w3_err,
-                  dustyw1w4_err, dustyw1w4_lim, 'go', 
-                  label="ATLAS3D (FIR Det)", ufmt="gv", lfmt="g^")
-    stat.errorbar(colorcutw1w3, colorcutw1w4, colorcutw1w3_err,
-                  colorcutw1w4_err, colorcutw1w4_lim,
-                  label="ATLAS3D", fmt="mo", ufmt="mv", lfmt="m^")
+#   plt.plot(amblard_dusty["w1unextmag"]-amblard_dusty["w3unextmag"],
+#            amblard_dusty["w1unextmag"]-amblard_dusty["w4unextmag"],
+#            "kx", mew=2)
     fsps.plot_FSPS_color_color(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
         modelbase=os.path.join("toggle_dust_met_bounds", "dust_highmet"),

@@ -391,14 +391,14 @@ def color_cut_dustless_table(atlas3d_table):
 def color_cut_dustless_indices(w1, w3, w4):
     '''Returns indicies that would register as dustless from a color cut.
 
-    The color cut consists of W1-W3 > -1.8 and W1-W4 > -2.23. This was the
+    The color cut consists of W1-W3 > -1.85 and W1-W4 > -2.23. This was the
     region in W1-W3 and W1-W4 where there are no measured galaxies with cold
     gas.
     '''
     w1w3 = w1 - w3
     w1w4 = w1 - w4
 
-    return np.where(np.logical_and(w1w3 < -1.8, w1w4 < -2.23))
+    return np.where(np.logical_and(w1w3 < -1.85, w1w4 < -2.23))
 
 def plot_dustless_separation(
     atlas3d_table, xval, yval, yerr, xerr, ylim, fmt, color=True, **kwargs):
