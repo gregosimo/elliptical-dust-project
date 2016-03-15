@@ -22,6 +22,7 @@ The function returns a 3-tuple containing the new value, error and limit.
 
 import numpy as np
 import matplotlib.pyplot as plt
+from astropy.table import Column
 
 import band_conversions as conv
 
@@ -58,7 +59,7 @@ def invert_limits(limits):
     UPPER and LOWER limits will switch, while valid/unconstrained values will
     remain as they were.
     '''
-    newlimits = np.copy(limits)
+    newlimits = np.array(limits, subok=True)
     upperindices = np.where(limits == UPPER)
     lowerindices = np.where(limits == LOWER)
     # For the case when limits is not an array, but just a float.
@@ -81,7 +82,13 @@ def combine_limits(lim1, lim2):
 
     See combine_limit for the algebra
     '''
-    return np.array([combine_limit(v1, v2) for (v1, v2) in zip(lim1, lim2)])
+    limitlist = [combine_limit(v1, v2) for (v1, v2) in zip(lim1, lim2)]
+    if isinstance(lim1, Column) and isinstance(lim2, Column):
+        newlimits = Column(limitlist)
+    else:
+        newlimits = np.array(limitlist)
+    return newlimits
+        
 
 def combine_inverted_limits(lim1, lim2):
     '''This is used for cases where one of the limits needs to be flipped.
@@ -407,6 +414,10 @@ def _errorbar(x, y, **kwargs):
         normy, normyerr = get_lim(y, yerr, ylim, DETECTION)
         plt.errorbar(normx, normy, normyerr, normxerr, **kwargs)
 
+        # We want the limits to be automatically unfilled. So if there is a
+        # fill value for upper limits, we'll remove it.
+        if "fillstyle" in kwargs:
+            del(kwargs["fillstyle"])
         # Now upper limits
         ux, uxerr = get_lim(x, xerr, ylim, UPPER)
         uy, uyerr = get_lim(y, yerr, ylim, UPPER)

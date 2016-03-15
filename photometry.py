@@ -1501,8 +1501,8 @@ def generateEllipseCutouts(BASEDIR, WISEtable, runbands=bands,
 def ellipse_cutout_grid(
         BASEDIR, WISEtable, runbands=bands, skyAperture=True, skyimage=False, 
         skyprefix="sky_level", aperturefile="ellipse_aperture", 
-        skymethod="adaptive", maskbase="mask", sizescale=1.5, 
-        scalelength="ellipse", scalebarlength=15, scalebarband="FUV", 
+        skymethod="adaptive", maskbase="mask", scalesize=1.5, 
+        scale="ellipse", scalebarlength=30, scalebarband="FUV", 
         ignore_exception=False):
     '''Returns a figure with a grid of cutout figures.
 
@@ -1554,9 +1554,12 @@ def ellipse_cutout_grid(
                 galname=""
 
             # If we want W1, we're going to set it to be w1 manually.
-            if scalelength == "W1":
-                sizescale *= WISErow["w1rsemi"]
-                scalelength = "manual"
+            if scale == "W1":
+                tilescale = "manual"
+                tilesize = scalesize * WISErow["w1rsemi"]
+            else:
+                tilescale = scale
+                tilesize = scalesize
             # Also, let's only set the scale bar on the last image.
             if band == scalebarband:
                 scalebar=True
@@ -1567,10 +1570,10 @@ def ellipse_cutout_grid(
                     BASEDIR, WISErow, band, f, skyAperture=skyAperture,
                     skyimage=skyimage, skyprefix=skyprefix,
                     aperturefile=aperturefile, skymethod=skymethod,
-                    maskbase=maskbase, sizescale=sizescale,
+                    maskbase=maskbase, sizescale=tilesize,
                     coords=draw_coords, hide_x_labels=True, hide_y_labels=True,
                     galname=galname, galcoord=(0.4, 0.9),
-                    scalelength=scalelength, scalebar=scalebar,
+                    scalelength=tilescale, scalebar=scalebar,
                     scalebarlength=scalebarlength)
             except iraf.IrafError as e:
                 continue
@@ -1617,7 +1620,7 @@ def draw_ellipse_cutout(
         skymethod="adaptive", maskbase="mask", sizescale=1.5, 
         coords=[1, 1, 1, 1], hide_x_labels=False, hide_y_labels=False, 
         galname="", galcoord=(0.1, 0.9), scalelength="ellipse", scalebar=True,
-        scalebarlength=5):
+        scalebarlength=5, show_scalebarlength=False):
     '''Draws a cutout given for a particular band into a figure instance.
 
     A cutout for each band will be created that contains the aperture
@@ -1664,8 +1667,12 @@ def draw_ellipse_cutout(
         sl = get_outer_sky_length(galaxydir, band)
     elif scalelength is "manual":
         sl = 1
+    else:
+        raise ValueError("Don't understand scalelength"
+                         "{0}".format(scalelength))
     cutoutsize = sizescale * sl / 3600.0
     gc.recenter(Xval, Yval, radius=cutoutsize)
+    print "Cutout radius for {0} is {1}.".format(galname, cutoutsize*3600)
     # Now we want to put the name of the galaxy on the image.
     # Since the coordinates are in percentile units of the image, they need to
     # be transformed to the units of the figure.
@@ -1673,7 +1680,8 @@ def draw_ellipse_cutout(
     imgheight = coords[3]
     xcoord = coords[0] + galcoord[0] * imgwidth
     ycoord = coords[1] + galcoord[1] * imgheight
-    gc.add_label(galcoord[0], galcoord[1], galname, relative=True, size="large")
+    gc.add_label(galcoord[0], galcoord[1], galname, relative=True, 
+                 size="x-large")
     if hide_x_labels:
         gc.hide_xtick_labels()
         gc.hide_xaxis_label()
@@ -1682,9 +1690,12 @@ def draw_ellipse_cutout(
         gc.hide_yaxis_label()
     if scalebar:
         gc.add_scalebar(scalebarlength / 3600.0)
-        gc.scalebar.set_label('{0:d}"'.format(scalebarlength))
         gc.scalebar.set_linewidth(3)
-        gc.scalebar.set_font_size("large")
+        if show_scalebarlength:
+            gc.scalebar.set_label('{0:d}"'.format(scalebarlength))
+            gc.scalebar.set_font_size("large")
+        else:
+            gc.scalebar.set_label("")
     gc.refresh()
 
 def drawSkyParams(galaxydir, band, gc, skyprefix="sky_level", method="adaptive"):
