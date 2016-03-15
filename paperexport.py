@@ -10,6 +10,7 @@ import os
 import matplotlib
 matplotlib.use("PDF")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import AutoMinorLocator
 from astropy.table import Table, vstack
 from astropy.modeling import models, fitting
 from astropy.io.ascii import masked
@@ -327,11 +328,21 @@ def create_W2_W3_cumulative_histogram(
         table=rampazzo_table, dest=build_filepath(FIGUREPATH,
                                                   "class023_cumhist")):
     '''Cumulative histogram illustrating difference between Class 0 and 2/3.'''
+    minorLocator = AutoMinorLocator(5)
     table = remove_bad_galaxies(table)
-    xlabel = "W2-W3"
+    xlabel = "W2-W3 (AB)"
     rp.color_cumulative_histogram_by_class(
-        table["w2unextmag"], table["w3unextmag"], table["MIR_class"], "W2-W3",
+        table["w2unextmag"], table["w3unextmag"], table["MIR_class"], xlabel,
         "", 80, colrange=(-1.5, 2.5), classes=[0, 2, 3])
+    plt.plot([-1.2, -1.2], [0, 1], 'r--')
+    ax = plt.gca()
+    ax.xaxis.set_minor_locator(minorLocator)
+    plt.xlim([-1.5, 0.5])
+    plt.ylim([0, 1])
+    add_Vega_axis("W2", "W3")
+    newax = plt.gca()
+    newminorLocator = AutoMinorLocator(5)
+    newax.xaxis.set_minor_locator(newminorLocator)
     plt.savefig(dest)
     plt.close()
 
@@ -374,12 +385,15 @@ def create_W2W3_W3W4_MIR_plot(table=rampazzo_table,
     w2err = table["w2unexterr"]
     w3err = table["w3unexterr"]
     w4err = table["w4unexterr"]
+    w2lim = table["w2unextlim"]
+    w3lim = table["w3unextlim"]
+    w4lim = table["w4unextlim"]
     MIR = table["MIR_class"]
 
-    w2w3, w2w3err = stat.subtract(w2, w3, w2err, w3err)
-    w3w4, w3w4err = stat.subtract(w3, w4, w3err, w4err)
+    w2w3, w2w3err, w2w3lim = stat.subtract(w2, w3, w2err, w3err, w2lim, w3lim)
+    w3w4, w3w4err, w3w4lim = stat.subtract(w3, w4, w3err, w4err, w3lim, w4lim)
 
-    rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, xrange(5), xlabel,
+    rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, w2w3lim, xrange(5), xlabel,
                ylabel, "", loc="upper left")
     plt.axis([-1.5, 0, -1.5, 0])
     plt.savefig(dest)
@@ -414,22 +428,24 @@ def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
     w2w3, w2w3err, w2w3lim = stat.subtract(w2, w3, w2err, w3err, w2lim, w3lim)
     w3w4, w3w4err, w3w4lim = stat.subtract(w3, w4, w3err, w4err, w3lim, w4lim)
 
-    w1w2label = "W1-W2"
-    w2w3label = "W2-W3"
-    w3w4label = "W3-W4"
+    w1w2label = "W1-W2 (AB)"
+    w2w3label = "W2-W3 (AB)"
+    w3w4label = "W3-W4 (AB)"
 
     plt.subplot(1, 2, 1)
-    rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, xrange(5), w2w3label,
+    rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, w1w2lim, xrange(5), w2w3label,
                w1w2label, "", loc="lower right")
     plt.axis([-1.5, 0, -0.75, -0.6])
+    add_dual_Vega_axes("W2", "W3", "W1", "W2")
 
     plt.subplot(1, 2, 2)
-    rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, xrange(5), w3w4label,
+    rp.MIRplot(w3w4, w2w3, MIR, w2w3err, w3w4err, w2w3lim, xrange(5), w3w4label,
                w2w3label, "", loc=None)
     plt.axis([-1.5, 0, -1.5, 0])
+    add_dual_Vega_axes("W3", "W4", "W2", "W3") 
     plt.tight_layout()
     plt.savefig(dest)
-    plt.close()
+#   plt.close()
 
 
 
@@ -520,13 +536,15 @@ def create_stellar_mass_luminosity_relation(
 
 def create_cutout_grid(
         table=atlas3d_table, 
-        tablenames = ["NGC4489", "PGC051753", "NGC2594", "NGC4570", "NGC6278"], 
+        tablenames = ["IC3631", "PGC051753", "NGC4660", "NGC4570", "NGC6278"], 
         dest=os.path.join(FIGUREPATH, "cutouts.png"), BASEDIR=ATLAS3DBASE):
     
     thumbtable = phot.extract_subtable_from_column(table, "objstr_01",
                                                    tablenames)
+    thumbtable["logM"] = thumbtable["logML_star"] + thumbtable["logLum"]
+    thumbtable.sort("logM")
     gridfig = phot.ellipse_cutout_grid(
-        BASEDIR, thumbtable, scalelength="W1", sizescale=2.5, 
+        BASEDIR, thumbtable, scale="W1", scalesize=2.7, 
         ignore_exception=False, runbands=["FUV", "NUV", "W1", "W2", "W3", "W4"] )
     gridfig.savefig(dest)
     plt.close(gridfig)
@@ -618,7 +636,7 @@ def create_mass_to_light_ATLAS3D_comparison(
     # If I figure out how to get parameter estimates with error bars, I'll do
     # that for a variable slope.
     flatline = models.Linear1D(0, -0.006, fixed={"slope": True})
-    fit_l = fitting.LevMarLSQFitter()
+    fit_l = fitting.LinearLSQFitter()
     flatfit = fit_l(flatline, w1w2dustless, dustlesstable["logML_W1"])
     fit_limits = np.linspace(-0.75, -0.6, 2)
     flatlogval = flatfit(0)
@@ -677,7 +695,7 @@ def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table,
 
     plt.errorbar(aw1abs, anuvw1, anuvw1_e, aw1abs_e, 'kx', label="ATLAS3D")
     rp.MIRplot(rw1abs, rnuvw1, rtable["MIR_class"], rnuvw1_e, 
-               xlabel=r"M$_{W1}$", ylabel="NUV-W1")
+               xlabel=r"M$_{W1}$", ylabel="NUV-W1 (AB)")
 
     plt.ylim([2, 7])
     plt.xlim([-18, -24])
@@ -710,7 +728,7 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
                                                        pah77_err, pah113_err)
 
     rp.MIRplot(xcolor, yratio, classtable["MIR_class"], yerr=yratioerr, 
-               xerr=xcolorerr, classes=(2,3), xlabel="NUV-J",
+               xerr=xcolorerr, classes=(2,3), xlabel="NUV-J (AB)",
                ylabel="7.7 um / 11.3 um")
     plt.xlabel("NUV-J")
     plt.ylabel("7.7 um/11.3 um")
@@ -846,6 +864,9 @@ def create_circumstellar_verification_plot(
 #   parsec.plot_parsec_color_color(PARSECPATH, "marigo_lowmet.dat", "W1", "W3",
 #                                  "W1", "W4", label="PARSEC (low met)",
 #                                  fmt="b--", agecutoff=1e9)
+
+    
+    
     plt.xlabel("W1-W3 (AB)")
     plt.ylabel("W1-W4 (AB)")
     add_Vega_axis("W1", "W3")
@@ -854,7 +875,7 @@ def create_circumstellar_verification_plot(
     plt.savefig(dest)
     plt.close()
 
-def add_Vega_axis(band1, band2, axis="x"):
+def add_Vega_axis(band1, band2, axis="x", initax=None):
     '''Adds a matching axis for colors in the Vega system to the current figure.
 
     The necessary information are the two bands used for the color, as well as
@@ -865,7 +886,11 @@ def add_Vega_axis(band1, band2, axis="x"):
     def detransform(a):
         return a - transform(0)
 
-    ax = plt.gca()
+    if initax is None:
+        ax = plt.gca()
+    else:
+        ax = initax
+        print "{0} Axis has been overridden.".format(axis)
 
     if axis == "x":
         newax = ax.twiny()
@@ -876,12 +901,51 @@ def add_Vega_axis(band1, band2, axis="x"):
         lowbound, upbound = ax.get_xlim()
         newax.set_xlim(transform(lowbound), transform(upbound))
         newax.set_xlabel(ax.get_xlabel().replace("(AB)", "(Vega)"))
-    if axis == "y":
-        ax.yaxis.tick_left()
+    elif axis == "y":
         newax = ax.twinx() 
+        ax.yaxis.tick_right()
+        ax.yaxis.set_label_position("right")
+        newax.yaxis.tick_left()
+        newax.yaxis.set_label_position("left")
         lowbound, upbound = ax.get_ylim()
         newax.set_ylim(transform(lowbound), transform(upbound))
         newax.set_ylabel(ax.get_ylabel().replace("(AB)", "(Vega)"))
+
+    return newax
+
+def add_dual_Vega_axes(xband1, xband2, yband1, yband2):
+    '''Changes converts both the x and y axes to dual AB-Vega axes.
+
+    This function wraps two calls to add_Vega_axis, but cleans up some annoying
+    side effects from running both twinx and twiny on the same axes.
+    '''
+
+    def transform(a, b1, b2):
+        return a + (conv.AB2Vegamag(b1, 0) - conv.AB2Vegamag(b2, 0))
+    def detransform(a, b1, b2):
+        return a - transform(0, b1, b2)
+    ax = plt.gca()
+
+    xax = ax.twiny()
+    yax = ax.twinx()
+
+    ax.xaxis.tick_top()
+    ax.xaxis.set_label_position('top')
+    xax.xaxis.tick_bottom()
+    xax.xaxis.set_label_position("bottom")
+    lowbound, upbound = ax.get_xlim()
+    xax.set_xlim(transform(lowbound, xband1, xband2), 
+                 transform(upbound, xband1, xband2))
+    xax.set_xlabel(ax.get_xlabel().replace("(AB)", "(Vega)"))
+
+    ax.yaxis.tick_right()
+    ax.yaxis.set_label_position("right")
+    yax.yaxis.tick_left()
+    yax.yaxis.set_label_position("left")
+    lowbound, upbound = ax.get_ylim()
+    yax.set_ylim(transform(lowbound, yband1, yband2), 
+                 transform(upbound, yband1, yband2))
+    yax.set_ylabel(ax.get_ylabel().replace("(AB)", "(Vega)"))
 
 def create_circumstellar_dust_plot(table=atlas3d_table,
                                    dest=build_filepath(FIGUREPATH, "cdust",
@@ -899,9 +963,9 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
         dustless_catalog["w1unextmag"], dustless_catalog["w4unextmag"], 
         dustless_catalog["w1unexterr"], dustless_catalog["w4unexterr"],
         dustless_catalog["w1unextlim"], dustless_catalog["w4unextlim"])
-    atlas3d_ages = dustless_catalog["Age_SSP"]
-    atlas3d_ages_err = dustless_catalog["Age_SSP_err"]
-    atlas3d_metallicities = dustless_catalog["[Z/H]_SSP"]
+    atlas3d_ages = dustless_catalog["Age_SFH"]
+    atlas3d_ages_err = dustless_catalog["Age_SFH_err"]
+    atlas3d_metallicities = dustless_catalog["[Z/H]_SFH"]
     med_met = float(np.ma.median(atlas3d_metallicities))
                                                 
     
@@ -912,9 +976,11 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
         atlas3d_ages, w1w3color, w1w3err, atlas3d_ages_err, w1w3lim,
         atlas3d_metallicities, med_met)
     fsps.plot_dust_toggled_metallicity_bounds(
-        os.path.join(fsps.OUTPUT_PATH, "toggle_dust_met_bounds"), "W1", "W3")
-    plt.legend(loc="upper right", fontsize="small")
-    plt.ylabel("W1-W3")
+        os.path.join(fsps.OUTPUT_PATH, "narrower_bounds"), "W1", "W3",
+        highmet=-0.1, lowmet=-0.3)
+    ax1.set_ylim([-3.0, -0.5])
+    plt.ylabel("W1-W3 (AB)")
+    add_Vega_axis("W1", "W3", "y")
 
     # Now the second plot: W1-W4
     plt.sca(ax2)
@@ -922,14 +988,18 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
         atlas3d_ages, w1w4color, w1w4err, atlas3d_ages_err, w1w4lim,
         atlas3d_metallicities, med_met)
     fsps.plot_dust_toggled_metallicity_bounds(
-        os.path.join(fsps.OUTPUT_PATH, "toggle_dust_met_bounds"), "W1", "W4")
-    ax2.set_ylim([-4, 1])
-    plt.xlim(0, 19)
-    plt.ylabel("W1-W4")
-    plt.xlabel("SSP Age (Gyr)")
+        os.path.join(fsps.OUTPUT_PATH, "narrower_bounds"), "W1", "W4",
+        highmet=-0.1, lowmet=-0.3)
+    ax2.set_ylim([-4, 0])
+    plt.sca(ax2)
+    plt.xlim(0, 15)
+    plt.ylabel("W1-W4 (AB)")
+    plt.xlabel("SFH Age (Gyr)")
+    plt.legend(loc="lower left", fontsize="small")
+    add_Vega_axis("W1", "W4", "y")
     plt.tight_layout(0)
-    plt.savefig(dest)
-    plt.close()
+#   plt.savefig(dest)
+#   plt.close()
 
 def create_star_formation_plot(
         table=atlas3d_table, dest=build_filepath(FIGUREPATH, "circsfr", EXT)):
@@ -1440,7 +1510,7 @@ def read_McDermid15_Table_3(
     atlas3dsample = separate_errors_in_table(atlas3dsample)
     return atlas3dsample
 
-def read_McDermid_Table_4(
+def read_McDermid15_Table_4(
         URL=("/home/regulus/simonian/year1/wise/ATLAS3D_DB/"
              "McDermid2015_Atlas3D_Paper30_Table4.txt")):
     '''Reads in the table from McDermid 2015

@@ -5,6 +5,7 @@ from astropy.table import Table, join
 
 import photometry as phot
 import fsps
+import statop as stat
 
 MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ', 
                    "markeredgewidth": 1.5, 
@@ -172,8 +173,8 @@ def plot_rampazzo_line_ratios(linetable, mirtable, title):
     plt.legend()
     plt.title(title)
 
-def MIRplot(x, y, mirindex, yerr=None, xerr=None, classes=xrange(5), xlabel="", 
-            ylabel="", title="", loc='upper right'):
+def MIRplot(x, y, mirindex, yerr=None, xerr=None, ylim=None, classes=xrange(5), 
+            xlabel="", ylabel="", title="", loc='upper right'):
     '''Makes a plot that automatically differentiates between MIR classes.
 
     The x and y data need to be columns which have the same length as 
@@ -196,6 +197,13 @@ def MIRplot(x, y, mirindex, yerr=None, xerr=None, classes=xrange(5), xlabel="",
             xerrgroup = None
         else:
             raise ValueError("xerr must be a Table or None")
+    try:
+        ylimgroup = ylim.group_by(mirindex)
+    except AttributeError:
+        if ylim is None:
+            ylimgroup = None
+        else:
+            raise ValueError("ylim must be a Table or None")
 
     for MIRclass in classes:
         try:
@@ -212,13 +220,17 @@ def MIRplot(x, y, mirindex, yerr=None, xerr=None, classes=xrange(5), xlabel="",
                 xerrvals = xerrgroup.groups[yerrgroup.groups.keys==MIRclass]
             except AttributeError:
                 xerrvals = None
+            try:
+                ylimvals = ylimgroup.groups[ylimgroup.groups.keys==MIRclass]
+            except AttributeError:
+                ylimvals = None
         except IndexError:
             # If the given class is not in the groups, ignore it.
             print "Class {0} not detected.".format(MIRclass)
             raise
         
 
-        plt.errorbar(xvals, yvals, yerrvals, xerrvals,
+        stat.errorbar(xvals, yvals, yerrvals, xerrvals, ylimvals,
                      label="Class {0}".format(MIRclass), 
                      **MIR_Symbols[MIRclass])
 
