@@ -369,13 +369,15 @@ def mag_table_to_flux_table(
         lim_column = phot.name_photometry_column(band, limit=True)
         if ZP is "AB":
             newtable[mag_column] = conv.ABmag2Jansky(band, table[mag_column])
+            newtable[err_column] = conv.AB_mag_err_to_Jansky_err(
+                band, table[mag_column], table[err_column])
         elif ZP is "Vega":
             newtable[mag_column] = conv.Vegamag2Jansky(band, table[mag_column])
+            newtable[err_column] = conv.Vega_mag_err_to_Jansky_err(
+                band, table[mag_column], table[err_column])
         else:
             raise ValueError("Don't understand magnitude system: "
                              "{0}.".format(ZP))
-        newtable[err_column] = conv.Mag_err_to_Jansky_err(
-            band, table[mag_column], table[err_column])
         newtable[lim_column] = stat.invert_limits(table[lim_column])
     return newtable
 
