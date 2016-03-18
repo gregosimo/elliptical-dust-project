@@ -810,6 +810,9 @@ def create_circumstellar_verification_plot(
     class0w1w3, class0w1w3_err, class0w1w3_lim = stat.subtract(
         class0["w1unextmag"], class0["w3unextmag"], class0["w1unexterr"],
         class0["w3unexterr"], class0["w1unextlim"], class0["w3unextlim"])
+    class0w2w3, class0w2w3_err, class0w2w3_lim = stat.subtract(
+        class0["w2unextmag"], class0["w3unextmag"], class0["w2unexterr"],
+        class0["w3unexterr"], class0["w2unextlim"], class0["w3unextlim"])
     class0w1w4, class0w1w4_err, class0w1w4_lim = stat.subtract(
         class0["w1unextmag"], class0["w4unextmag"], class0["w1unexterr"],
         class0["w4unexterr"], class0["w1unextlim"], class0["w4unextlim"])
@@ -817,6 +820,10 @@ def create_circumstellar_verification_plot(
         colorcut_dusty["w1unextmag"], colorcut_dusty["w3unextmag"], 
         colorcut_dusty["w1unexterr"], colorcut_dusty["w3unexterr"], 
         colorcut_dusty["w1unextlim"], colorcut_dusty["w3unextlim"])
+    dustyw2w3, dustyw2w3_err, dustyw2w3_lim = stat.subtract(
+        colorcut_dusty["w2unextmag"], colorcut_dusty["w3unextmag"], 
+        colorcut_dusty["w2unexterr"], colorcut_dusty["w3unexterr"], 
+        colorcut_dusty["w2unextlim"], colorcut_dusty["w3unextlim"])
     dustyw1w4, dustyw1w4_err, dustyw1w4_lim = stat.subtract(
         colorcut_dusty["w1unextmag"], colorcut_dusty["w4unextmag"], 
         colorcut_dusty["w1unexterr"], colorcut_dusty["w4unexterr"], 
@@ -825,6 +832,10 @@ def create_circumstellar_verification_plot(
         colorcut_dustless["w1unextmag"], colorcut_dustless["w3unextmag"], 
         colorcut_dustless["w1unexterr"], colorcut_dustless["w3unexterr"], 
         colorcut_dustless["w1unextlim"], colorcut_dustless["w3unextlim"])
+    colorcutw2w3, colorcutw2w3_err, colorcutw2w3_lim = stat.subtract(
+        colorcut_dustless["w2unextmag"], colorcut_dustless["w3unextmag"], 
+        colorcut_dustless["w2unexterr"], colorcut_dustless["w3unexterr"], 
+        colorcut_dustless["w2unextlim"], colorcut_dustless["w3unextlim"])
     colorcutw1w4, colorcutw1w4_err, colorcutw1w4_lim = stat.subtract(
         colorcut_dustless["w1unextmag"], colorcut_dustless["w4unextmag"], 
         colorcut_dustless["w1unexterr"], colorcut_dustless["w4unexterr"], 
