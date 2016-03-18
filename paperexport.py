@@ -842,21 +842,22 @@ def create_circumstellar_verification_plot(
 #   plt.plot(amblard_dusty["w1unextmag"]-amblard_dusty["w3unextmag"],
 #            amblard_dusty["w1unextmag"]-amblard_dusty["w4unextmag"],
 #            "kx", mew=2)
+    dustfolder = "toggle_dust_met_bounds"
     fsps.plot_FSPS_color_color(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
-        modelbase=os.path.join("toggle_dust_met_bounds", "dust_highmet"),
+        modelbase=os.path.join(dustfolder, "dust_highmet"),
         label="[Z/H] = 0.2", fmt="r-", agecutoff=1e9)
     fsps.plot_FSPS_color_color(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
-        modelbase=os.path.join("toggle_dust_met_bounds", "dust_lowmet"),
+        modelbase=os.path.join(dustfolder, "dust_lowmet"),
         label="[Z/H] = -0.89", fmt="b-", agecutoff=1e9)
     fsps.plot_FSPS_color_color(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
-        modelbase=os.path.join("toggle_dust_met_bounds", "nodust_highmet"),
+        modelbase=os.path.join(dustfolder, "nodust_highmet"),
         label="[Z/H] = 0.2", fmt="r:", agecutoff=1e9)
     fsps.plot_FSPS_color_color(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
-        modelbase=os.path.join("toggle_dust_met_bounds", "nodust_lowmet"),
+        modelbase=os.path.join(dustfolder, "nodust_lowmet"),
         label="[Z/H] = -0.89", fmt="b:", agecutoff=1e9)
 #   parsec.plot_parsec_color_color(PARSECPATH, "marigo_highmet.dat", "W1", "W3",
 #                                  "W1", "W4", label="PARSEC (high met)",
@@ -869,9 +870,8 @@ def create_circumstellar_verification_plot(
     
     plt.xlabel("W1-W3 (AB)")
     plt.ylabel("W1-W4 (AB)")
-    add_Vega_axis("W1", "W3")
-    add_Vega_axis("W1", "W4", "y")
     plt.legend(loc="lower right")
+    add_dual_Vega_axes("W1", "W3", "W1", "W4")
     plt.savefig(dest)
     plt.close()
 
@@ -976,9 +976,9 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
         atlas3d_ages, w1w3color, w1w3err, atlas3d_ages_err, w1w3lim,
         atlas3d_metallicities, med_met)
     fsps.plot_dust_toggled_metallicity_bounds(
-        os.path.join(fsps.OUTPUT_PATH, "narrower_bounds"), "W1", "W3",
+        os.path.join(fsps.OUTPUT_PATH, "matched_late_const_sfr"), "W1", "W3",
         highmet=-0.1, lowmet=-0.3)
-    ax1.set_ylim([-3.0, -0.5])
+    ax1.set_ylim([-2.9, -0.5])
     plt.ylabel("W1-W3 (AB)")
     add_Vega_axis("W1", "W3", "y")
 
@@ -998,8 +998,8 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     plt.legend(loc="lower left", fontsize="small")
     add_Vega_axis("W1", "W4", "y")
     plt.tight_layout(0)
-#   plt.savefig(dest)
-#   plt.close()
+    plt.savefig(dest)
+    plt.close()
 
 def create_star_formation_plot(
         table=atlas3d_table, dest=build_filepath(FIGUREPATH, "circsfr", EXT)):
