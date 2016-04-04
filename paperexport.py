@@ -6,6 +6,8 @@ necessary plots and tables in the paper. When in doubt, include it.
 
 '''
 import os
+import tarfile
+from StringIO import StringIO
 
 import matplotlib
 matplotlib.use("PDF")
@@ -46,7 +48,7 @@ FULL_GIL_DE_PAZ_TABLE = os.path.join(GDPBASE, "gil_de_paz.tbl")
 
 # If we want to change the type of file which is exported, just change this
 # extension!
-EXT = "pdf"
+EXT = "eps"
 
 # This is the string which is displayed in LaTeX for a missing value.
 LATEX_TABLE_MASKSTRING = r"--"
@@ -242,40 +244,85 @@ def create_param_table(table=fulltable[:10], dest=os.path.join(TABLEPATH,
     names = ["Galaxy", "Morph", "D", "S", r"\(a_{W1}\)", r"\(a_{W4}\)",
              r"\(b/a_{W1}\)", r"\(b/a_{W4}\)", "PA", "Survey", "NUV Tile", 
              "FUV Tile"]
-    preamble = r"""\tabletypesize{\scriptsize}"""
+#   preamble = r"""\tabletypesize{\scriptsize}"""
+    preamble = ""
     collist = latex_colnum_header(len(names))
-    tablefoot = r"""\tablecomments{Galaxy information and aperture photometry
-    parameters. Columns: (1) galaxy name; (2) morphological type; (3) distance
-    in Mpc; (4) Originating Sample (A: \ATLAS{} R: \Rampazzo{} B: Both); (5) W1
-    aperture semimajor axis in arcseconds; (6) W4 aperture semimajor axis in
-    arcseconds; (7) W1 aperture axis ratio; (8) W4 aperture axis ratio; (9)
-    Position Angle (10) \WISE{} data release catalog; (11) \GALEX{} NUV 
-    tilename; (12) \GALEX{} FUV tilename. References for morphological type and
-    distance come from \citet{Cappellari11} and \citet{Rampazzo13}.}"""
+    tablefoot = r"""
+    \emph{Notes:} Galaxy information and aperture photometry
+    parameters. Columns: (1)~galaxy name; (2)~morphological type; (3)~distance
+    in Mpc; (4)~Originating Sample (A:~\ATLAS{} R:~\Rampazzo{} B:~Both); (5)~W1
+    aperture semimajor axis in arcseconds; (6)~W4 aperture semimajor axis in
+    arcseconds; (7)~W1 aperture axis ratio; (8)~W4 aperture axis ratio; (9)~
+    Position Angle (10)~\WISE{} data release catalog; (11)~\GALEX{} NUV 
+    tilename; (12)~\GALEX{} FUV tilename. References for morphological type and
+    distance come from \citet{Cappellari11} and \citet{Rampazzo13}. The full
+    version of this table with the full galaxy sample is included in the online
+    journal article."""
     writetable = table[columns]
     writetable.write(
         dest, format="ascii.latex", names=names, 
         latexdict={
             "caption": caption, "preamble": preamble, "tablefoot": tablefoot,
             "header_start": r"\hline", 
-            "header_end": "\n".join([collist,r"\hline"])}, 
+            "header_end": "\n".join([collist,r"\hline"]), 
+            "data_end": r"\hline", "tabletype": "table*"}, 
         formats={
             "NUV Tile": format_GALEX_tile, "FUV Tile": format_GALEX_tile, 
             "S": format_sample, "PA": "%d"})
 
-def create_magnitude_table(table=rampazzo_table[:10], 
+def create_full_param_table(table=fulltable, 
+                            dest=os.path.join(TABLEPATH, "param.txt")):
+    heading = """
+# This is Table 1 from Simonian & Martini (2016):
+# "Circumstellar Dust, PAHs, and Stellar Populations in Early-Type Galaxies:
+#    Insights from GALEX and WISE"
+# 
+# This table contains galaxy information and aperture photometry parameters for
+# the full sample.
+#
+# Columns:
+#   (1) Galaxy Name
+#   (2) Morphological type
+#   (3) Distance (Mpc)
+#   (4) Originating Sample
+#   (5) WISE W1 aperture semimajor axis (arcsec)
+#   (6) WISE W1 axis ratio
+#   (7) WISE W4 aperture semimajor axis (arcsec)
+#   (8) WISE W4 axis ratio
+#   (9) Position Angle
+#   (10) WISE data release catalog
+#   (11) GALEX NUV tilename
+#   (12) GALEX FUV tilename
+"""
+    filestring = StringIO()
+    columns = ["objstr_01", "type", "D", "sample", "w1rsemi", "w4rsemi", 
+               "w1ba", "w4ba", "w1pa", "cat", "NUV_Tile", "FUV_Tile"]
+    names = ["Galaxy", "Morph", "D", "S", "a_W1", "a_W4", "b/a_W1", "b/a_W4", 
+             "PA", "Survey", "NUV Tile", "FUV Tile"]
+    reltable = table[columns]
+    reltable.write(filestring, format="ascii.fixed_width_two_line", names=names)
+    totstr = '\n'.join([heading, filestring.getvalue()])
+    filestring.close()
+    with open(dest, "w") as f:
+        f.write(totstr)
+
+
+def create_magnitude_table(table=fulltable[:10], 
                            dest=os.path.join(TABLEPATH, "mags.tex")):
     caption = r"""Galaxy magnitudes for the \ATLAS{} and \Rampazzo{} samples.
     \label{tab:magtable}"""
-    tablefoot = r"""\tablecomments{Calculated magnitudes for galaxies in our 
+    tablefoot = r"""
+    \emph{Notes:} Calculated magnitudes for galaxies in our 
     sample reported in the AB system. They have not been corrected for 
-    extinction. Columns: (1) Galaxy name; (2) FUV magnitude; (3) FUV magnitude
-    uncertainty; (4) NUV magnitude; (5) NUV magnitude uncertainty; (6) W1
-    magnitude; (7) W1 magnitude uncertainty; (8) W2 magnitude; (9) W2 magnitude
-    uncertainty; (10) W3 magnitude; (11) W3 magnitude uncertainty; (12) W4
-    magnitude; (13) W4 magnitude uncertainty. Uncertainties contain statistical
+    extinction. Columns: (1)~Galaxy name; (2)~FUV magnitude; (3)~FUV magnitude
+    uncertainty; (4)~NUV magnitude; (5)~NUV magnitude uncertainty; (6)~W1
+    magnitude; (7)~W1 magnitude uncertainty; (8)~W2 magnitude; (9)~W2 magnitude
+    uncertainty; (10)~W3 magnitude; (11)~W3 magnitude uncertainty; (12)~W4
+    magnitude; (13)~W4 magnitude uncertainty. Uncertainties contain statistical
     and calibration uncertainties. All upper limits are \(3\sigma\) upper
-    limits.}"""
+    limits. Blank UV entries mean that no \GALEX{} observations were taken. 
+    The full version of this table with the full galaxy sample is included
+    in the online journal article"""
     columns = ["objstr_01", "FUVaperr", "NUVaperr", "w1aperr", "w2aperr", 
                "w3aperr", "w4aperr"]
     column_order = ["objstr_01", "FUVapmag", "FUVaperr", "NUVapmag", "NUVaperr", 
@@ -284,7 +331,8 @@ def create_magnitude_table(table=rampazzo_table[:10],
     names = ["Galaxy", "FUV", r"\(\sigma_{FUV}\)", "NUV", r"\(\sigma_{NUV}\)", 
              "W1", r"\(\sigma_{W1}\)", "W2", r"\(\sigma_{W2}\)", "W3",
              r"\(\sigma_{W3}\)", "W4", r"\(\sigma_{W4}\)"]
-    preamble = r"""\tabletypesize{\scriptsize}"""
+#   preamble = r"""\tabletypesize{\scriptsize}"""
+    preamble = ""
     collist = latex_colnum_header(len(column_order))
     formats = {"Galaxy": format_reflect, r"\(\sigma_{FUV}\)": format_mag_err, 
                r"\(\sigma_{NUV}\)": format_mag_err, 
@@ -310,7 +358,62 @@ def create_magnitude_table(table=rampazzo_table[:10],
         latexdict={
             "caption": caption, "tablefoot": tablefoot, 
             "preamble": preamble, "header_start": r"\hline", 
-            "header_end": "\n".join([collist, r"\hline"])})
+            "header_end": "\n".join([collist, r"\hline"]), "data_end":
+            r"\hline", "tabletype": "table*"})
+
+def create_full_magnitude_table(table=fulltable, 
+                                dest=build_filepath(TABLEPATH, "mags", "txt")):
+    '''Creates the complete machine-readable magnitude table.'''
+    heading = """
+# This is Table 2 from Simonian & Martini (2016):
+# "Circumstellar Dust, PAHs, and Stellar opulations in Early-Type Galaxies:
+#    Insights from GALEX and WISE"
+#
+#    This table contains the photometry for the full sample. None of the values
+#    have been corrected for extinction.
+#
+# Columns:
+#   (1) Object Name
+#   (2)-(3) FUV magnitude and uncertainty
+#   (3)-(4) NUV magnitude and uncertainty
+#   (5)-(6) W1 magnitude and uncertainty
+#   (7)-(8) W2 magnitude and uncertainty
+#   (9)-(10) W3 magnitude and uncertainty
+#   (11)-(12) W4 magnitude and uncertainty
+"""
+    columns = ["objstr_01", "FUVaperr", "NUVaperr", "w1aperr", "w2aperr", 
+               "w3aperr", "w4aperr"]
+    column_order = ["objstr_01", "FUVapmag", "FUVaperr", "NUVapmag", "NUVaperr", 
+                    "w1apmag", "w1aperr", "w2apmag", "w2aperr", "w3apmag", 
+                    "w3aperr", "w4apmag", "w4aperr"]
+    names = ["Galaxy", "FUV", "sig_FUV", "NUV", "sig_NUV", 
+             "W1", "sig_W1", "W2", "sig_W2", "W3",
+             "sig_W3", "W4", "sig_W4"]
+    formats = {"Galaxy": format_reflect, "sig_FUV": format_mag_err, 
+               "sig_NUV": format_mag_err, "sig_W1": format_mag_err, 
+               "sig_W2": format_mag_err, "sig_W3": format_mag_err, 
+               "sig_W4": format_mag_err}
+    export = table[columns]
+    export["FUVapmag"] = format_mag_column(
+        table["FUVapmag"], table["FUVaplim"], upstr="<", lowstr=">")
+    export["NUVapmag"] = format_mag_column(
+        table["NUVapmag"], table["NUVaplim"], upstr="<", lowstr=">")
+    export["w1apmag"] = format_mag_column(
+        table["w1apmag"], table["w1aplim"], upstr="<", lowstr=">")
+    export["w2apmag"] = format_mag_column(
+        table["w2apmag"], table["w2aplim"], upstr="<", lowstr=">")
+    export["w3apmag"] = format_mag_column(
+        table["w3apmag"], table["w3aplim"], upstr="<", lowstr=">")
+    export["w4apmag"] = format_mag_column(
+        table["w4apmag"], table["w4aplim"], upstr="<", lowstr=">")
+
+    tablestr = StringIO()
+    export[column_order].write(
+        tablestr, format="ascii.fixed_width_two_line", names=names, formats=formats)
+    totstr = '\n'.join([heading, tablestr.getvalue()])
+    tablestr.close()
+    with open(dest, "w") as f:
+        f.write(totstr)
 
 def create_W2_W3_histogram(table=rampazzo_table, 
                            dest=build_filepath(FIGUREPATH, "w2w3hist")):
@@ -431,6 +534,7 @@ def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
     w1w2label = "W1-W2 (AB)"
     w2w3label = "W2-W3 (AB)"
     w3w4label = "W3-W4 (AB)"
+    plt.figure(figsize=(15,5))
 
     plt.subplot(1, 2, 1)
     rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, w1w2lim, xrange(5), w2w3label,
@@ -536,13 +640,14 @@ def create_stellar_mass_luminosity_relation(
 
 def create_cutout_grid(
         table=atlas3d_table, 
-        tablenames = ["IC3631", "PGC051753", "NGC4660", "NGC4570", "NGC6278"], 
+        tablenames = ["NGC6278", "NGC4570", "NGC4660", "PGC051753", "IC3631"], 
         dest=os.path.join(FIGUREPATH, "cutouts.png"), BASEDIR=ATLAS3DBASE):
     
     thumbtable = phot.extract_subtable_from_column(table, "objstr_01",
                                                    tablenames)
     thumbtable["logM"] = thumbtable["logML_star"] + thumbtable["logLum"]
     thumbtable.sort("logM")
+    thumbtable.reverse()
     gridfig = phot.ellipse_cutout_grid(
         BASEDIR, thumbtable, scale="W1", scalesize=2.7, 
         ignore_exception=False, runbands=["FUV", "NUV", "W1", "W2", "W3", "W4"] )
@@ -552,7 +657,7 @@ def create_cutout_grid(
 
 def create_mass_to_light_ATLAS3D_comparison(
         table=atlas3d_table, dest=build_filepath(
-            FIGUREPATH, "masstolight", "pdf")):
+            FIGUREPATH, "masstolight")):
     table = remove_bad_galaxies(table)
     # Calculate the mass-to-light ratio for the ATLAS3D points in WISE.
     w1w2, w1w2err, w1w2lim = stat.subtract(
@@ -587,26 +692,7 @@ def create_mass_to_light_ATLAS3D_comparison(
     plt.plot(cluver_limits, cluver_ML, 'r-', label="Cluver M/L")
 
     # FSPS output
-    solmetmags = fsps.read_mags(os.path.join(
-        fsps.OUTPUT_PATH, "imf_met", "solmet_chabrier.mags"))
-    lowmetmags = fsps.read_mags(os.path.join(
-        fsps.OUTPUT_PATH, "imf_met", "lowmet_chabrier.mags"))
-    highmetmags = fsps.read_mags(os.path.join(
-        fsps.OUTPUT_PATH, "imf_met", "highmet_chabrier.mags"))
-
     modelage = 1e10
-    solmet = fsps.FSPS_data_at_age(solmetmags["log(age)"], solmetmags,
-                                   modelage)
-    lowmet = fsps.FSPS_data_at_age(lowmetmags["log(age)"], lowmetmags,
-                                   modelage)
-    highmet = fsps.FSPS_data_at_age(highmetmags["log(age)"], highmetmags,
-                                   modelage)
-    spsmodels = Table(np.vstack([lowmet, solmet, highmet]),
-                   names=solmetmags.colnames)
-    w1w2 = spsmodels["W1"] - spsmodels["W2"]
-    masstolight = (spsmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
-        "W1", spsmodels["W1"])))
-    plt.plot(w1w2, masstolight, 'c-', label="FSPS (c)")
 
     solmetsalmags = fsps.read_mags(os.path.join(
         fsps.OUTPUT_PATH, "imf_met", "solmet_salpeter.mags"))
@@ -625,7 +711,28 @@ def create_mass_to_light_ATLAS3D_comparison(
     w1w2sal = salmodels["W1"] - salmodels["W2"]
     masstolightsal = (salmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
         "W1", salmodels["W1"])))
-    plt.plot(w1w2sal, masstolightsal, 'cx-', label="FSPS (s)")
+    plt.plot(w1w2sal, masstolightsal, 'co-', label="FSPS (s)", lw=2, ms=7,
+             mec="c")
+
+    solmetmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "solmet_chabrier.mags"))
+    lowmetmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "lowmet_chabrier.mags"))
+    highmetmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "highmet_chabrier.mags"))
+    solmet = fsps.FSPS_data_at_age(solmetmags["log(age)"], solmetmags,
+                                   modelage)
+    lowmet = fsps.FSPS_data_at_age(lowmetmags["log(age)"], lowmetmags,
+                                   modelage)
+    highmet = fsps.FSPS_data_at_age(highmetmags["log(age)"], highmetmags,
+                                   modelage)
+    spsmodels = Table(np.vstack([lowmet, solmet, highmet]),
+                   names=solmetmags.colnames)
+    w1w2 = spsmodels["W1"] - spsmodels["W2"]
+    masstolight = (spsmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
+        "W1", spsmodels["W1"])))
+    plt.plot(w1w2, masstolight, 'cs-', label="FSPS (c)", lw=2, ms=7, 
+             mec="c")
 
     # This will be a fit to the color-selected dustless galaxies.
     dustlesstable = atlas3d.color_cut_dustless_table(table)
@@ -647,21 +754,25 @@ def create_mass_to_light_ATLAS3D_comparison(
     #flatval, flaterr, _ = stat.exponentiate(10, flatlogval, 0, flatlogerr)
     print "Appropriate M/L is {0:.2f} +/- {1:.3f}".format(
         flatlogval, flatlogerr)
-    plt.plot(fit_limits, [flatlogval, flatlogval], 'k--', label="This work")
+    plt.plot(fit_limits, [flatlogval, flatlogval], 'k--', label="This work",
+             lw=3)
 
     plt.xlabel("W1-W2 (AB)")
-    plt.ylabel(r"$\log\ \frac{M^*}{L_{W1}} \left(\frac{M_\odot}{L_\odot}\right)$")
+    plt.ylabel(r"$\log\ \frac{M^*}{L_{W1}}"
+               r"\left(\frac{M_\odot}{L_\odot}\right)$", fontsize=24)
     # Not shown is PGC029321 all the way to the right.
     plt.xlim([-0.75, -0.6])
     plt.ylim([-1.0, 0.5])
     plt.legend(loc="lower left")
     ax = plt.gca()
     add_Vega_axis("W1", "W2")
+    x0, x1, y0, y1 = plt.axis()
+    plt.tight_layout(w_pad=1.5)
     plt.savefig(dest)
     plt.close()
 
 def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table, 
-        dest=os.path.join(FIGUREPATH, "nuvw1.pdf")):
+        dest=build_filepath(FIGUREPATH, "nuvw1")):
     rtable = remove_bad_galaxies(rtable)
     atable = remove_bad_galaxies(atable)
     rnuv = rtable[phot.name_photometry_column("NUV")]
@@ -693,9 +804,9 @@ def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table,
     # This until I figure out what to do with distance errors.
     aw1abs_e = conv.app_err_to_abs_err(aw1_e, ad, ad_e)
 
-    plt.errorbar(aw1abs, anuvw1, anuvw1_e, aw1abs_e, 'kx', label="ATLAS3D")
+    plt.errorbar(aw1abs, anuvw1, anuvw1_e, fmt='kx', label="ATLAS3D")
     rp.MIRplot(rw1abs, rnuvw1, rtable["MIR_class"], rnuvw1_e, 
-               xlabel=r"M$_{W1}$", ylabel="NUV-W1 (AB)")
+               xlabel=r"M$_{W1}$ (AB)", ylabel="NUV-W1 (AB)")
 
     plt.ylim([2, 7])
     plt.xlim([-18, -24])
@@ -704,7 +815,7 @@ def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table,
     plt.close()
 
 def create_NUV_J_PAH77_113_plot(table=rampazzo_table, 
-                                dest=os.path.join(FIGUREPATH, "uvpahs.pdf")):
+                                dest=build_filepath(FIGUREPATH, "uvpahs")):
     table = remove_bad_galaxies(table)
     pahtable = read_Rampazzo_TableA1()
     fulltable = phot.join_by_galaxy_name(table, pahtable,
@@ -726,16 +837,14 @@ def create_NUV_J_PAH77_113_plot(table=rampazzo_table,
     xcolor, xcolorerr, _ = stat.subtract(nuv, j, nuv_err, j_err)
     yratio, yratioerr, _ = stat.divide(pah77, pah113,
                                                        pah77_err, pah113_err)
+    print classtable["objstr_01"], xcolor
 
     rp.MIRplot(xcolor, yratio, classtable["MIR_class"], yerr=yratioerr, 
                xerr=xcolorerr, classes=(2,3), xlabel="NUV-J (AB)",
-               ylabel="7.7 um / 11.3 um")
-    plt.xlabel("NUV-J")
-    plt.ylabel("7.7 um/11.3 um")
+               ylabel="7.7 $\mu$m / 11.3 $\mu$m", loc="lower left")
     plt.savefig(dest)
     plt.close()
 
-    return classtable
 
 def create_SED(
     table=fulltable, dest=build_filepath(FIGUREPATH, "sed", EXT), 
@@ -843,7 +952,7 @@ def create_circumstellar_verification_plot(
 
     stat.errorbar(dustyw1w3, dustyw1w4, dustyw1w4_err,
                   dustyw1w3_err, dustyw1w4_lim, 'go', 
-                  label="ATLAS3D (FIR Det)", ufmt="gv", lfmt="g^")
+                  label="ATLAS3D (FIR)", ufmt="gv", lfmt="g^")
     stat.errorbar(colorcutw1w3, colorcutw1w4, colorcutw1w4_err,
                   colorcutw1w3_err, colorcutw1w4_lim,
                   label="ATLAS3D", fmt="mo", ufmt="mv", lfmt="m^")
@@ -860,16 +969,24 @@ def create_circumstellar_verification_plot(
         label="[Z/H] = 0.2", fmt="r-", agecutoff=1e9)
     fsps.plot_FSPS_color_color(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
+        modelbase=os.path.join(dustfolder, "dust_medmet"),
+        label="[Z/H] = -0.2", fmt="k-", agecutoff=1e9)
+    fsps.plot_FSPS_color_color(
+        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
         modelbase=os.path.join(dustfolder, "dust_lowmet"),
         label="[Z/H] = -0.89", fmt="b-", agecutoff=1e9)
     fsps.plot_FSPS_color_color(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
         modelbase=os.path.join(dustfolder, "nodust_highmet"),
-        label="[Z/H] = 0.2", fmt="r:", agecutoff=1e9)
+        label="", fmt="r:", agecutoff=1e9)
+    fsps.plot_FSPS_color_color(
+        fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
+        modelbase=os.path.join(dustfolder, "nodust_medmet"),
+        label="", fmt="k:", agecutoff=1e9)
     fsps.plot_FSPS_color_color(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
         modelbase=os.path.join(dustfolder, "nodust_lowmet"),
-        label="[Z/H] = -0.89", fmt="b:", agecutoff=1e9)
+        label="", fmt="b:", agecutoff=1e9)
 #   parsec.plot_parsec_color_color(PARSECPATH, "marigo_highmet.dat", "W1", "W3",
 #                                  "W1", "W4", label="PARSEC (high met)",
 #                                  fmt="r--", agecutoff=1e9)
@@ -877,7 +994,8 @@ def create_circumstellar_verification_plot(
 #                                  "W1", "W4", label="PARSEC (low met)",
 #                                  fmt="b--", agecutoff=1e9)
 
-    
+    plt.plot([-2.5, -1.85], [-2.23, -2.23], 'k--')
+    plt.plot([-1.85, -1.85], [-4.0, -2.23], 'k--')
     
     plt.xlabel("W1-W3 (AB)")
     plt.ylabel("W1-W4 (AB)")
@@ -961,7 +1079,61 @@ def add_dual_Vega_axes(xband1, xband2, yband1, yband2):
 def create_circumstellar_dust_plot(table=atlas3d_table,
                                    dest=build_filepath(FIGUREPATH, "cdust",
                                                        EXT)):
-    '''Dual-paneled W1-W3 and W1-W4 vs age plot.'''
+    '''Dual-paneled W1-W3 and W1-W4 vs SSP age plot.'''
+    table = remove_bad_galaxies(table)
+    # Set up the data
+    dustless_catalog = \
+        atlas3d.filter_ATLAS3D_table_for_dustless_galaxies(table)
+    w1w3color, w1w3err, w1w3lim = stat.subtract(
+        dustless_catalog["w1unextmag"], dustless_catalog["w3unextmag"], 
+        dustless_catalog["w1unexterr"], dustless_catalog["w3unexterr"],
+        dustless_catalog["w1unextlim"], dustless_catalog["w3unextlim"])
+    w1w4color, w1w4err, w1w4lim = stat.subtract(
+        dustless_catalog["w1unextmag"], dustless_catalog["w4unextmag"], 
+        dustless_catalog["w1unexterr"], dustless_catalog["w4unexterr"],
+        dustless_catalog["w1unextlim"], dustless_catalog["w4unextlim"])
+    atlas3d_ages = np.minimum(dustless_catalog["Age_SSP"], 14)
+    atlas3d_ages_err = dustless_catalog["Age_SSP_err"]
+    atlas3d_metallicities = dustless_catalog["[Z/H]_SFH"]
+    med_met = float(np.ma.median(atlas3d_metallicities))
+                                                
+    
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(10,12))
+    # Let's make the first plot: W1-W3
+    plt.sca(ax1)
+    fsps.plot_atlas3d_coded_by_metallicity(
+        atlas3d_ages, w1w3color, w1w3err, atlas3d_ages_err, w1w3lim,
+        atlas3d_metallicities, med_met)
+    fsps.plot_dust_toggled_metallicity_bounds(
+        os.path.join(fsps.OUTPUT_PATH, "matched_late_const_sfr"), "W1", "W3",
+        highmet=-0.1, lowmet=-0.3)
+    ax1.set_ylim([-2.9, -0.5])
+    plt.ylabel("W1-W3 (AB)")
+    add_Vega_axis("W1", "W3", "y")
+
+    # Now the second plot: W1-W4
+    plt.sca(ax2)
+    fsps.plot_atlas3d_coded_by_metallicity(
+        atlas3d_ages, w1w4color, w1w4err, atlas3d_ages_err, w1w4lim,
+        atlas3d_metallicities, med_met)
+    fsps.plot_dust_toggled_metallicity_bounds(
+        os.path.join(fsps.OUTPUT_PATH, "narrower_bounds"), "W1", "W4",
+        highmet=-0.1, lowmet=-0.3)
+    ax2.set_ylim([-4, 0])
+    plt.sca(ax2)
+    plt.xlim(0, 15)
+    plt.ylabel("W1-W4 (AB)")
+    plt.xlabel("SSP Age (Gyr)")
+    plt.legend(loc="lower left", fontsize="x-large")
+    add_Vega_axis("W1", "W4", "y")
+    plt.tight_layout(0)
+    plt.savefig(dest)
+    plt.close()
+
+def create_circumstellar_dust_plot_sfh(
+        table=atlas3d_table, dest=build_filepath(FIGUREPATH, "sfhcdust", 
+                                                 EXT)):
+    '''Dual-paneled W1-W3 and W1-W4 vs SFH age plot.'''
     table = remove_bad_galaxies(table)
     # Set up the data
     dustless_catalog = \
@@ -980,7 +1152,7 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     med_met = float(np.ma.median(atlas3d_metallicities))
                                                 
     
-    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True)
+    f, (ax1, ax2) = plt.subplots(2, 1, sharex=True, figsize=(10, 12))
     # Let's make the first plot: W1-W3
     plt.sca(ax1)
     fsps.plot_atlas3d_coded_by_metallicity(
@@ -1006,7 +1178,7 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     plt.xlim(0, 15)
     plt.ylabel("W1-W4 (AB)")
     plt.xlabel("SFH Age (Gyr)")
-    plt.legend(loc="lower left", fontsize="small")
+    plt.legend(loc="lower left", fontsize="x-large")
     add_Vega_axis("W1", "W4", "y")
     plt.tight_layout(0)
     plt.savefig(dest)
@@ -1640,6 +1812,14 @@ def separate_errors_in_table(fulltable, seperator="+/-", suffix="_err",
             newtable[colname] = col
     return newtable
 
+def create_arxiv_tarfile(BASEDIR, archivebase="arxiv", sourcefile="main",
+                         figuredir="fig", tabledir="table",
+                         additional_files=["mnras.cls"]):
+    '''Generates a tarfile for the arXiv.'''
+    archivepath = os.path.join(BASEDIR, archivebase+".tar.gz")
+    with tarfile.open(archivepath, "w") as tar:
+        pass
+
 def collapse_list_nested_array(arr):
     '''Collapses an array of singleton lists.
 
@@ -1807,7 +1987,7 @@ def format_mag(mag):
         magstr = LATEX_TABLE_MASKSTRING
     return magstr
 
-def format_mag_column(mags, limits):
+def format_mag_column(mags, limits, upstr="$<$", lowstr="$>$"):
     '''Convert mag column to column of strings formatted correctly for limits.
 
     This function basically converts the float array of magnitudes into string
@@ -1819,8 +1999,8 @@ def format_mag_column(mags, limits):
     magstr = np.ma.asanyarray(magstr, 'a7')
     upperlims = np.where(limits == stat.UPPER)
     lowerlims = np.where(limits == stat.LOWER)
-    magstr[upperlims] = npstr.add("$<$", magstr[upperlims])
-    magstr[lowerlims] = npstr.add("$>$", magstr[lowerlims])
+    magstr[upperlims] = npstr.add(upstr, magstr[upperlims])
+    magstr[lowerlims] = npstr.add(lowstr, magstr[lowerlims])
     
     return magstr
 
