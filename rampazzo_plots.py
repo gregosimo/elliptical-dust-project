@@ -169,7 +169,7 @@ def plot_rampazzo_line_ratios(linetable, mirtable, title):
     print class3table[["Galaxy", "Hratio", "Sratio"]]
 
     plt.xlabel(r"H$_2$S(3) / H$_2$S(1)")
-    plt.ylabel(r"[SIII] 18.7 $\mu m$ / [SIII] 33.5 $\mu m$")
+    plt.ylabel(r"[SIII] 18.7 $\mu$m/[SIII] 33.5 $\mu$m")
     plt.legend()
     plt.title(title)
 

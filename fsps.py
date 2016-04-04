@@ -221,14 +221,11 @@ def plot_metallicity_bounds(lowzh, highzh, MET_PATH, blueband, redband,
     plt.plot(highmetspsages, highmetmagtable[blueband] -
              highmetmagtable[redband], 'r-', label=label.format(highzh))
 
-def plot_dust_toggled_metallicity_bounds(FILE_PATH, blueband, redband,
-                                        highdusthighmet="dust_highmet.mags",
-                                        highdustlowmet="dust_lowmet.mags",
-                                        lowdusthighmet="nodust_highmet.mags",
-                                        lowdustlowmet="nodust_lowmet.mags",
-                                        highmet=0.2, lowmet=-0.89,
-                                        dustsuffix="", 
-                                        nodustsuffix=" (No dust)"):
+def plot_dust_toggled_metallicity_bounds(
+    FILE_PATH, blueband, redband, highdusthighmet="dust_highmet.mags", 
+    highdustlowmet="dust_lowmet.mags", lowdusthighmet="nodust_highmet.mags", 
+    lowdustlowmet="nodust_lowmet.mags", highmet=0.2, lowmet=-0.89, 
+    dustsuffix="", nodustsuffix=" (No dust)", nodustlabels=True):
     '''Plots two FSPS metallicity bounds for dusty and dustless galaxies.
 
     This function is kinda contrived and not elegant at all. But oh well, I
@@ -245,8 +242,12 @@ def plot_dust_toggled_metallicity_bounds(FILE_PATH, blueband, redband,
 
     highdusthighmetlabel="[Z/H]={0:.2f}{1}".format(highmet, dustsuffix)
     highdustlowmetlabel="[Z/H]={0:.2f}{1}".format(lowmet, dustsuffix)
-    lowdusthighmetlabel="[Z/H]={0:.2f}{1}".format(highmet, nodustsuffix)
-    lowdustlowmetlabel="[Z/H]={0:.2f}{1}".format(lowmet, nodustsuffix)
+    if nodustlabels:
+        lowdusthighmetlabel=""
+        lowdustlowmetlabel=""
+    else:
+        lowdusthighmetlabel="[Z/H]={0:.2f}{1}".format(highmet, nodustsuffix)
+        lowdustlowmetlabel="[Z/H]={0:.2f}{1}".format(lowmet, nodustsuffix)
 
     highdusthighmetages = 10**(highdusthighmettable["log(age)"]-9)
     highdustlowmetages = 10**(highdustlowmettable["log(age)"]-9)
