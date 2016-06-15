@@ -10,6 +10,7 @@ import photometry as phot
 import band_conversions as conv
 import statop as stat
 import paperexport as pe
+import astropy_util as au
 
 # Maybe I want to subclass figure later on. But now... meh.
 class SED(object):
@@ -339,8 +340,8 @@ def get_ATLAS3D_dustless_galaxies():
     krajnovic_table = pe.read_Krajnovic_Table_D1()
     young_table = pe.read_Young_Table_1()
 
-    extless = phot.astropy_table_row(krajnovic_table, "dust", ["N"])
-    gasless = phot.astropy_table_row(young_table, "log M(H2) lim", stat.UPPER)
+    extless = au.astropy_table_row(krajnovic_table, "dust", ["N"])
+    gasless = au.astropy_table_row(young_table, "log M(H2) lim", stat.UPPER)
 
     dustless = phot.join_by_galaxy_name(extless, gasless, names=("name",
                                                                  "Galaxy"))
@@ -353,7 +354,7 @@ def filter_ATLAS3D_table_for_dustless_galaxies(atlas3d_table):
     out the galaxies without signs of diffuse dust.'''
     dustless_galaxies = get_ATLAS3D_dustless_galaxies()
 
-    filteredtable = phot.extract_subtable_from_column(
+    filteredtable = au.extract_subtable_from_column(
         atlas3d_table, "objstr_01", dustless_galaxies)
     return filteredtable
 
@@ -366,7 +367,7 @@ def ATLAS3D_dustless_galaxy_indices(atlas3d_table):
     '''
     dustless_galaxies = get_ATLAS3D_dustless_galaxies()
 
-    indices = phot.astropy_table_indices(atlas3d_table, "objstr_01",
+    indices = au.astropy_table_indices(atlas3d_table, "objstr_01",
                                          dustless_galaxies)
     return indices
 
@@ -401,12 +402,16 @@ def color_cut_dustless_indices(w1, w3, w4):
     return np.where(np.logical_and(w1w3 < -1.85, w1w4 < -2.23))
 
 def plot_dustless_separation(
-    atlas3d_table, xval, yval, yerr, xerr, ylim, fmt, color=True, **kwargs):
+    atlas3d_table, xval, yval, yerr, xerr, ylim, fmt, dfmt, color=True,
+    error_coord=None, **kwargs):
     '''Makes an errorbar plot separating dustless from other galaxies.
 
-    The dustless galaxies will be full markers of format while the dusty ones
-    will be empty markers.
-    '''
+    The dustless galaxies will be plotted as fmt while the dusty galaxies will
+    be plotted as dfmt. All fo the keyword arguments remain the same.
+    
+    To draw a representative error bar rather than having error bars on all of
+    the points, put a pair of coordinates in the error_coord keyword. If the
+    error_coord keyword is None, then error bars will be drawn as usual.'''
     if color:
         dustlessindices = color_cut_dustless_indices(
             atlas3d_table[phot.name_photometry_column("W1")],
@@ -416,15 +421,35 @@ def plot_dustless_separation(
         dustlessindices = ATLAS3D_dustless_galaxy_indices(atlas3d_table)
 
     dustindices = pe.get_complement_indices(dustlessindices, len(atlas3d_table))
+    print (len(xval[dustindices]) + len(xval[dustlessindices]))
 
-    stat.errorbar(
-        xval[dustlessindices], yval[dustlessindices], yerr[dustlessindices], 
-        xerr[dustlessindices], ylim[dustlessindices], fmt, **kwargs)
-    kwargs.pop("label")
-    stat.errorbar(
-        xval[dustindices], yval[dustindices], yerr[dustindices], 
-        xerr[dustindices], ylim[dustindices], fmt, fillstyle="none", **kwargs)
+    dustlesskws = kwargs
+    dustykws = kwargs.copy()
+    dustykws.update({"color": "0.7", "linestyle": "None", "marker": "."})
+    
+    mainlabel = kwargs["label"]
+    dustykws["label"] = "{0} (dusty)".format(mainlabel)
+    dustlesskws["label"] = "{0} (dustless)".format(mainlabel)
 
+    if error_coord is None:
+        stat.errorbar(
+            xval[dustindices], yval[dustindices], yerr[dustindices], 
+            xerr[dustindices], ylim[dustindices], dfmt, **dustykws)
+        stat.errorbar(
+            xval[dustlessindices], yval[dustlessindices], yerr[dustlessindices], 
+            xerr[dustlessindices], ylim[dustlessindices], fmt, **dustlesskws)
+    else:
+        # Since we want to suppress errorbars, but keep limits, we will use the
+        # stat-friendly errorbar function, but not supply the error routines.
+        stat.errorbar(
+            xval[dustindices], yval[dustindices], ylim=ylim[dustindices], 
+            fmt=dfmt, **dustykws)
+        stat.errorbar(
+            xval[dustlessindices], yval[dustlessindices],
+            ylim=ylim[dustlessindices], fmt=fmt, **dustlesskws)
+        xerr_samp, yerr_samp = np.mean(xerr), np.mean(yerr)
+        plt.errorbar(error_coord[0], error_coord[1], yerr_samp, xerr_samp,
+                     fmt='k.')
 
 def filter_out_bad_targets(atlas3d_table):
     '''Objects which cause errors for some reason or another.

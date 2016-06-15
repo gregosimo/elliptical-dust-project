@@ -27,6 +27,7 @@ import band_conversions as conv
 import atlas3d
 import statop as stat
 import parsec
+import astropy_util as au
 
 BASEPATH = "/home/regulus/simonian/year1/wise"
 FSPSPATH = "/home/regulus/simonian/year1/fsps"
@@ -48,7 +49,7 @@ FULL_GIL_DE_PAZ_TABLE = os.path.join(GDPBASE, "gil_de_paz.tbl")
 
 # If we want to change the type of file which is exported, just change this
 # extension!
-EXT = "eps"
+EXT = "pdf"
 
 # This is the string which is displayed in LaTeX for a missing value.
 LATEX_TABLE_MASKSTRING = r"--"
@@ -177,7 +178,7 @@ def remove_bad_galaxies(table, galcol="objstr_01", badgals=["NGC2974"]):
     tables. Also, bad galaxies for one plot may not necessarily be bad galaxies
     for other plots.
     '''
-    badindices = phot.astropy_table_indices(table, galcol, badgals)
+    badindices = au.astropy_table_indices(table, galcol, badgals)
     goodindices = get_complement_indices(badindices, len(table))
     return table[goodindices]
 
@@ -643,7 +644,7 @@ def create_cutout_grid(
         tablenames = ["NGC6278", "NGC4570", "NGC4660", "PGC051753", "IC3631"], 
         dest=os.path.join(FIGUREPATH, "cutouts.png"), BASEDIR=ATLAS3DBASE):
     
-    thumbtable = phot.extract_subtable_from_column(table, "objstr_01",
+    thumbtable = au.extract_subtable_from_column(table, "objstr_01",
                                                    tablenames)
     thumbtable["logM"] = thumbtable["logML_star"] + thumbtable["logLum"]
     thumbtable.sort("logM")
@@ -663,10 +664,13 @@ def create_mass_to_light_ATLAS3D_comparison(
     w1w2, w1w2err, w1w2lim = stat.subtract(
         table["w1unextmag"], table["w2unextmag"], table["w1unexterr"], 
         table["w2unexterr"], table["w1unextlim"], table["w2unextlim"])
+    kw1, kw1err, kw1lim = stat.subtract(
+        table["k_m_k20fe"], table["w1unextmag"], table["k_msig_k20fe"]],
+        table["w1unexterr"], table["k_mlim_k20fe"], table["w1unextlim"])
     atlas3d.plot_dustless_separation(
         table, w1w2, table["logML_W1"], table["logML_W1err"], w1w2err, 
-        table["logML_W1lim"], 'bo', color=True, ms=5, label="ATLAS3D",
-        linewidth=0.7)
+        table["logML_W1lim"], 'bo', 'k.', color=True, ms=5, label="ATLAS3D",
+        linewidth=0.7, error_coord=(-0.725, -0.8))
 
 
     # Remember that these will be given in Vega mags.
@@ -711,8 +715,7 @@ def create_mass_to_light_ATLAS3D_comparison(
     w1w2sal = salmodels["W1"] - salmodels["W2"]
     masstolightsal = (salmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
         "W1", salmodels["W1"])))
-    plt.plot(w1w2sal, masstolightsal, 'co-', label="FSPS (s)", lw=2, ms=7,
-             mec="c")
+    plt.plot(w1w2sal, masstolightsal, 'ks--', label="FSPS (s)", lw=2, ms=7)
 
     solmetmags = fsps.read_mags(os.path.join(
         fsps.OUTPUT_PATH, "imf_met", "solmet_chabrier.mags"))
@@ -731,8 +734,7 @@ def create_mass_to_light_ATLAS3D_comparison(
     w1w2 = spsmodels["W1"] - spsmodels["W2"]
     masstolight = (spsmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
         "W1", spsmodels["W1"])))
-    plt.plot(w1w2, masstolight, 'cs-', label="FSPS (c)", lw=2, ms=7, 
-             mec="c")
+    plt.plot(w1w2, masstolight, 'ks:', label="FSPS (c)", lw=2, ms=7)
 
     # This will be a fit to the color-selected dustless galaxies.
     dustlesstable = atlas3d.color_cut_dustless_table(table)
@@ -745,7 +747,7 @@ def create_mass_to_light_ATLAS3D_comparison(
     flatline = models.Linear1D(0, -0.006, fixed={"slope": True})
     fit_l = fitting.LinearLSQFitter()
     flatfit = fit_l(flatline, w1w2dustless, dustlesstable["logML_W1"])
-    fit_limits = np.linspace(-0.75, -0.6, 2)
+    fit_limits = np.linspace(-0.75, -0.5, 2)
     flatlogval = flatfit(0)
     # I don't want a sqrt(N) because I'm not looking for the error on the mean,
     # I'm looking for the width of the Gaussian fitted to the distribution of
@@ -754,16 +756,16 @@ def create_mass_to_light_ATLAS3D_comparison(
     #flatval, flaterr, _ = stat.exponentiate(10, flatlogval, 0, flatlogerr)
     print "Appropriate M/L is {0:.2f} +/- {1:.3f}".format(
         flatlogval, flatlogerr)
-    plt.plot(fit_limits, [flatlogval, flatlogval], 'k--', label="This work",
-             lw=3)
+    plt.plot(fit_limits, [flatlogval, flatlogval], 'k-', label="This work",
+             lw=4)
 
     plt.xlabel("W1-W2 (AB)")
     plt.ylabel(r"$\log\ \frac{M^*}{L_{W1}}"
                r"\left(\frac{M_\odot}{L_\odot}\right)$", fontsize=24)
     # Not shown is PGC029321 all the way to the right.
-    plt.xlim([-0.75, -0.6])
-    plt.ylim([-1.0, 0.5])
-    plt.legend(loc="lower left")
+    plt.xlim([-0.75, -0.5])
+    plt.ylim([-1.1, 0.5])
+    plt.legend(loc="lower right")
     ax = plt.gca()
     add_Vega_axis("W1", "W2")
     x0, x1, y0, y1 = plt.axis()
@@ -908,7 +910,7 @@ def create_circumstellar_verification_plot(
             amblard_overlap["350_mum"] > 5*amblard_overlap["350_mum_err"]),
             amblard_overlap["500_mum"] > 5*amblard_overlap["500_mum_err"]))]
 
-    dusty_atlas3d_indices = phot.astropy_table_indices(
+    dusty_atlas3d_indices = au.astropy_table_indices(
         dcat, "objstr_01", amblard_dusty["objstr_01"])
     print "% of overlapped galaxies w/ FIR Dust detections: {0:.2f}".format(
         float(len(amblard_dusty["objstr_01"]))/len(amblard_overlap)*100)
@@ -959,9 +961,9 @@ def create_circumstellar_verification_plot(
     stat.errorbar(class0w1w3, class0w1w4, class0w1w4_err, class0w1w3_err,
                   class0w1w4_lim, label="Class 0", ufmt="kv", lfmt="k^", 
                   **rp.MIR_Symbols[0])
-#   plt.plot(amblard_dusty["w1unextmag"]-amblard_dusty["w3unextmag"],
-#            amblard_dusty["w1unextmag"]-amblard_dusty["w4unextmag"],
-#            "kx", mew=2)
+    plt.plot(amblard_dusty["w1unextmag"]-amblard_dusty["w3unextmag"],
+             amblard_dusty["w1unextmag"]-amblard_dusty["w4unextmag"],
+             "kx", mew=2)
     dustfolder = "toggle_dust_met_bounds"
     fsps.plot_FSPS_color_color(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
@@ -1029,7 +1031,8 @@ def add_Vega_axis(band1, band2, axis="x", initax=None):
         newax.xaxis.set_label_position('bottom')
         lowbound, upbound = ax.get_xlim()
         newax.set_xlim(transform(lowbound), transform(upbound))
-        newax.set_xlabel(ax.get_xlabel().replace("(AB)", "(Vega)"))
+        newax.set_xlabel(ax.get_xlabel().replace("(AB)", "(Vega)"),
+                         fontsize=ax.get_xaxis().get_label().get_fontsize())
     elif axis == "y":
         newax = ax.twinx() 
         ax.yaxis.tick_right()
@@ -1038,7 +1041,8 @@ def add_Vega_axis(band1, band2, axis="x", initax=None):
         newax.yaxis.set_label_position("left")
         lowbound, upbound = ax.get_ylim()
         newax.set_ylim(transform(lowbound), transform(upbound))
-        newax.set_ylabel(ax.get_ylabel().replace("(AB)", "(Vega)"))
+        newax.set_ylabel(ax.get_ylabel().replace("(AB)", "(Vega)"),
+                         fontsize=ax.get_yaxis().get_label().get_fontsize())
 
     return newax
 
@@ -1093,6 +1097,8 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
         dustless_catalog["w1unexterr"], dustless_catalog["w4unexterr"],
         dustless_catalog["w1unextlim"], dustless_catalog["w4unextlim"])
     atlas3d_ages = np.minimum(dustless_catalog["Age_SSP"], 14)
+    print float(np.count_nonzero(dustless_catalog["Age_SSP"] >
+                                 14))/len(dustless_catalog)
     atlas3d_ages_err = dustless_catalog["Age_SSP_err"]
     atlas3d_metallicities = dustless_catalog["[Z/H]_SFH"]
     med_met = float(np.ma.median(atlas3d_metallicities))
@@ -1108,7 +1114,7 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
         os.path.join(fsps.OUTPUT_PATH, "matched_late_const_sfr"), "W1", "W3",
         highmet=-0.1, lowmet=-0.3)
     ax1.set_ylim([-2.9, -0.5])
-    plt.ylabel("W1-W3 (AB)")
+    plt.ylabel("W1-W3 (AB)", fontsize=24)
     add_Vega_axis("W1", "W3", "y")
 
     # Now the second plot: W1-W4
@@ -1122,11 +1128,11 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     ax2.set_ylim([-4, 0])
     plt.sca(ax2)
     plt.xlim(0, 15)
-    plt.ylabel("W1-W4 (AB)")
-    plt.xlabel("SSP Age (Gyr)")
+    plt.ylabel("W1-W4 (AB)", fontsize=24)
+    plt.xlabel("SSP Age (Gyr)", fontsize=24)
     plt.legend(loc="lower left", fontsize="x-large")
     add_Vega_axis("W1", "W4", "y")
-    plt.tight_layout(0)
+    plt.tight_layout(0.3)
     plt.savefig(dest)
     plt.close()
 
@@ -1162,7 +1168,7 @@ def create_circumstellar_dust_plot_sfh(
         os.path.join(fsps.OUTPUT_PATH, "matched_late_const_sfr"), "W1", "W3",
         highmet=-0.1, lowmet=-0.3)
     ax1.set_ylim([-2.9, -0.5])
-    plt.ylabel("W1-W3 (AB)")
+    plt.ylabel("W1-W3 (AB)", fontsize=24)
     add_Vega_axis("W1", "W3", "y")
 
     # Now the second plot: W1-W4
@@ -1176,11 +1182,11 @@ def create_circumstellar_dust_plot_sfh(
     ax2.set_ylim([-4, 0])
     plt.sca(ax2)
     plt.xlim(0, 15)
-    plt.ylabel("W1-W4 (AB)")
-    plt.xlabel("SFH Age (Gyr)")
+    plt.ylabel("W1-W4 (AB)", fontsize=24)
+    plt.xlabel("SFH Age (Gyr)", fontsize=24)
     plt.legend(loc="lower left", fontsize="x-large")
     add_Vega_axis("W1", "W4", "y")
-    plt.tight_layout(0)
+    plt.tight_layout(0.3)
     plt.savefig(dest)
     plt.close()
 
@@ -1324,7 +1330,7 @@ def create_star_formation_plot(
     print "Dispersion is: {0:0.2f}".format(disp)
 
     ax1.set_ylim((40.0, 43.5))
-    ax1.set_ylabel(r"$\log\ \nu L_{W3}$ (erg s$^{-1}$)")
+    ax1.set_ylabel(r"$\log\ \nu L_{W3}$ (erg s$^{-1}$)", fontsize=24)
     
     plt.sca(ax2)
     
@@ -1360,11 +1366,11 @@ def create_star_formation_plot(
     print "Dispersion is: {0:0.2f}".format(disp)
     
     ax2.set_ylim((40, 43.5))
-    ax2.set_ylabel(r"$\log\ \nu L_{W4}$ (erg s$^{-1}$)")
+    ax2.set_ylabel(r"$\log\ \nu L_{W4}$ (erg s$^{-1}$)", fontsize=24)
 
     plt.xlim(9.5, 12)
-    plt.xlabel(r"$\log\ L_{W1}\ (L_\odot)$")
-    plt.legend(loc="lower right")
+    plt.xlabel(r"$\log\ L_{W1}\ (L_\odot)$", fontsize=24)
+    plt.legend(loc="lower right", fontsize="large")
     plt.tight_layout()
     plt.savefig(dest)
     plt.close()
@@ -1501,7 +1507,7 @@ def get_complement_table(partialtable, totaltable):
     This is kinda like an operation to create a table which when stacked with
     partialtable and sorted by objstr_01, will create totaltable.
     '''
-    partialindices = phot.astropy_table_indices(totaltable, "objstr_01",
+    partialindices = au.astropy_table_indices(totaltable, "objstr_01",
                                                 partialtable["objstr_01"])
     compmask = get_complement_indices(partialindices, len(totaltable))
     comp_sample = totaltable[compmask]
