@@ -206,20 +206,44 @@ def tburst_data_plot(times, lowmet, highmet, atlas3dtable,
         plt.ylabel("{0}-{1}".format(blueband, redband))
         plt.legend(loc=loc)
 
-def plot_metallicity_bounds(lowzh, highzh, MET_PATH, blueband, redband,
-                            fileformat="z{0:+3.2f}.mags", 
-                            label="[Z/H]={0:.2f}"):
+def plot_metallicity_bounds(lowzh, medzh, highzh, MET_PATH, blueband, redband,
+                            lowfile="lowmet.mags", medfile="medmet.mags",
+                            highfile="highmet.mags", label="[Z/H]={0:.2f}"):
     '''Plots FSPS tracks at metallicity bounds.'''
-    lowmetfilename = os.path.join(MET_PATH, fileformat.format(lowzh))
+    lowmetfilename = os.path.join(MET_PATH, lowfile)
     lowmetmagtable = read_mags(lowmetfilename)
-    highmetfilename = os.path.join(MET_PATH, fileformat.format(highzh))
+    medmetfilename = os.path.join(MET_PATH, medfile)
+    medmetmagtable = read_mags(medmetfilename)
+    highmetfilename = os.path.join(MET_PATH, highfile)
     highmetmagtable = read_mags(highmetfilename)
+
     lowmetspsages = 10**(lowmetmagtable["log(age)"]-9)
+    medmetspsages = 10**(medmetmagtable["log(age)"]-9)
     highmetspsages = 10**(highmetmagtable["log(age)"]-9)
+
     plt.plot(lowmetspsages, lowmetmagtable[blueband] - lowmetmagtable[redband], 
              'b-', label=label.format(lowzh))
+    plt.plot(medmetspsages, medmetmagtable[blueband] - medmetmagtable[redband], 
+             'k-', label=label.format(medzh))
     plt.plot(highmetspsages, highmetmagtable[blueband] -
              highmetmagtable[redband], 'r-', label=label.format(highzh))
+
+def plot_imf_color_evolution(FILE_PATH, blueband, redband,
+                             chabfile="medmet_chabrier.mags",
+                             salpfile="medmet_salpeter.mags", labelbase="FSPS"):
+    '''Plots FSPS color evolution tracks with salpeter and chabrier IMFs.'''
+    filename_chabrier = os.path.join(FILE_PATH, chabfile)
+    table_chabrier = read_mags(filename_chabrier)
+    filename_salpeter = os.path.join(FILE_PATH, salpfile)
+    table_salpeter= read_mags(filename_salpeter)
+
+    spsages_chabrier = 10**(table_chabrier["log(age)"]-9)
+    spsages_salpeter = 10**(table_salpeter["log(age)"]-9)
+
+    plt.plot(spsages_chabrier, table_chabrier[blueband] -
+             table_chabrier[redband], 'k:', label="{0} (c)".format(labelbase))
+    plt.plot(spsages_salpeter, table_salpeter[blueband] -
+             table_salpeter[redband], 'k--', label="{0} (s)".format(labelbase))
 
 def plot_dust_toggled_metallicity_bounds(
     FILE_PATH, blueband, redband, highdusthighmet="dust_highmet.mags", 

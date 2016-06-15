@@ -24,6 +24,7 @@ import queries as query
 import synthetic_photometry as synphot
 import band_conversions as conv
 import statop as stat
+import astropy_util as au
 
 bands=["W1", "W2", "W3", "W4", "NUV", "FUV"]
 IRBANDS = bands[:4]
@@ -574,84 +575,6 @@ def complete_for_bands(BASEDIR, objname, checkbands=bands):
         except RuntimeError:
             return False
     return True
-
-###############################################################################
-# Astropy Utilities                                                           #
-###############################################################################
-
-def change_column_dtype(table, colname, newdtype):
-    '''Changes the dtype of a column in a table.
-
-    Use this function to change the dtype of a particular column in a table.
-    '''
-    tempcol = table[colname]
-    colindex = table.colnames.index(colname)
-    del(table[colname])
-    table.add_column(np.asanyarray(tempcol, dtype=newdtype), index=colindex)
-
-def astropy_table_index(table, column, value):
-    '''Returns the row index of the table which has the value in column.
-
-    There are often times when you want to know the index of the row
-    where a certain column has a value. This function will return a 
-    list of row indices that match the value in the column.'''
-    return astropy_table_indices(table, column, [value])
-
-def astropy_table_indices(table, column, values):
-    '''Returns the row indices of the table which have the values in column.
-
-    If you need to get the indices of values located in the column of a table,
-    this function will determine that for you.
-    '''
-    return np.where(multi_logical_or(*[table[column] == v for v in values]))
-
-def multi_logical_or(*arrs):
-    '''Performs a logical and for an arbitrary number of boolean arrays.'''
-    if len(arrs) == 1:
-        return arrs[0]
-    elif len(arrs) == 2:
-        return np.logical_or(*arrs)
-    elif len(arrs) > 2:
-        return np.logical_or(arrs[0], multi_logical_or(*arrs[1:]))
-    elif len(arrs) == 0:
-        raise ValueError("Need values to perform logical and")
-    else:
-        raise ValueError("Array somehow has negative length.")
-
-
-def astropy_table_row(table, column, value):
-    '''Returns the row of the table which has the value in column.
-
-    If you want to know the row in an astropy table where a value in a
-    column corresponds to a given value, this function will return that
-    row. If there are multiple rows which match the value in the 
-    column, you will get all of them. If no rows match the value, this
-    function will throw a ValueError.'''
-    return table[astropy_table_index(table, column, value)]
-
-def extract_subtable_from_column(table, column, selections):
-    '''Returns a table which only contains values in selections.
-
-    This function will create a Table whose values in column are only
-    those found in selections.
-    '''
-    return table[astropy_table_indices(table, column, selections)]
-
-def filterTable(BASEDIR, fulltable, isTrue, **kwargs):
-    '''Filters a table based on a boolean method isTrue.
-    
-    isTrue should have a call signature of isTrue(BASEDIR, WISErow, **kwargs)'''
-    try:
-        copy = kwargs.pop("copy")
-        galcol = kwargs.pop("galcol")
-    except KeyError:
-        copy=True
-    filteredTable = Table(fulltable, copy=copy, masked=False)
-    for i, object in enumerate(fulltable[galcol]):
-        if not isTrue(BASEDIR, object, **kwargs):
-            filteredTable.remove_row(np.argwhere(filteredTable[galcol] ==
-                    object)[0][0])
-    return filteredTable
 
 def runOnImages(BASEDIR, fulltable, func, **kwargs):
     '''Goes through a table of objects and runs a function on them.
@@ -2797,19 +2720,35 @@ def Jarrett_Table_2_to_WISE_table(Jarrett_table2):
     # NGC 777:  64".0
     # NGC 4486: 154".7 
     ## ASTROPY_BUG: We should have the commands:
-    ## converted_table["w3rsemi"][astropy_table_index(converted_table,
+    ## converted_table["w3rsemi"][au.astropy_table_index(converted_table,
     ## "objstr_01", "NGC 584")[0][0]] = 52.9
     ## and
-    ## converted_table[astropy_table_index(converted_table,
+    ## converted_table[au.astropy_table_index(converted_table,
     ## "objstr_01", "NGC 584")[0][0]]["w3rsemi"] = 52.9
     ## be equivalent. But they don't appear to be. Look into that!
-    converted_table["w3rsemi"][astropy_table_index(converted_table, "objstr_01", 
+    converted_table["w3rsemi"][au.astropy_table_index(converted_table, "objstr_01", 
             "NGC 584")[0][0]] = 52.9
-    converted_table["w3rsemi"][astropy_table_index(converted_table, "objstr_01", 
+    converted_table["w3rsemi"][au.astropy_table_index(converted_table, "objstr_01", 
             "NGC 777")[0][0]] = 64.0
-    converted_table["w3rsemi"][astropy_table_index(converted_table, "objstr_01", 
+    converted_table["w3rsemi"][au.astropy_table_index(converted_table, "objstr_01", 
             "NGC 4486")[0][0]] = 154.7
     return converted_table
+
+def filterTable(BASEDIR, fulltable, isTrue, **kwargs):
+    '''Filters a table based on a boolean method isTrue.
+    
+    isTrue should have a call signature of isTrue(BASEDIR, WISErow, **kwargs)'''
+    try:
+        copy = kwargs.pop("copy")
+        galcol = kwargs.pop("galcol")
+    except KeyError:
+        copy=True
+    filteredTable = Table(fulltable, copy=copy, masked=False)
+    for i, object in enumerate(fulltable[galcol]):
+        if not isTrue(BASEDIR, object, **kwargs):
+            filteredTable.remove_row(np.argwhere(filteredTable[galcol] ==
+                    object)[0][0])
+    return filteredTable
 
 def Convert_to_UV_Table(objstr, ra, dec, nuvrsemi, fuvrsemi, nuvpa, fuvpa,
         nuvba, fuvba):
