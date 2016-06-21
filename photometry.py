@@ -3069,20 +3069,28 @@ def multijoin_by_galaxy_name(*tables, **kwargs):
     '''Joins multiple tables by the provided name columns.
 
     This function joins an arbitrarily large number of tables together by a
-    sequence of names provided in the names tuple. The length of the names list
-    should correspond to the number of tables. It will return one large table.
-    I haven't dealt with collisions yet...
+    sequence of names provided in the names keyword argument. The length of the 
+    names list should correspond to the number of tables. It will return one 
+    large table.  I haven't dealt with collisions yet...
+
+    If the joins should be left-hand joins so that the resulting table is the
+    same size as the left-most table, pass the "left=True" keyword.
     '''
     # Maybe add in a mechanism to deal with multiple join types. But I don't
     # think it's worth the thought at this point.
     names = kwargs["names"]
     if len(names) != len(tables):
         raise ValueError("Names and Tables have different lengths")
+    if "left" in kwargs:
+        join_type = "left"
+    else:
+        join_type = "inner"
     temptable = tables[0]
     finalname = names[0]
     for (newtab, newname) in zip(tables[1:], names[1:]):
-        temptable = join_by_galaxy_name(temptable, newtab, names=(finalname,
-                                                                  newname))
+        temptable = join_by_galaxy_name(
+            temptable, newtab, names=(finalname, newname), 
+            join_type=join_type)
     return temptable
 
 def write_pipeline_file(filename, **kwargs):
