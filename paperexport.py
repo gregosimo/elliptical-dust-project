@@ -658,83 +658,19 @@ def create_cutout_grid(
 
 def create_mass_to_light_ATLAS3D_comparison(
         table=atlas3d_table, dest=build_filepath(
-            FIGUREPATH, "masstolight")):
+            FIGUREPATH, "masstolight"), CO_correction=False):
     table = remove_bad_galaxies(table)
     # Calculate the mass-to-light ratio for the ATLAS3D points in WISE.
     w1w2, w1w2err, w1w2lim = stat.subtract(
         table["w1unextmag"], table["w2unextmag"], table["w1unexterr"], 
         table["w2unexterr"], table["w1unextlim"], table["w2unextlim"])
     kw1, kw1err, kw1lim = stat.subtract(
-        table["k_m_k20fe"], table["w1unextmag"], table["k_msig_k20fe"]],
+        table["k_m_k20fe"], table["w1unextmag"], table["k_msig_k20fe"],
         table["w1unexterr"], table["k_mlim_k20fe"], table["w1unextlim"])
     atlas3d.plot_dustless_separation(
         table, w1w2, table["logML_W1"], table["logML_W1err"], w1w2err, 
         table["logML_W1lim"], 'bo', 'k.', color=True, ms=5, label="ATLAS3D",
         linewidth=0.7, error_coord=(-0.725, -0.8))
-
-
-    # Remember that these will be given in Vega mags.
-    meidt_limits_IRAC = np.linspace(-0.12, -0.04, 2)
-    meidt_limits = conv.IRAC2WISEcolor("[3.6]", "[4.5]", meidt_limits_IRAC,
-                                       wisesystem="AB")
-    meidt_ML = (3.98 * meidt_limits_IRAC + 0.13 - 
-                np.log10(conv.IRACflux2WISEflux("[3.6]", 1)))
-    meidt_ML_upper = ((3.98+0.98) * meidt_limits_IRAC + (0.13 + 0.08) -
-                      np.log10(conv.IRACflux2WISEflux("[3.6]", 1)))
-    meidt_ML_lower = ((3.98-0.98) * meidt_limits_IRAC + (0.13 - 0.08) -
-                      np.log10(conv.IRACflux2WISEflux("[3.6]", 1)))
-    plt.plot(meidt_limits, meidt_ML, 'g-', label="Meidt M/L")
-    plt.plot(meidt_limits, meidt_ML_upper, 'g--')
-    plt.plot(meidt_limits, meidt_ML_lower, 'g--')
-    const_ML = np.log10(0.6 / conv.IRAC_TO_WISE_FACTOR["[3.6]"])
-    plt.plot(meidt_limits, [const_ML, const_ML], 'g:')
-
-    # Relations from Cluver et al( 2014)
-    cluver_limits_VEGA = np.linspace(-0.3, 0.7, 2)
-    cluver_limits = conv.Vega2ABcolor("W1", "W2", cluver_limits_VEGA)
-    cluver_ML = -2.54 * (cluver_limits_VEGA) - 0.17
-    plt.plot(cluver_limits, cluver_ML, 'r-', label="Cluver M/L")
-
-    # FSPS output
-    modelage = 1e10
-
-    solmetsalmags = fsps.read_mags(os.path.join(
-        fsps.OUTPUT_PATH, "imf_met", "solmet_salpeter.mags"))
-    lowmetsalmags = fsps.read_mags(os.path.join(
-        fsps.OUTPUT_PATH, "imf_met", "lowmet_salpeter.mags"))
-    highmetsalmags = fsps.read_mags(os.path.join(
-        fsps.OUTPUT_PATH, "imf_met", "highmet_salpeter.mags"))
-    solmetsal = fsps.FSPS_data_at_age(solmetsalmags["log(age)"], solmetsalmags,
-                                   modelage)
-    lowmetsal = fsps.FSPS_data_at_age(lowmetsalmags["log(age)"], lowmetsalmags,
-                                   modelage)
-    highmetsal = fsps.FSPS_data_at_age(highmetsalmags["log(age)"], highmetsalmags,
-                                   modelage)
-    salmodels = Table(np.vstack([lowmetsal, solmetsal, highmetsal]),
-                   names=solmetsalmags.colnames)
-    w1w2sal = salmodels["W1"] - salmodels["W2"]
-    masstolightsal = (salmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
-        "W1", salmodels["W1"])))
-    plt.plot(w1w2sal, masstolightsal, 'ks--', label="FSPS (s)", lw=2, ms=7)
-
-    solmetmags = fsps.read_mags(os.path.join(
-        fsps.OUTPUT_PATH, "imf_met", "solmet_chabrier.mags"))
-    lowmetmags = fsps.read_mags(os.path.join(
-        fsps.OUTPUT_PATH, "imf_met", "lowmet_chabrier.mags"))
-    highmetmags = fsps.read_mags(os.path.join(
-        fsps.OUTPUT_PATH, "imf_met", "highmet_chabrier.mags"))
-    solmet = fsps.FSPS_data_at_age(solmetmags["log(age)"], solmetmags,
-                                   modelage)
-    lowmet = fsps.FSPS_data_at_age(lowmetmags["log(age)"], lowmetmags,
-                                   modelage)
-    highmet = fsps.FSPS_data_at_age(highmetmags["log(age)"], highmetmags,
-                                   modelage)
-    spsmodels = Table(np.vstack([lowmet, solmet, highmet]),
-                   names=solmetmags.colnames)
-    w1w2 = spsmodels["W1"] - spsmodels["W2"]
-    masstolight = (spsmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
-        "W1", spsmodels["W1"])))
-    plt.plot(w1w2, masstolight, 'ks:', label="FSPS (c)", lw=2, ms=7)
 
     # This will be a fit to the color-selected dustless galaxies.
     dustlesstable = atlas3d.color_cut_dustless_table(table)
@@ -758,6 +694,80 @@ def create_mass_to_light_ATLAS3D_comparison(
         flatlogval, flatlogerr)
     plt.plot(fit_limits, [flatlogval, flatlogval], 'k-', label="This work",
              lw=4)
+
+
+
+    # FSPS output
+    modelage = 1e10
+
+    solmetsalmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "solmet_salpeter.mags"))
+    lowmetsalmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "lowmet_salpeter.mags"))
+    highmetsalmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "highmet_salpeter.mags"))
+    solmetsal = fsps.FSPS_data_at_age(solmetsalmags["log(age)"], solmetsalmags,
+                                   modelage)
+    lowmetsal = fsps.FSPS_data_at_age(lowmetsalmags["log(age)"], lowmetsalmags,
+                                   modelage)
+    highmetsal = fsps.FSPS_data_at_age(highmetsalmags["log(age)"], highmetsalmags,
+                                   modelage)
+    salmodels = Table(np.vstack([lowmetsal, solmetsal, highmetsal]),
+                   names=solmetsalmags.colnames)
+    if CO_correction:
+        w1w2sal = fsps.meidt_corrected_w1w2_color(
+            salmodels["J"] - salmodels["H"])
+    else:
+        w1w2sal = salmodels["W1"] - salmodels["W2"]
+    masstolightsal = (salmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
+        "W1", salmodels["W1"])))
+    plt.plot(w1w2sal, masstolightsal, 'ks--', label="FSPS (s)", lw=2, ms=7)
+
+    solmetmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "solmet_chabrier.mags"))
+    lowmetmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "lowmet_chabrier.mags"))
+    highmetmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "highmet_chabrier.mags"))
+    solmet = fsps.FSPS_data_at_age(solmetmags["log(age)"], solmetmags,
+                                   modelage)
+    lowmet = fsps.FSPS_data_at_age(lowmetmags["log(age)"], lowmetmags,
+                                   modelage)
+    highmet = fsps.FSPS_data_at_age(highmetmags["log(age)"], highmetmags,
+                                   modelage)
+    spsmodels = Table(np.vstack([lowmet, solmet, highmet]),
+                   names=solmetmags.colnames)
+    if CO_correction:
+        w1w2chab = fsps.meidt_corrected_w1w2_color(
+            spsmodels["J"] - spsmodels["H"])
+    else: 
+        w1w2chab = spsmodels["W1"] - spsmodels["W2"]
+    
+    masstolight = (spsmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
+        "W1", spsmodels["W1"])))
+    plt.plot(w1w2chab, masstolight, 'ks:', label="FSPS (c)", lw=2, ms=7)
+
+    # Remember that these will be given in Vega mags.
+    meidt_limits_IRAC = np.linspace(-0.12, -0.04, 2)
+    meidt_limits = conv.IRAC2WISEcolor("[3.6]", "[4.5]", meidt_limits_IRAC,
+                                       wisesystem="AB")
+    meidt_ML = (3.98 * meidt_limits_IRAC + 0.13 - 
+                np.log10(conv.IRACflux2WISEflux("[3.6]", 1)))
+    meidt_ML_upper = ((3.98+0.98) * meidt_limits_IRAC + (0.13 + 0.08) -
+                      np.log10(conv.IRACflux2WISEflux("[3.6]", 1)))
+    meidt_ML_lower = ((3.98-0.98) * meidt_limits_IRAC + (0.13 - 0.08) -
+                      np.log10(conv.IRACflux2WISEflux("[3.6]", 1)))
+    plt.plot(meidt_limits, meidt_ML, 'g-', label="Meidt M/L")
+    plt.plot(meidt_limits, meidt_ML_upper, 'g--')
+    plt.plot(meidt_limits, meidt_ML_lower, 'g--')
+    const_ML = np.log10(0.6 / conv.IRAC_TO_WISE_FACTOR["[3.6]"])
+    plt.plot(meidt_limits, [const_ML, const_ML], 'g:')
+
+    # Relations from Cluver et al( 2014)
+    cluver_limits_VEGA = np.linspace(-0.3, 0.7, 2)
+    cluver_limits = conv.Vega2ABcolor("W1", "W2", cluver_limits_VEGA)
+    cluver_ML = -2.54 * (cluver_limits_VEGA) - 0.17
+    plt.plot(cluver_limits, cluver_ML, 'r-', label="Cluver M/L")
 
     plt.xlabel("W1-W2 (AB)")
     plt.ylabel(r"$\log\ \frac{M^*}{L_{W1}}"
@@ -806,11 +816,11 @@ def create_NUV_W1_abs_plot(rtable=rampazzo_table, atable=atlas3d_table,
     # This until I figure out what to do with distance errors.
     aw1abs_e = conv.app_err_to_abs_err(aw1_e, ad, ad_e)
 
-    plt.errorbar(aw1abs, anuvw1, anuvw1_e, fmt='kx', label="ATLAS3D")
+    plt.errorbar(aw1abs, anuvw1, anuvw1_e, fmt='k.', label="ATLAS3D")
     rp.MIRplot(rw1abs, rnuvw1, rtable["MIR_class"], rnuvw1_e, 
                xlabel=r"M$_{W1}$ (AB)", ylabel="NUV-W1 (AB)")
 
-    plt.ylim([2, 7])
+    plt.ylim([2, 6.5])
     plt.xlim([-18, -24])
     plt.legend(loc="lower right", bbox_to_anchor=(0.85, 0.01))
     plt.savefig(dest)
@@ -902,19 +912,28 @@ def create_circumstellar_verification_plot(
 
     # These are the Amblard et al 2013 objects. 
     amblard_objects = read_Amblard_Table_4()
-    amblard_overlap = phot.join_by_galaxy_name(dcat, amblard_objects, 
-                                               names=("objstr_01", "Name"))
-    amblard_dusty = amblard_overlap[np.where(
-        np.logical_or(np.logical_or(
-            amblard_overlap["250_mum"] > 5*amblard_overlap["250_mum_err"],
-            amblard_overlap["350_mum"] > 5*amblard_overlap["350_mum_err"]),
-            amblard_overlap["500_mum"] > 5*amblard_overlap["500_mum_err"]))]
+    sperello_table = read_Sperello_table()
 
-    dusty_atlas3d_indices = au.astropy_table_indices(
-        dcat, "objstr_01", amblard_dusty["objstr_01"])
+    full_dusttable = phot.multijoin_by_galaxy_name(
+        dcat, amblard_objects, sperello_table, names=(
+            "objstr_01", "Name", "Galaxy"), left=True)
+    herschel_indices = np.where(au.multi_logical_or(
+        np.logical_not(full_dusttable["250_mum"].mask),
+        np.logical_not(full_dusttable["HRS"].mask),
+        np.logical_not(full_dusttable["HeViCS"].mask)))
+    herschel_table = full_dusttable[herschel_indices]
+    dusty_atlas3d_indices = np.where(au.multi_logical_or(
+        full_dusttable["250_mum"] > 5*full_dusttable["250_mum_err"],
+        full_dusttable["350_mum"] > 5*full_dusttable["350_mum_err"],
+        full_dusttable["500_mum"] > 5*full_dusttable["500_mum_err"],
+        np.logical_not(full_dusttable["HRS"].mask),
+        np.logical_not(full_dusttable["HeViCS"].mask)))
+    dusty_atlas3d_galaxies = full_dusttable[dusty_atlas3d_indices]
+
+
     print "% of overlapped galaxies w/ FIR Dust detections: {0:.2f}".format(
-        float(len(amblard_dusty["objstr_01"]))/len(amblard_overlap)*100)
-    print len(amblard_overlap)
+        float(len(dusty_atlas3d_galaxies))/len(herschel_table)*100)
+    print dusty_atlas3d_galaxies["objstr_01"]
 
 
 
@@ -961,8 +980,8 @@ def create_circumstellar_verification_plot(
     stat.errorbar(class0w1w3, class0w1w4, class0w1w4_err, class0w1w3_err,
                   class0w1w4_lim, label="Class 0", ufmt="kv", lfmt="k^", 
                   **rp.MIR_Symbols[0])
-    plt.plot(amblard_dusty["w1unextmag"]-amblard_dusty["w3unextmag"],
-             amblard_dusty["w1unextmag"]-amblard_dusty["w4unextmag"],
+    plt.plot(dusty_atlas3d_galaxies["w1unextmag"]-dusty_atlas3d_galaxies["w3unextmag"],
+             dusty_atlas3d_galaxies["w1unextmag"]-dusty_atlas3d_galaxies["w4unextmag"],
              "kx", mew=2)
     dustfolder = "toggle_dust_met_bounds"
     fsps.plot_FSPS_color_color(
@@ -989,22 +1008,25 @@ def create_circumstellar_verification_plot(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
         modelbase=os.path.join(dustfolder, "nodust_lowmet"),
         label="", fmt="b:", agecutoff=1e9)
-#   parsec.plot_parsec_color_color(PARSECPATH, "marigo_highmet.dat", "W1", "W3",
-#                                  "W1", "W4", label="PARSEC (high met)",
-#                                  fmt="r--", agecutoff=1e9)
-#   parsec.plot_parsec_color_color(PARSECPATH, "marigo_lowmet.dat", "W1", "W3",
-#                                  "W1", "W4", label="PARSEC (low met)",
-#                                  fmt="b--", agecutoff=1e9)
+    parsec.plot_parsec_color_color(PARSECPATH, "parsec_highmet.dat.gz", "W1", "W3",
+                                   "W1", "W4", label="PARSEC (high met)",
+                                   fmt="r--", agecutoff=1e9)
+    parsec.plot_parsec_color_color(PARSECPATH, "parsec_medmet.dat.gz", "W1", "W3",
+                                   "W1", "W4", label="PARSEC (med met)",
+                                   fmt="k--", agecutoff=1e9)
+    parsec.plot_parsec_color_color(PARSECPATH, "parsec_lowmet.dat.gz", "W1", "W3",
+                                   "W1", "W4", label="PARSEC (low met)",
+                                   fmt="b--", agecutoff=1e9)
 
     plt.plot([-2.5, -1.85], [-2.23, -2.23], 'k--')
     plt.plot([-1.85, -1.85], [-4.0, -2.23], 'k--')
     
     plt.xlabel("W1-W3 (AB)")
     plt.ylabel("W1-W4 (AB)")
-    plt.legend(loc="lower right")
+#   plt.legend(loc="lower right")
     add_dual_Vega_axes("W1", "W3", "W1", "W4")
     plt.savefig(dest)
-    plt.close()
+#   plt.close()
 
 def add_Vega_axis(band1, band2, axis="x", initax=None):
     '''Adds a matching axis for colors in the Vega system to the current figure.
@@ -1780,10 +1802,49 @@ def read_Amblard_Table_4(
     amblard_table = Table.read(URL, format="ascii.tab", header_start=2,
                                data_start=4, guess=False)
     revised_amblard_table = separate_errors_in_table(amblard_table,
-                                                     seperator="+or-")
+                                                     separator="+or-")
     return revised_amblard_table
 
-def separate_errors_in_table(fulltable, seperator="+/-", suffix="_err",
+def read_Sperello_table(
+    URL=("/home/regulus/simonian/year1/wise/Simonian_Martini_Table_2_HRS_HeViCS.txt")):
+    '''Reads the Table that Sperello e-mailed with Herschel detections.'''
+    sperello_table = Table.read(
+        URL, format="ascii.fixed_width_two_line", guess=False,
+        include_names=["Galaxy", "HRS", "HeViCS"])
+    return sperello_table
+
+def read_Smith12_Table_1(
+    URL=("/home/regulus/simonian/year1/wise/Smith12_Table1.txt")):
+    '''Reads the Galaxy Lookup table from Smith 2012.'''
+    smith_table = Table.read(
+        URL, format="ascii.tab", guess=False, header_start=2, data_start=4,
+        data_end=66)
+    return smith_table
+
+def read_Smith12_Table_4(
+    URL=("/home/regulus/simonian/year1/wise/Smith12_Table4.txt")):
+    smith_table = Table.read(
+        URL, format="ascii.tab", guess=False, header_start=2, data_start=4,
+        data_end=66#, fill_values=[("", "0"), (" ... ", "0")])
+    )
+    #smith_table = separate_errors_in_table(smith_table, separator="+or-",
+    #                                       mask="...")
+
+    return smith_table
+
+def create_Herschel_observation_table():
+    '''Creates a table which is complete with Herschel observations.'''
+
+    smith_table1 = read_Smith12_Table_1()
+    # Sometimes Messier names are added which will make joining a major
+    # problem. This isn't a fully general solution, but should work in this
+    # particular case.
+    smith_table1["Other Name"] = np.array([
+        name[0] for name in npstr.split(
+            smith_table1["Other Name"], sep=",")])
+
+
+def separate_errors_in_table(fulltable, separator="+/-", suffix="_err",
                              mask="--"):
     '''Formats table to have separate error column.
     
@@ -1795,7 +1856,7 @@ def separate_errors_in_table(fulltable, seperator="+/-", suffix="_err",
     for colname in fulltable.colnames:
         col = fulltable[colname]
         if np.issubdtype(col.dtype, np.str):
-            splitcol = npstr.split(col, sep=seperator)
+            splitcol = npstr.split(col, sep=separator)
             if len(splitcol[0]) == 1:
                 newtable[colname] = collapse_list_nested_array(splitcol)
             elif len(splitcol[0]) == 2:
@@ -1840,8 +1901,8 @@ def separate_limit(table, limcols, updelim="<", lowdelim=">", eqdelim="=",
     For all columns in the list of limcols, this function will split them into
     a limit column and a numerical value column. The column will change dtype
     to be numerical. The limit will have a column name as determined by
-    coltemplate, which shoul be a format string which takes the column name as
-    the first argument.
+    coltemplate, which should be a format string which takes the column name 
+    as the first argument.
     '''
     for col in limcols:
         strcol = table[col]

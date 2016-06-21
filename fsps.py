@@ -631,3 +631,22 @@ def plot_FSPS_color_color(
     plt.plot(xcolor[0], ycolor[0], fmt[0]+"*")
     plt.plot(xcolor, ycolor, fmt, label=label)
 
+def meidt_corrected_w1w2_color(jhcolor, inputsystem="AB", outputsystem="AB"):
+    '''Perform's Meidt's correction for CO absorption.
+
+    Since FSPS does not have CO absorption, its W2 value can be significantly
+    off. This function performs the correction from Meidt et al (2014)
+    calibrated from GLIMPSE giants to empirically convert from J-H to W1-W2. A
+    correction between Spitzer [3.6]-[4.5] is included in this calculation.
+    '''
+    print jhcolor[0]
+    if inputsystem is "AB":
+        jhcolor = conv.AB2Vegacolor("J", "H", jhcolor)
+    elif inputsystem is not "Vega":
+        raise ValueError("Don't understand input photometric system")
+    print jhcolor[0]
+    spitzer3645 = -0.223 * jhcolor + 0.053
+    print spitzer3645[0]
+    w1w2 = conv.IRAC2WISEcolor("[3.6]", "[4.5]", spitzer3645,
+                               wisesystem=outputsystem)
+    return w1w2
