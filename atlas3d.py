@@ -11,6 +11,7 @@ import band_conversions as conv
 import statop as stat
 import paperexport as pe
 import astropy_util as au
+import fsps
 
 # Maybe I want to subclass figure later on. But now... meh.
 class SED(object):
@@ -374,7 +375,7 @@ def ATLAS3D_dustless_galaxy_indices(atlas3d_table):
 def color_cut_dustless_table(atlas3d_table):
     '''Picks out dustless galaxies from the given table via color cuts.
 
-    The color cut consists of W1-W3 > -1.8 and W1-W4 > -2.23. This was the
+    The color cut consists of W1-W3 > -1.8 and W1-W4 > -2.4. This was the
     region in W1-W3 vs W1-W4 where there are no measured galaxies with cold
     gas.
     '''
@@ -386,20 +387,20 @@ def color_cut_dustless_table(atlas3d_table):
     w1w4 = w1-w4
 
     newtable = atlas3d_table[
-        np.where(np.logical_and(w1w3 < -1.8, w1w4 < -2.23))]
+        np.where(np.logical_and(w1w3 < -1.85, w1w4 < -2.4))]
     return newtable
 
 def color_cut_dustless_indices(w1, w3, w4):
     '''Returns indicies that would register as dustless from a color cut.
 
-    The color cut consists of W1-W3 > -1.85 and W1-W4 > -2.23. This was the
+    The color cut consists of W1-W3 > -1.85 and W1-W4 > -2.4. This was the
     region in W1-W3 and W1-W4 where there are no measured galaxies with cold
     gas.
     '''
     w1w3 = w1 - w3
     w1w4 = w1 - w4
 
-    return np.where(np.logical_and(w1w3 < -1.85, w1w4 < -2.23))
+    return np.where(np.logical_and(w1w3 < -1.85, w1w4 < -2.4))
 
 def plot_dustless_separation(
     atlas3d_table, xval, yval, yerr, xerr, ylim, fmt, dfmt, color=True,
@@ -421,7 +422,6 @@ def plot_dustless_separation(
         dustlessindices = ATLAS3D_dustless_galaxy_indices(atlas3d_table)
 
     dustindices = pe.get_complement_indices(dustlessindices, len(atlas3d_table))
-    print (len(xval[dustindices]) + len(xval[dustlessindices]))
 
     dustlesskws = kwargs
     dustykws = kwargs.copy()
@@ -464,3 +464,35 @@ def filter_out_bad_targets(atlas3d_table):
     ###########################################################################
     return newtable
 
+def IMF_variation_plot(atlas3dtable):
+    '''Makes a plot showing the variation of M/L with dispersion.
+
+    This is essentially supposed to recreate the M/L vs. velocity dispersion
+    plot.'''
+    modelage=1e10
+    solmetmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "solmet_chabrier.mags"))
+    solmet = Table(np.vstack([fsps.FSPS_data_at_age(
+        solmetmags["log(age)"], solmetmags, modelage)]), 
+        names=solmetmags.colnames)
+    chabML = (solmet["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
+        "W1", solmet["W1"])))
+    solmetmags = fsps.read_mags(os.path.join(
+        fsps.OUTPUT_PATH, "imf_met", "solmet_salpeter.mags"))
+    solmet = Table(np.vstack([fsps.FSPS_data_at_age(
+        solmetmags["log(age)"], solmetmags, modelage)]),
+                   names=solmetmags.colnames)
+    salML = (solmet["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
+        "W1", solmet["W1"])))
+    plot_dustless_separation(
+        atlas3dtable, atlas3dtable["logSig_e"], atlas3dtable["logML_W1"],
+        atlas3dtable["logML_W1err"], np.zeros(len(atlas3dtable)),
+        stat.generate_limit(None, len(atlas3dtable)), 'bo', 'ro', label="ATLAS3D")   
+    plt.plot([1.5, 2.5], [salML, salML], 'k--', label="FSPS (s)")
+    plt.plot([1.5, 2.5], [chabML, chabML], 'k-', label="FSPS (c)")
+    plt.xlabel(r"$\log\ \sigma_e$")
+    plt.ylabel(r"$\log\ \frac{M^*}{L_{W1}}"
+               r"\left(\frac{M_\odot}{L_\odot}\right)$", fontsize=24)
+    plt.title("Mass-to-light dispersion trend")
+    plt.legend(loc="lower right")
+    plt.tight_layout(w_pad=1.5)
