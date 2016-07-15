@@ -49,7 +49,7 @@ FULL_GIL_DE_PAZ_TABLE = os.path.join(GDPBASE, "gil_de_paz.tbl")
 
 # If we want to change the type of file which is exported, just change this
 # extension!
-EXT = "pdf"
+EXT = "eps"
 
 # This is the string which is displayed in LaTeX for a missing value.
 LATEX_TABLE_MASKSTRING = r"--"
@@ -471,7 +471,7 @@ def create_W1W2_W2W3_MIR_plot(table=rampazzo_table,
     w1w2, w1w2err, w1w2lim = stat.subtract(w1, w2, w1err, w2err, w1lim, w2lim)
     w2w3, w2w3err, w2w3lim = stat.subtract(w2, w3, w2err, w3err, w2lim, w3lim)
 
-    rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, xrange(5), xlabel,
+    rp.MIRplot(w2w3, w1w2, MIR, w1w2err, w2w3err, None, xrange(5), xlabel,
                ylabel, "", loc="upper left")
     plt.savefig(dest)
     plt.close()
@@ -550,7 +550,7 @@ def create_dual_panel_W1W2_W2W3_W3W4_MIR_plot(
     add_dual_Vega_axes("W3", "W4", "W2", "W3") 
     plt.tight_layout()
     plt.savefig(dest)
-#   plt.close()
+    plt.close()
 
 
 
@@ -658,7 +658,7 @@ def create_cutout_grid(
 
 def create_mass_to_light_ATLAS3D_comparison(
         table=atlas3d_table, dest=build_filepath(
-            FIGUREPATH, "masstolight"), CO_correction=False):
+            FIGUREPATH, "masstolight")):
     table = remove_bad_galaxies(table)
     # Calculate the mass-to-light ratio for the ATLAS3D points in WISE.
     w1w2, w1w2err, w1w2lim = stat.subtract(
@@ -714,14 +714,13 @@ def create_mass_to_light_ATLAS3D_comparison(
                                    modelage)
     salmodels = Table(np.vstack([lowmetsal, solmetsal, highmetsal]),
                    names=solmetsalmags.colnames)
-    if CO_correction:
-        w1w2sal = fsps.meidt_corrected_w1w2_color(
-            salmodels["J"] - salmodels["H"])
-    else:
-        w1w2sal = salmodels["W1"] - salmodels["W2"]
+    w1w2sal = salmodels["W1"] - salmodels["W2"]
+    w1w2sal_corr = fsps.meidt_corrected_w1w2_color(
+        salmodels["J"] - salmodels["H"])
     masstolightsal = (salmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
         "W1", salmodels["W1"])))
     plt.plot(w1w2sal, masstolightsal, 'ks--', label="FSPS (s)", lw=2, ms=7)
+    plt.plot(w1w2sal_corr, masstolightsal, 'ks--', lw=2, ms=7, mfc="None")
 
     solmetmags = fsps.read_mags(os.path.join(
         fsps.OUTPUT_PATH, "imf_met", "solmet_chabrier.mags"))
@@ -737,15 +736,14 @@ def create_mass_to_light_ATLAS3D_comparison(
                                    modelage)
     spsmodels = Table(np.vstack([lowmet, solmet, highmet]),
                    names=solmetmags.colnames)
-    if CO_correction:
-        w1w2chab = fsps.meidt_corrected_w1w2_color(
-            spsmodels["J"] - spsmodels["H"])
-    else: 
-        w1w2chab = spsmodels["W1"] - spsmodels["W2"]
+    w1w2chab = spsmodels["W1"] - spsmodels["W2"]
+    w1w2chab_corr = fsps.meidt_corrected_w1w2_color(
+        spsmodels["J"] - spsmodels["H"])
     
     masstolight = (spsmodels["log(mass)"] - np.log10(conv.ABabsmag2inbandLum(
         "W1", spsmodels["W1"])))
     plt.plot(w1w2chab, masstolight, 'ks:', label="FSPS (c)", lw=2, ms=7)
+    plt.plot(w1w2chab_corr, masstolight, 'ks:', lw=2, ms=7, mfc="None")
 
     # Remember that these will be given in Vega mags.
     meidt_limits_IRAC = np.linspace(-0.12, -0.04, 2)
@@ -913,24 +911,29 @@ def create_circumstellar_verification_plot(
     # These are the Amblard et al 2013 objects. 
     amblard_objects = read_Amblard_Table_4()
     sperello_table = read_Sperello_table()
+    smith_objects = create_Smith12_observation_table()
+    alighieri_objects = read_di_Serego_Alighieri_sample()
 
     full_dusttable = phot.multijoin_by_galaxy_name(
-        dcat, amblard_objects, sperello_table, names=(
-            "objstr_01", "Name", "Galaxy"), left=True)
+        dcat, amblard_objects, smith_objects, alighieri_objects, names=(
+            "objstr_01", "Name", "Other Name", "Other name"), left=True)
     herschel_indices = np.where(au.multi_logical_or(
         np.logical_not(full_dusttable["250_mum"].mask),
         np.logical_not(full_dusttable["HRS"].mask),
-        np.logical_not(full_dusttable["HeViCS"].mask)))
+        np.logical_not(full_dusttable["F250"].mask),
+        full_dusttable["Virgo"]))
     herschel_table = full_dusttable[herschel_indices]
     dusty_atlas3d_indices = np.where(au.multi_logical_or(
         full_dusttable["250_mum"] > 5*full_dusttable["250_mum_err"],
         full_dusttable["350_mum"] > 5*full_dusttable["350_mum_err"],
         full_dusttable["500_mum"] > 5*full_dusttable["500_mum_err"],
-        np.logical_not(full_dusttable["HRS"].mask),
-        np.logical_not(full_dusttable["HeViCS"].mask)))
+        full_dusttable["logM_d_lim"] == stat.DETECTION,
+        np.logical_not(full_dusttable["F250"].mask)))
     dusty_atlas3d_galaxies = full_dusttable[dusty_atlas3d_indices]
 
 
+    print "Number of objects w/ Herschel Observations: {0}".format(
+        len(herschel_table))
     print "% of overlapped galaxies w/ FIR Dust detections: {0:.2f}".format(
         float(len(dusty_atlas3d_galaxies))/len(herschel_table)*100)
     print dusty_atlas3d_galaxies["objstr_01"]
@@ -980,9 +983,9 @@ def create_circumstellar_verification_plot(
     stat.errorbar(class0w1w3, class0w1w4, class0w1w4_err, class0w1w3_err,
                   class0w1w4_lim, label="Class 0", ufmt="kv", lfmt="k^", 
                   **rp.MIR_Symbols[0])
-    plt.plot(dusty_atlas3d_galaxies["w1unextmag"]-dusty_atlas3d_galaxies["w3unextmag"],
-             dusty_atlas3d_galaxies["w1unextmag"]-dusty_atlas3d_galaxies["w4unextmag"],
-             "kx", mew=2)
+#   plt.plot(dusty_atlas3d_galaxies["w1unextmag"]-dusty_atlas3d_galaxies["w3unextmag"],
+#            dusty_atlas3d_galaxies["w1unextmag"]-dusty_atlas3d_galaxies["w4unextmag"],
+#            "kx", mew=2)
     dustfolder = "toggle_dust_met_bounds"
     fsps.plot_FSPS_color_color(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
@@ -1008,25 +1011,25 @@ def create_circumstellar_verification_plot(
         fsps.OUTPUT_PATH, "W1", "W3", "W1", "W4", 
         modelbase=os.path.join(dustfolder, "nodust_lowmet"),
         label="", fmt="b:", agecutoff=1e9)
-    parsec.plot_parsec_color_color(PARSECPATH, "parsec_highmet.dat.gz", "W1", "W3",
-                                   "W1", "W4", label="PARSEC (high met)",
-                                   fmt="r--", agecutoff=1e9)
-    parsec.plot_parsec_color_color(PARSECPATH, "parsec_medmet.dat.gz", "W1", "W3",
-                                   "W1", "W4", label="PARSEC (med met)",
-                                   fmt="k--", agecutoff=1e9)
-    parsec.plot_parsec_color_color(PARSECPATH, "parsec_lowmet.dat.gz", "W1", "W3",
-                                   "W1", "W4", label="PARSEC (low met)",
-                                   fmt="b--", agecutoff=1e9)
+#   parsec.plot_parsec_color_color(PARSECPATH, "parsec_highmet.dat.gz", "W1", "W3",
+#                                  "W1", "W4", label="PARSEC (high met)",
+#                                  fmt="r--", agecutoff=1e9)
+#   parsec.plot_parsec_color_color(PARSECPATH, "parsec_medmet.dat.gz", "W1", "W3",
+#                                  "W1", "W4", label="PARSEC (med met)",
+#                                  fmt="k--", agecutoff=1e9)
+#   parsec.plot_parsec_color_color(PARSECPATH, "parsec_lowmet.dat.gz", "W1", "W3",
+#                                  "W1", "W4", label="PARSEC (low met)",
+#                                  fmt="b--", agecutoff=1e9)
 
-    plt.plot([-2.5, -1.85], [-2.23, -2.23], 'k--')
-    plt.plot([-1.85, -1.85], [-4.0, -2.23], 'k--')
+    plt.plot([-2.5, -1.85], [-2.4, -2.4], 'k--')
+    plt.plot([-1.85, -1.85], [-4.0, -2.4], 'k--')
     
     plt.xlabel("W1-W3 (AB)")
     plt.ylabel("W1-W4 (AB)")
-#   plt.legend(loc="lower right")
+    plt.legend(loc="lower right")
     add_dual_Vega_axes("W1", "W3", "W1", "W4")
     plt.savefig(dest)
-#   plt.close()
+    plt.close()
 
 def add_Vega_axis(band1, band2, axis="x", initax=None):
     '''Adds a matching axis for colors in the Vega system to the current figure.
@@ -1102,9 +1105,9 @@ def add_dual_Vega_axes(xband1, xband2, yband1, yband2):
                  transform(upbound, yband1, yband2))
     yax.set_ylabel(ax.get_ylabel().replace("(AB)", "(Vega)"))
 
-def create_circumstellar_dust_plot(table=atlas3d_table,
-                                   dest=build_filepath(FIGUREPATH, "cdust",
-                                                       EXT)):
+def create_circumstellar_dust_plot(
+    table=atlas3d_table, dest=build_filepath(FIGUREPATH, "cdust", EXT),
+    plot_parsec=False):
     '''Dual-paneled W1-W3 and W1-W4 vs SSP age plot.'''
     table = remove_bad_galaxies(table)
     # Set up the data
@@ -1132,10 +1135,15 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     fsps.plot_atlas3d_coded_by_metallicity(
         atlas3d_ages, w1w3color, w1w3err, atlas3d_ages_err, w1w3lim,
         atlas3d_metallicities, med_met)
-    fsps.plot_dust_toggled_metallicity_bounds(
-        os.path.join(fsps.OUTPUT_PATH, "matched_late_const_sfr"), "W1", "W3",
-        highmet=-0.1, lowmet=-0.3)
-    ax1.set_ylim([-2.9, -0.5])
+    if plot_parsec:
+        parsec.plot_dust_toggled_metallicity_bounds(
+            PARSECPATH, "W1", "W3", highmet=-0.1, lowmet=-0.3)
+    else:
+        fsps.plot_dust_toggled_metallicity_bounds(
+            os.path.join(fsps.OUTPUT_PATH, "matched_late_const_sfr"), "W1", 
+            "W3", highmet=-0.1, lowmet=-0.3)
+
+#   ax1.set_ylim([-2.9, -0.5])
     plt.ylabel("W1-W3 (AB)", fontsize=24)
     add_Vega_axis("W1", "W3", "y")
 
@@ -1144,9 +1152,13 @@ def create_circumstellar_dust_plot(table=atlas3d_table,
     fsps.plot_atlas3d_coded_by_metallicity(
         atlas3d_ages, w1w4color, w1w4err, atlas3d_ages_err, w1w4lim,
         atlas3d_metallicities, med_met)
-    fsps.plot_dust_toggled_metallicity_bounds(
-        os.path.join(fsps.OUTPUT_PATH, "narrower_bounds"), "W1", "W4",
-        highmet=-0.1, lowmet=-0.3)
+    if plot_parsec:
+        parsec.plot_dust_toggled_metallicity_bounds(
+            PARSECPATH, "W1", "W4", highmet=-0.1, lowmet=-0.3)
+    else:
+        fsps.plot_dust_toggled_metallicity_bounds(
+            os.path.join(fsps.OUTPUT_PATH, "narrower_bounds"), "W1", "W4",
+            highmet=-0.1, lowmet=-0.3)
     ax2.set_ylim([-4, 0])
     plt.sca(ax2)
     plt.xlim(0, 15)
@@ -1716,9 +1728,13 @@ def read_McDermid15_Table_3(
     tablepath=os.path.join(ATLAS3DBASE, 
                            "McDermid2015_Atlas3D_Paper30_Table3.txt")):
     '''Reads in the third table from McDermid 2015.'''
-    atlas3dsample = Table.read(tablepath, format="ascii.fixed_width", 
-                               data_start=3, guess=False)
-    atlas3dsample = separate_errors_in_table(atlas3dsample)
+    atlas3dsample = Table.read(
+        tablepath, format="ascii.fixed_width", data_start=3, guess=False,
+        fill_values=[("", "0"), ("-- +/-   --", "0"), ("--", "0")])
+    atlas3dsample = separate_errors_in_table(
+        atlas3dsample, separator="+/-", parsecols=[
+            "Hbeta", "Fe5015", "Mgb", "Fe5270", "Age_SSP", "[Z/H]_SSP",
+            "[a/Fe]_SSP"])
     return atlas3dsample
 
 def read_McDermid15_Table_4(
@@ -1801,8 +1817,9 @@ def read_Amblard_Table_4(
     '''
     amblard_table = Table.read(URL, format="ascii.tab", header_start=2,
                                data_start=4, guess=False)
-    revised_amblard_table = separate_errors_in_table(amblard_table,
-                                                     separator="+or-")
+    revised_amblard_table = separate_errors_in_table(
+        amblard_table, separator="+or-", parsecols=[
+            "250_mum", "350_mum", "500_mum"])
     return revised_amblard_table
 
 def read_Sperello_table(
@@ -1825,14 +1842,21 @@ def read_Smith12_Table_4(
     URL=("/home/regulus/simonian/year1/wise/Smith12_Table4.txt")):
     smith_table = Table.read(
         URL, format="ascii.tab", guess=False, header_start=2, data_start=4,
-        data_end=66#, fill_values=[("", "0"), (" ... ", "0")])
-    )
-    #smith_table = separate_errors_in_table(smith_table, separator="+or-",
-    #                                       mask="...")
+        data_end=66, fill_values=[("", "0"), (" ... ", "0")])
+    stripped_h2 = np.ma.array(
+        [a[0] for a in npstr.rsplit(smith_table["logM_H i"], sep="^")],
+        dtype=np.str)
+    stripped_h2.mask = smith_table["logM_H i"].mask
+    smith_table["logM_H i"] = stripped_h2
+    smith_table.rename_column("log", "logM_H 2")
+    
+    smith_table = separate_errors_in_table(
+        smith_table, separator="+or-", mask="...", parsecols=[
+        "logL_FIR", "T_d", "logM_d", "logM_H 2", "logM_H i"])
 
     return smith_table
 
-def create_Herschel_observation_table():
+def create_Smith12_observation_table():
     '''Creates a table which is complete with Herschel observations.'''
 
     smith_table1 = read_Smith12_Table_1()
@@ -1842,10 +1866,75 @@ def create_Herschel_observation_table():
     smith_table1["Other Name"] = np.array([
         name[0] for name in npstr.split(
             smith_table1["Other Name"], sep=",")])
+    smith_table4 = read_Smith12_Table_4()
+    fulltable = phot.join_by_galaxy_name(
+        smith_table1, smith_table4, names=("HRS", "HRS Name"))
+    return fulltable
 
+def read_di_Serego_Alighieri_Table1(
+    tblpath="/home/regulus/simonian/year1/wise/Alighieri_Table1.txt"):
+    tbl = Table.read(
+        tblpath, format="ascii.fixed_width", header_start=0,
+        data_start=2, col_starts=[
+            0, 8, 24, 40, 56, 64, 72, 80, 88, 96, 104, 112, 120],
+        col_ends=[
+            7, 23, 39, 55, 63, 71, 79, 87, 95, 103, 111, 119, 123])
+    separate_limit(tbl, ["F100", "F160", "F250", "F350", "F500"], eqdelim="")
+    return tbl
 
-def separate_errors_in_table(fulltable, separator="+/-", suffix="_err",
-                             mask="--"):
+def read_di_Serego_Alighieri_Table2(
+    tblpath="/home/regulus/simonian/year1/wise/Alighieri_Table2.txt"):
+    tbl = Table.read(
+        tblpath, format="ascii.fixed_width", header_start=0,
+        data_start=2, col_starts=[
+            0, 8, 24, 40, 56, 64, 72, 80, 88, 96, 104, 112, 120],
+        col_ends=[
+            7, 23, 39, 55, 63, 71, 79, 87, 95, 103, 111, 119, 123])
+    separate_limit(tbl, ["F100", "F160", "F250", "F350", "F500"], eqdelim="")
+    return tbl
+
+def read_di_Serego_Alighieri_sample():
+    '''Reads the HeViCS sample.'''
+    tbl1 = read_di_Serego_Alighieri_Table1()
+    tbl2 = read_di_Serego_Alighieri_Table2()
+    # Since tbl1 has a VCC 881C and 881SE, tbl2 needs to have this column
+    # converted to be a string column.
+    au.change_column_dtype(tbl2, "VCC", np.str)
+    fulltbl = vstack([tbl1, tbl2])
+    return fulltbl
+
+def separate_errors_and_limits_in_column(
+    col, separator="+/-", updelim="<", lowdelim=">", eqdelim="=",
+    final_dtype=np.float):
+    '''Separates a raw string column into values, errors, and limits.'''
+    valcol, errcol = separate_error_col(col, separator)
+    try:
+        valcol = np.array(valcol, dtype=final_dtype)
+    except ValueError:
+        valcol, limcol = split_limit_col(
+            col, updelim, lowdelim, eqdelim, final_dtype)
+    return valcol, errcol, limcol
+
+def separate_error_col(col, separator="+/-", maskstring="--"):
+    '''Splits an array of strings into a value and limit array'''
+    valcol = np.ma.array(col, dtype=np.str, fill_value="999")
+    errcol = np.ma.MaskedArray(np.ones(len(col), dtype=np.float))
+    splitcol = npstr.split(col, sep=separator)
+    for i, stringcol in enumerate(splitcol):
+        # For some reason, split turns a np.ma.masked value into a '0'. So if
+        # valcol is masked we don't want to change anything about it.
+        if valcol[i] is not np.ma.masked:
+            valcol[i] = stringcol[0]
+        try:
+            errcol[i] = stringcol[1]
+        except IndexError:
+            errcol[i] = np.ma.masked
+
+    return valcol, errcol
+
+def separate_errors_in_table(
+    fulltable, parsecols=[], separator="+/-", errsuffix="_err", 
+    limsuffix="_lim", mask="--", updelim="<", lowdelim=">", eqdelim=""):
     '''Formats table to have separate error column.
     
     The separator acts as a delimiter between the value and the error. The
@@ -1854,29 +1943,22 @@ def separate_errors_in_table(fulltable, separator="+/-", suffix="_err",
     '''
     newtable = Table(masked=True)
     for colname in fulltable.colnames:
-        col = fulltable[colname]
-        if np.issubdtype(col.dtype, np.str):
-            splitcol = npstr.split(col, sep=separator)
-            if len(splitcol[0]) == 1:
-                newtable[colname] = collapse_list_nested_array(splitcol)
-            elif len(splitcol[0]) == 2:
-                # This takes advantage of the fact that supplying an array to
-                # "array" yields the same array of lists. While adding a list to 
-                # "array" yields a 2-d array.
-                combinedarray = np.array(list(splitcol))
-                maskedvalarray = npstr.replace(
-                    combinedarray[:,0], mask, 'NaN')
-                floatvalarray = maskedvalarray.astype(np.float)
-                newtable[colname] = np.ma.masked_invalid(floatvalarray)
-                errcolname = "{0}{1}".format(colname, suffix)
-                maskederrarray = npstr.replace(
-                    combinedarray[:,1], mask, 'NaN')
-                floaterrarray = maskederrarray.astype(np.float)
-                newtable[errcolname] = np.ma.masked_invalid(floaterrarray)
-            else:
-                raise ValueError("Can't parse errors in Table.")
+        if colname in parsecols:
+            col = fulltable[colname]
+            if np.issubdtype(col.dtype, np.str):
+                valarray, errarray = separate_error_col(col, separator)
+                errcolname = "{0}{1}".format(colname, errsuffix)
+                newtable[errcolname] = errarray
+                try:
+                    valarray = np.ma.array(valarray, dtype=np.float)
+                except ValueError as e:
+                    valarray, limarray = split_limit_col(
+                        valarray, updelim, lowdelim, eqdelim, np.float)
+                    limcolname = "{0}{1}".format(colname, limsuffix)
+                    newtable[limcolname] = limarray
+                newtable[colname] = valarray
         else:
-            newtable[colname] = col
+            newtable[colname] = fulltable[colname]
     return newtable
 
 def create_arxiv_tarfile(BASEDIR, archivebase="arxiv", sourcefile="main",
@@ -1920,24 +2002,30 @@ def split_limit_col(initcol, updelim="<", lowdelim=">", eqdelim="=",
     limit. Therefore, this function splits a string column into two arrays:
     one with a limit representation, another with the numerical values.
     '''
+    # If the column was not read as a string, then just return it.
+    oldmask = initcol.mask
     limcol = stat.generate_limit(None, len(initcol))
     try:
         upperindices = np.where(npstr.startswith(initcol, updelim))
+        lowerindices = np.where(npstr.startswith(initcol, lowdelim))
     except TypeError:
         print "{0} is not a string column. Ignoring.".format(initcol.name)
-    initcol = npstr.lstrip(initcol, updelim)
-    lowerindices = np.where(npstr.startswith(initcol, lowdelim))
-    initcol = npstr.lstrip(initcol, lowdelim)
-    if eqdelim is not "":
-        eqindices = np.where(npstr.startswith(initcol, eqdelim))
-        initcol = npstr.lstrip(initcol, eqdelim)
-    newcol = np.asanyarray(initcol, dtype=dtype)
-    limcol[upperindices] = stat.UPPER
-    limcol[lowerindices] = stat.LOWER
+    else:
+        # If initcol is not a string column, we want to skip all of these
+        # string operations.
+        initcol = npstr.lstrip(initcol, updelim)
+        initcol = npstr.lstrip(initcol, lowdelim)
+        if eqdelim is not "":
+            eqindices = np.where(npstr.startswith(initcol, eqdelim))
+            initcol = npstr.lstrip(initcol, eqdelim)
+        limcol[upperindices] = stat.UPPER
+        limcol[lowerindices] = stat.LOWER
+    newcol = np.ma.asanyarray(initcol, dtype=dtype)
+    newcol.mask = oldmask
     # If there is a mask, then we want to ensure that the masked values are
     # considered to be invalid data points.
     try:
-        limcol[initcol.mask] = stat.NA
+        limcol[newcol.mask] = stat.NA
     except AttributeError:
         pass
 
@@ -2106,6 +2194,33 @@ def format_reflect(inp):
     Table.write() more transparent.'''
     return inp
 
+def generate_figures(ext="pdf"):
+    '''Generates the figures to be included in the paper'''
+    generate_fulltable()
+    print "Creating cutout grid"
+#   create_cutout_grid(dest=build_filepath(FIGUREPATH, "cutouts"))
+    print "Creating NUV-W1 vs W1 plot"
+    create_NUV_W1_abs_plot()
+    print "Creating Circumstellar verification plot"
+    create_circumstellar_verification_plot()
+    print "Creating SED plot"
+    create_SED(fulltable)
+    print "Creating M/L plot"
+    create_mass_to_light_ATLAS3D_comparison()
+    print "Creating Circumstellar Dust plot"
+    create_circumstellar_dust_plot()
+    print "Creating Circumstellar Dust plot with SFH"
+    create_circumstellar_dust_plot_sfh()
+    print "Creating Star Formation Plot"
+    create_star_formation_plot()
+    print "Creating the Sulfur/H2 lineratio plot"
+    create_sulfur_h2_plot()
+    print "Creating the NUV-J vs 7.7/11.3um plot"
+    create_NUV_J_PAH77_113_plot()
+    print "Creating the Rampazzo W1-W2 vs W2-W3 plot"
+    create_dual_panel_W1W2_W2W3_MIR_plot()
+    print "Creating the W1-W2 histogram for Rampazzo classes"
+    create_W2_W3_cumulative_histogram()
 
 if __name__ == "__main__":
 
@@ -2114,4 +2229,5 @@ if __name__ == "__main__":
     # Write ATLAS3D parameters and magnitudes to paper directory.
     # Write Jarrett fluxes (paper and calculated) to paper directory.
     # Move FSPS output to paper directory.
-    pass
+    generate_figures()
+

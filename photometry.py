@@ -2802,8 +2802,13 @@ def join_by_galaxy_name(table1, table2, names=("objstr_01", "objstr_01"),
     tempcol1 = table1[name1]
     tempcol2 = table2[name2]
     # Now format them to be in folder form.
-    table1[name1] = object_name_to_dir(table1[name1])
-    table2[name1] = object_name_to_dir(table2[name2])
+    # If they are strings, we want to do this. If they are not, forget about
+    # it.
+    try:
+        table1[name1] = object_name_to_dir(table1[name1])
+        table2[name1] = object_name_to_dir(table2[name2])
+    except TypeError:
+        table2[name1] = table2[name2]
     # Now join them.
     newtable = join(table1, table2, keys=[name1]+additional_keys, 
                     join_type=join_type, table_names=list(conflict_suffixes),

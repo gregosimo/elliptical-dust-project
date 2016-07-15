@@ -639,14 +639,11 @@ def meidt_corrected_w1w2_color(jhcolor, inputsystem="AB", outputsystem="AB"):
     calibrated from GLIMPSE giants to empirically convert from J-H to W1-W2. A
     correction between Spitzer [3.6]-[4.5] is included in this calculation.
     '''
-    print jhcolor[0]
     if inputsystem is "AB":
         jhcolor = conv.AB2Vegacolor("J", "H", jhcolor)
     elif inputsystem is not "Vega":
         raise ValueError("Don't understand input photometric system")
-    print jhcolor[0]
     spitzer3645 = -0.223 * jhcolor + 0.053
-    print spitzer3645[0]
     w1w2 = conv.IRAC2WISEcolor("[3.6]", "[4.5]", spitzer3645,
                                wisesystem=outputsystem)
     return w1w2
