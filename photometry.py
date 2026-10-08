@@ -26,7 +26,8 @@ MIR_Symbols = {0: {"marker": 'o', "markerfacecolor": 'white', "ls": ' ',
                3: {"marker": '*', "markerfacecolor": 'blue', "ls": ' '},
                4: {"marker": 'D', "markerfacecolor": 'white', "ls": ' ',
                    "markeredgecolor": 'red', "markeredgewidth": 1.5}}
-
+LARGE_APERTURE_CORRECTION = {"W1": -0.034, "W2": -0.041, "W3": 0.03, "W4": 
+        -0.029}
 
 ###############################################################################
 # Aperture Photometry Routines                                                #
@@ -72,7 +73,6 @@ def calc_DNflux(galaxydir, band, baseobjectfile="ellipse_aperture",
     if objectflux < 0:
         raise ValueError("Measured negative flux for object.")
     return objectflux
-    
 
 
 def galaxy_photometry(BASEDIR, name, band, baseobjectfile="ellipse_aperture", 
@@ -156,6 +156,9 @@ def calculate_correlated_pixel_noise(band):
     INPUT_TO_OUTPUT_PIXEL_RATIO = {"W1": 2, "W2": 2, "W3": 2, "W4": 4}
     return  (EFFECTIVE_NOISE_PIXELS[band] * 
             (INPUT_TO_OUTPUT_PIXEL_RATIO[band])**2)
+
+
+
 
 def calc_DNerr(galaxydir, band, ellipsebase="ellipse_aperture",
         skybase="sky_level", uncertainty_base="uncertainty", mask=""):
@@ -259,7 +262,6 @@ def photometric_error(BASEDIR, name, band, ellipsebase="ellipse_aperture",
         magerr = (get_zero_point_magnitude_uncertainty(band)**2 + 1.179 * 
             fluxerr**2 / object_flux**2)**(0.5)
         return magerr
-
 ###############################################################################
 # Astropy Utilities                                                           #
 ###############################################################################
@@ -351,7 +353,6 @@ def get_zero_point_flux_uncertainty(band):
     '''
     sig_f0 = {"W1": 4.6, "W2": 2.6, "W3": 0.436, "W4": 0.124}
     return sig_f0[band]
-
 
 def change_to_galaxy_dir(BASEDIR, objectname):
     '''Returns the path of a galaxy's directory.
